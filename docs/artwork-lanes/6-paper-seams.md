@@ -39,7 +39,7 @@
 - TIFF SHA `731073bd38c83dc4643a7eefea5103c0ca0269effc788d7fb1c02729d920b0bf`。严格及regression-only保护均只报`output_pixels_changed`；输入/参考/owner/coverage/canvas/来源和原生QG均通过。保留原始rejected，不改写为通过。
 - 证据`output/acceptance/task-6/lanting-r1/{lanting/analysis.json,paper-tone-audit.json}`；[机器摘要](../benchmarks/lanting-task-6-paper-seams.json)。同冻结版正在`--exclusive --label r1-exclusive`复跑并导出test-only重叠样本，先排除负载与确定性差异。
 
-### r2：直接拟合实际渲染的增益基函数（待验证）
+### r2：直接拟合实际渲染的增益基函数（算法说明）
 
 保留r1图解为初值；用fit patch位置上的真实9邻格衰减/归一化系数，建立成对稀疏约束，64步有界coordinate descent。每个pair-cell总权重相同，旧场ridge仍0.05；holdout完全不参与拟合。原local_gain函数逐字保留，拒绝时不因浮点运算重排改变旧像素。新增测试核对拟合基与渲染基在稀疏支持和格边界一致、弱支持的残差改善、未约束节点不变、限幅。
 
@@ -56,3 +56,9 @@ r1独占复跑已完成：TIFF与首轮相同（`731073bd…`）；QG pass/8ROI�
 - 复看包`output/acceptance/task-6/review-r2/README.md`：整图+6对512×512 RGBA16原生裁片，逐张PNG/TIFF解码RGBA一致、原ICC保留；采样坐标及源/裁片摘要见manifest。导出占run槽并监控RSS，峰值4,262,199,296B（3.97GiB）。Agent看图未见这些位置有明显新笔画光晕/断裂或真实反光丢失；此为技术复核，不代替用户D4。已登记[复看队列](review-queue.md) R20261118-1，1/3，待看。
 - 文档保留策略：已逐字节核对r1两次TIFF一致，删除较旧重复TIFF，保留较新的r1-exclusive失败TIFF及两轮全部日志/报告；映射在`duplicate-r1-tiff-retention.json`，不触碰旧正式基线。
 - 下一步：rebase到v1、同一冻结r2运行中等层5例。未通过前不勾选任务6或宣称合入。
+
+### 中等层进行时的兼容性核对
+
+9张冷跑已0项不符：TIFF仍v28 `718a903d…`、RAW18/fusion6、默认512MiB/1GiB预算、QG和RSS门均通过。热跑及后三例继续。
+
+发现新guard CLI对旧合同也无条件读取新缩略文件，会使旧合法目录缺图时被拒绝。新增合成CLI plumbing fixture实际复现（`legacy-cli-before-fix.log` exit1），然后改为仅在合同声明referencePreviewSha时读取；不改变v4分支的严格判定，不改Rust或任何运行预期。19项Node测试（guard9/runner10）通过，真实r2的v4严格保护再次通过（`r2-v4-strict-compat.json`）。这不重跑或伪造原生图像检查。

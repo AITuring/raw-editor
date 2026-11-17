@@ -1,5 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { evaluateLantingGuard } from './focus-stack-lanting-guard.mjs';
 const requiredCriteria = Array.from({ length: 8 }, (_, i) => `criterion-${i}`);
 const contract = {
@@ -126,4 +132,43 @@ test('task 6 audit binds the reference conversion and the measured image artifac
   }
   a.paperReferencePreviewSha = 'sandbox-conversion';
   assert.equal(evaluateLantingGuard(c, a).pass, false);
+});
+
+test('legacy CLI contracts do not require the newly bound preview artifacts', async () => {
+  // Synthetic guard plumbing only: native image/QG production is tested separately.
+  const dir = await mkdtemp(join(tmpdir(), 'lanting-guard-legacy-'));
+  try {
+    const base = join(dir, 'lanting');
+    const reportDir = join(base, 'run', 'fixture-stack-reports');
+    await mkdir(reportDir, { recursive: true });
+    await mkdir(join(base, 'diagnostics'));
+    const hash = (s) => createHash('sha256').update(s).digest('hex');
+    const actual = valid();
+    const inputs = actual.sourcePaths.map((path) => ({ path }));
+    const c = { ...contract, outputSha: hash('pixels'), referenceSha: hash('reference'),
+      ownerSha: hash('owner'), coverageSha: hash('coverage'), inputsSha: hash(JSON.stringify(inputs)),
+      referencePath: join(dir, 'reference.jpg') };
+    const report = { input: { source_count: 45 }, grouping: { station_count: 44 },
+      composition: { source_covered_pixels: c.covered, source_owned_pixels: c.owned },
+      output: { path: join(dir, 'fixture.tiff'), width: c.canvas[0], height: c.canvas[1],
+        written: true, artifact_validation: 'pass', alpha_preserved: true, bit_depth: 16 },
+      quality_gate: actual.qualityGate };
+    const json = (p, value) => writeFile(p, JSON.stringify(value));
+    await Promise.all([
+      writeFile(report.output.path, 'pixels'), writeFile(c.referencePath, 'reference'),
+      writeFile(join(base, 'diagnostics/owner.png'), 'owner'),
+      writeFile(join(base, 'diagnostics/coverage.png'), 'coverage'),
+      json(join(reportDir, 'stack-report-fixture.json'), report),
+      json(join(base, 'analysis.json'), { output_sha256: c.outputSha, checks: { inputs_unchanged: true } }),
+      json(join(base, 'execution.json'), { inputs }),
+      json(join(dir, 'paper-tone-audit.json'), { summary: actual.paper }),
+      json(join(dir, 'contract.json'), c),
+    ]);
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL('./focus-stack-lanting-guard.mjs', import.meta.url)),
+      join(dir, 'contract.json'), base], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).pass, true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

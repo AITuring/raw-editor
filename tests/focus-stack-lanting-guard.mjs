@@ -135,8 +135,10 @@ async function main() {
     bitDepth: output.bit_depth,
     paper: paper.summary,
     paperProvenance: paper.provenance,
-    paperReferencePreviewSha: await sha(resolve(base, '..', 'reference-2048.jpg')),
-    paperCurrentPreviewSha: await sha(resolve(base, '..', 'current-2048.jpg')),
+    paperReferencePreviewSha: contract.paper.referencePreviewSha === undefined ? undefined
+      : await sha(resolve(base, '..', 'reference-2048.jpg')),
+    paperCurrentPreviewSha: contract.paper.referencePreviewSha === undefined ? undefined
+      : await sha(resolve(base, '..', 'current-2048.jpg')),
     qualityGate: report.quality_gate,
   };
   if (analysis.output_sha256 !== actual.outputSha) throw new Error('TIFF hash differs from recorded analysis');
