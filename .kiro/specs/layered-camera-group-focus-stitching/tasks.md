@@ -101,13 +101,14 @@
 
 ### 第 0 批：并行基础设施（N8.5）
 
-先完成本批，之后的任务才按 §6 的槽和目录规则运行。`scripts/stack-lab/` 下有未提交、未测试的草稿（`common.py`、`slot.py`、`freeze.py`、`run.py`、`lanting_audit.py`），可作起点或重写。
+先完成本批，之后的任务才按 §6 的槽和目录规则运行。任务1的资源槽与冻结工具已验收，使用方式见 [stack-lab说明](../../../scripts/stack-lab/README.md)。任务2的 `run.py`、`lanting_audit.py` 仍是未提交、未验收草稿；矩阵和真实线程演练待任务2–4。
 
-- [ ] 1. 资源槽与冻结二进制工具
+- [x] 1. 资源槽与冻结二进制工具（2026-11-17）
   - 目标：`slot.py build|run|exclusive|status` 与 `freeze.py --label <label> [--worktree <path>] [--adopt <exe>]`，行为按 §6.1、§6.2。
   - 修改：`scripts/stack-lab/slot.py`、`freeze.py`、`common.py`。
   - 资源：`build` 槽（冻结一次）。依赖：无。冲突：无。
   - 完成标准：两个同类请求确实排队，`status` 显示占用者；上限与 `nice` 生效；用 `output/acceptance/base-p1/candidate-release-binary` 冻结出 `binaries/base-2026-11-12`，SHA 与 base-p1 一致；label 重复时拒绝。
+  - 验收：17项隔离进程测试通过；真实base冻结SHA与原记录一致、原始提交及523项清单保留；真实Cargo编译/冻结、执行入口及3项定向冒烟通过。见 [任务卡](../../../docs/artwork-lanes/1-resource-freeze.md)及[机器摘要](../../../docs/benchmarks/task-1-resource-freeze.json)。任务2–4仍未完成，不宣称已验证真实素材线程确定性。
 
 - [ ] 2. 单次运行与回归矩阵脚本
   - 目标：`run.py`（一次素材运行，自动排队 `run` 槽，写 `execution.json`/`analysis.json`：QG、未通过项、来源计数、峰值 RSS、内存门、wall、`contended`、TIFF SHA；兰亭取景运行附纸面审计和严格保护）和 `matrix.py --tier quick|medium|extended|full`。

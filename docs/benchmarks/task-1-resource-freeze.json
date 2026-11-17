@@ -1,0 +1,127 @@
+{
+  "id": "task-1-resource-freeze",
+  "date": "2026-11-17",
+  "status": "task_1_accepted",
+  "starting_commit": "b845bc9b73b6ed09f7e47aae7c1e5a9d06b8d0f0",
+  "changed_production_image_code": false,
+  "integration_tests": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/stack-lab -v",
+    "passed": 17,
+    "failed": 0,
+    "seconds": 9.799,
+    "isolated_temporary_repositories": true
+  },
+  "source_files_sha256": {
+    "scripts/stack-lab/common.py": "09fd59a22b9188821ca06f5371d43c92cdd39bcd014468d69f82ea039ac2519c",
+    "scripts/stack-lab/freeze.py": "b00915169ccef38a5b9009fd185cf3696180ff093a386ddbc85da034937f0b1f",
+    "scripts/stack-lab/slot.py": "cd2ef31e8f4cd60e6ee8a9f16128312a808da24f0a59301266b81faddd121391"
+  },
+  "base_adoption": {
+    "sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+    "commit": "c0c1e5a9037fb4f8a8f8b983802848feb667b9ba",
+    "source_manifest_entries": 523,
+    "source_manifest_matches_original": true,
+    "wrapper_list_exit_code": 0,
+    "list_summary": "1137 tests, 0 benchmarks",
+    "duplicate_exit_code": 1,
+    "duplicate_preserved_metadata": true,
+    "nice": 10,
+    "caps": {
+      "RAYON_NUM_THREADS": "5"
+    },
+    "usage": {
+      "method": "getrusage(RUSAGE_CHILDREN), one frozen Rust child",
+      "max_rss_bytes": 11436032,
+      "wall_seconds": 1.2607487081550062,
+      "user_seconds": 0.0026149999999999997,
+      "system_seconds": 0.003152,
+      "child_exit_code": 0
+    }
+  },
+  "real_cargo_freeze": {
+    "sha256": "b20d19f6919dd53dff7ead03233e3f288522d62a02afcbf1b174d248bcc20469",
+    "commit": "b845bc9b73b6ed09f7e47aae7c1e5a9d06b8d0f0",
+    "source_manifest_entries": 719,
+    "uncommitted_source_changes": false,
+    "checks": [
+      {
+        "args": [
+          "--list"
+        ],
+        "exit_code": 0,
+        "log": "/Users/dp/Desktop/raw-editor/output/acceptance/task-1/compiled-smoke-0.log"
+      },
+      {
+        "args": [
+          "--exact",
+          "image_stack::tests::canonical_stack_result_is_display_encoded_rgb16",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "log": "/Users/dp/Desktop/raw-editor/output/acceptance/task-1/compiled-smoke-1.log"
+      },
+      {
+        "args": [
+          "--exact",
+          "panorama_stitching::virtual_tile_pyramid_tests::hypothesis_selection::canonical_edge_strength_ratio_is_import_order_invariant_at_asymmetric_gates",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "log": "/Users/dp/Desktop/raw-editor/output/acceptance/task-1/compiled-smoke-2.log"
+      },
+      {
+        "args": [
+          "--exact",
+          "panorama_stitching::virtual_tile_pyramid_tests::prior_repair_planning::prior_repair_preflight_rejects_the_whole_cluster_when_one_member_fails",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "log": "/Users/dp/Desktop/raw-editor/output/acceptance/task-1/compiled-smoke-3.log"
+      }
+    ],
+    "nice": 10,
+    "build_command": [
+      "cargo",
+      "test",
+      "--release",
+      "--lib",
+      "--offline",
+      "--no-run",
+      "--message-format=json"
+    ],
+    "build_environment": {
+      "CARGO_TARGET_DIR": "/Users/dp/Desktop/raw-editor/src-tauri/target",
+      "CARGO_BUILD_JOBS": "3",
+      "RAYON_NUM_THREADS": null,
+      "RUSTFLAGS": null,
+      "MACOSX_DEPLOYMENT_TARGET": null
+    },
+    "cargo_elapsed": "7m 29s"
+  },
+  "scheduler_validation": {
+    "build_jobs_max": 3,
+    "run_rayon_max": 5,
+    "exclusive_build_jobs_max": 6,
+    "exclusive_rayon_max": 8,
+    "nice_minimum": 10,
+    "run_estimate_gib_max": 20,
+    "unknown_peak_requires_exclusive": true,
+    "measured_rss_gate_bytes_for_task_2": 25769803776,
+    "sandbox_priority_refusal": {
+      "exit_code": 127,
+      "target_command_executed": false
+    }
+  },
+  "preserved_files_sha256": {
+    ".vscode/settings.json": "2ac108a9cae907889bfd3e4d0f60a5ff35c2196b2b2ef8a18308e69ed4447f1c",
+    "scripts/stack-lab/run.py": "1043aad4b491a0a7a868421e3605d77972e15a08b60dcbc981cc69479b9595ad",
+    "scripts/stack-lab/lanting_audit.py": "739e566c0d31514b50c090d8881e7ffdcfb7e2e1facd1b4218b6e08014a39a49"
+  },
+  "evidence_directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-1",
+  "limits": [
+    "No image dataset runs or new image quality/performance acceptance.",
+    "The 17 integration tests use fake Cargo in temporary repositories; a separate real Cargo no-run build and 3 targeted Rust smoke tests passed.",
+    "New compiled artifact is tool-validation only and does not replace the accepted base binary or pixel baselines.",
+    "Tasks 2-4 remain incomplete: full run/matrix/RSS gate and actual 9-NEF thread/two-slot pixel validation remain pending."
+  ]
+}
