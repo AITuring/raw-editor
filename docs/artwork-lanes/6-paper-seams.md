@@ -28,3 +28,17 @@
 - 新增Rust测试覆盖传递约束、有限增益、未支持区域、插入顺序确定性，以及holdout冲突精确回退。构建前已有ONNX运行时先核对SHA再复制到忽略目录，无需下载。
 - `node --test tests/focus-stack-lanting-guard.test.mjs`：8/8通过，含>6增加/缺失和审计底板伪装的拒绝。
 - 初次定向Cargo调用误用工作树独立target，主动INT停止（exit130）；重试转到共享target。首次共享编译发现重复类型别名，修正后重新编译。保留`overlap-unit-r{1,2,3}.log`，不掩盖失败。
+
+### r1：holdout改善但任务指标未达标
+
+- 源码提交`1293c148822d4a9e5035c99d64efdf48db68f085`，冻结`task-6-paper-r1`，binary SHA `18f92268fc821bf0b00e8b53b4de703e12c3db6dc38b82ed3dc25b4a57b83a41`，线程探针verified（1/1）；真实run为Rayon5。
+- `matrix.py --tier quick --binary task-6-paper-r1 --lane task-6 --label r1`：7组全通过；Rust1097通过、0失败、44忽略；`matrix-r1-quick/matrix.json`。
+- `run.py --binary task-6-paper-r1 --lane task-6 --dataset lanting --framed --label r1`：QG pass/8ROI、unresolved0、native detail_repairs100（旧97）、RSS12,516,835,328B（11.657GiB）通过；与quick相交，contended，非性能结论。
+- holdout90948 patch：mean log残差0.015208→0.013917，median0.009368→0.008146，P950.049871→0.048821。插值场独立指标改善，允许候选启用。
+- 但纸面跨owner **P95仍4、max7、>6仍2**；>3边由30降到28，仍未达到≤3目标。RGB残差仍6/1/1，画面MAE artwork4.05→4.01，但rail5.53→5.69；部分边界变差。因此不准备新像素合同、不入视觉验收队列、不勾选任务6。
+- TIFF SHA `731073bd38c83dc4643a7eefea5103c0ca0269effc788d7fb1c02729d920b0bf`。严格及regression-only保护均只报`output_pixels_changed`；输入/参考/owner/coverage/canvas/来源和原生QG均通过。保留原始rejected，不改写为通过。
+- 证据`output/acceptance/task-6/lanting-r1/{lanting/analysis.json,paper-tone-audit.json}`；[机器摘要](../benchmarks/lanting-task-6-paper-seams.json)。同冻结版正在`--exclusive --label r1-exclusive`复跑并导出test-only重叠样本，先排除负载与确定性差异。
+
+### r2：直接拟合实际渲染的增益基函数（待验证）
+
+保留r1图解为初值；用fit patch位置上的真实9邻格衰减/归一化系数，建立成对稀疏约束，64步有界coordinate descent。每个pair-cell总权重相同，旧场ridge仍0.05；holdout完全不参与拟合。原local_gain函数逐字保留，拒绝时不因浮点运算重排改变旧像素。新增测试核对拟合基与渲染基在稀疏支持和格边界一致、弱支持的残差改善、未约束节点不变、限幅。

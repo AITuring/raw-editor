@@ -1,0 +1,184 @@
+{
+  "task": 6,
+  "status": "in_progress_not_accepted",
+  "target": {
+    "maximum_boundary_p95": 3,
+    "maximum_boundary_above_6": 2,
+    "quality_gate": "pass",
+    "geometry_and_source_binding": "unchanged"
+  },
+  "baseline": {
+    "output_sha256": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac",
+    "paper": {
+      "paper_points": 1008,
+      "adjacent_comparisons": 1937,
+      "median_residual_rgb": [
+        6.0,
+        1.0,
+        1.0
+      ],
+      "median_adjacent_step": 1.0,
+      "p95_adjacent_step": 4.0,
+      "maximum_adjacent_step": 7.5,
+      "source_boundary": {
+        "count": 506,
+        "median": 1.0,
+        "p95": 4.0,
+        "max": 7.0,
+        "above_6": 2
+      },
+      "source_interior": {
+        "count": 1431,
+        "median": 1.0,
+        "p95": 4.0,
+        "max": 7.5,
+        "above_6": 2
+      },
+      "zone_gray_mae": {
+        "wall": 6.59,
+        "rail": 5.53,
+        "artwork": 4.05,
+        "bottom_frame": 5.41
+      }
+    },
+    "audit_provenance": {
+      "method": "lanting_paper_sips_ffmpeg_v1",
+      "script_sha256": "dbbce8c9c65225835f623b1a81528bc89943542f38bf4f349b0df1bf2f0ed457",
+      "reference_sha256": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
+      "output_sha256": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac",
+      "reference_preview_sha256": "affaf67b4a64d74b9b0799e02c28114f730d95a434dc06b6876321aec5802683",
+      "current_preview_sha256": "3bc267add9a037af2d1c7b9b4899f55a4ba9d4852edb419190c3784d23650718",
+      "owner_sha256": "921b12cce03e2bc85d1cd4b0a95c51fff4e3460ffcd18f61727fc612b2989145",
+      "reference_rgb_sha256": "14bb712bce5251f55b078fce91b5b431f2c6cb281aa435b831fcd9b8df2e7b15",
+      "current_rgb_sha256": "2a56b58dffbf1cbe3acde8eba84a7518dc34f88f6eec43e0600ca6e48a769037"
+    }
+  },
+  "candidates": [
+    {
+      "label": "task-6-paper-r1",
+      "commit": "1293c148822d4a9e5035c99d64efdf48db68f085",
+      "binary_sha256": "18f92268fc821bf0b00e8b53b4de703e12c3db6dc38b82ed3dc25b4a57b83a41",
+      "output_sha256": "731073bd38c83dc4643a7eefea5103c0ca0269effc788d7fb1c02729d920b0bf",
+      "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/lanting-r1/lanting/analysis.json",
+      "paper": {
+        "paper_points": 1008,
+        "adjacent_comparisons": 1937,
+        "median_residual_rgb": [
+          6.0,
+          1.0,
+          1.0
+        ],
+        "median_adjacent_step": 1.0,
+        "p95_adjacent_step": 3.5,
+        "maximum_adjacent_step": 7.0,
+        "source_boundary": {
+          "count": 506,
+          "median": 1.0,
+          "p95": 4,
+          "max": 7,
+          "above_6": 2
+        },
+        "source_interior": {
+          "count": 1431,
+          "median": 1.0,
+          "p95": 3.0,
+          "max": 7.0,
+          "above_6": 2
+        },
+        "zone_gray_mae": {
+          "wall": 6.59,
+          "rail": 5.69,
+          "artwork": 4.01,
+          "bottom_frame": 5.28
+        }
+      },
+      "audit_provenance": {
+        "method": "lanting_paper_sips_ffmpeg_v1",
+        "script_sha256": "dbbce8c9c65225835f623b1a81528bc89943542f38bf4f349b0df1bf2f0ed457",
+        "reference_sha256": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
+        "output_sha256": "731073bd38c83dc4643a7eefea5103c0ca0269effc788d7fb1c02729d920b0bf",
+        "reference_preview_sha256": "affaf67b4a64d74b9b0799e02c28114f730d95a434dc06b6876321aec5802683",
+        "current_preview_sha256": "8c95d76e1c1cda4f74c494fa4eba085ed2000797ce1d599da64eb5413081d0cc",
+        "owner_sha256": "921b12cce03e2bc85d1cd4b0a95c51fff4e3460ffcd18f61727fc612b2989145",
+        "reference_rgb_sha256": "14bb712bce5251f55b078fce91b5b431f2c6cb281aa435b831fcd9b8df2e7b15",
+        "current_rgb_sha256": "41a7f33967215593bacd2643b3a930605d50adf04652ebc7fe1074fe022a310f"
+      },
+      "quality_gate": {
+        "verdict": "pass",
+        "roi_count": 8,
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "non_pass": [
+          "mtf50_normalized:not_applicable",
+          "boundary_stroke_alignment:not_applicable"
+        ],
+        "unresolved_pixels": 0,
+        "detail_repairs": 100
+      },
+      "checks": {
+        "inputs_unchanged": true,
+        "reference_unchanged": true,
+        "binary_unchanged": true,
+        "memory_gate_pass": true,
+        "runner_exit_zero": true,
+        "native_child_exit_zero": true,
+        "runner_summary_present": true,
+        "runner_failures_empty": true,
+        "quality_gate_pass": true,
+        "output_contract": true,
+        "report_source_digests": true,
+        "lanting_guard": false
+      },
+      "guard": {
+        "strict": {
+          "pass": false,
+          "failures": [
+            "output_pixels_changed"
+          ],
+          "status": "rejected",
+          "qualityPass": true,
+          "nativeEvidencePass": true,
+          "regressionOnly": false,
+          "contractSha": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25",
+          "reportSha": "4bc2e0362c4e82e474cd84f206a64aa0f26900fb3e8ffad421e00de521e8909f",
+          "outputSha": "731073bd38c83dc4643a7eefea5103c0ca0269effc788d7fb1c02729d920b0bf"
+        },
+        "regression_only": {
+          "pass": false,
+          "failures": [
+            "output_pixels_changed"
+          ],
+          "status": "rejected",
+          "qualityPass": true,
+          "nativeEvidencePass": true,
+          "regressionOnly": true,
+          "contractSha": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25",
+          "reportSha": "4bc2e0362c4e82e474cd84f206a64aa0f26900fb3e8ffad421e00de521e8909f",
+          "outputSha": "731073bd38c83dc4643a7eefea5103c0ca0269effc788d7fb1c02729d920b0bf"
+        }
+      },
+      "peak_rss_bytes": 12516835328,
+      "memory_gate_pass": true,
+      "target_met": false,
+      "decision": "rejected_as_task_completion: boundary P95 remains 4; original strict guard also correctly rejects changed TIFF pixels"
+    }
+  ],
+  "quick": {
+    "status": "pass",
+    "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/matrix-r1-quick/matrix.json",
+    "rust_passed": 1097,
+    "rust_failed": 0,
+    "rust_ignored": 44
+  },
+  "canonical_contract_changed": false,
+  "visual_review": "not_submitted_candidate_target_not_met"
+}

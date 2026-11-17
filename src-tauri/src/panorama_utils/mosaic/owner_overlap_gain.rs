@@ -196,15 +196,18 @@ impl OwnerOverlapGain {
     fn refined(&self, baseline: &GainCells) -> (GainCells, serde_json::Value) {
         let mut regions = BTreeMap::<(u32, u32), Vec<(u8, u8, f64)>>::new();
         let mut heldout = Vec::new();
+        let mut training = Vec::new();
         for (&(a, b, x, y), cell) in &self.cells {
             if cell.positions.len() != cell.values.len() || cell.quadrants.count_ones() < 2 {
                 continue;
             }
             let mut fit = Vec::new();
+            let mut fit_positions = Vec::new();
             let mut validation = Vec::new();
             for (&v, &(wx, wy, train)) in cell.values.iter().zip(&cell.positions) {
                 if train {
                     fit.push(v);
+                    fit_positions.push((wx, wy));
                 } else {
                     validation.push((a, b, wx, wy, v));
                 }
@@ -218,6 +221,12 @@ impl OwnerOverlapGain {
                 continue;
             }
             regions.entry((x, y)).or_default().push((a, b, r));
+            let weight = 1.0 / fit_positions.len() as f64;
+            training.extend(
+                fit_positions
+                    .into_iter()
+                    .map(|(wx, wy)| (a, b, wx, wy, r, weight)),
+            );
             heldout.extend(validation);
         }
         let mut candidate = baseline.clone();
@@ -257,6 +266,7 @@ impl OwnerOverlapGain {
                 candidate.insert((owner, x, y), value);
             }
         }
+        fit_interpolated_field(&mut candidate, baseline, &training);
         let error = |cells: &GainCells| {
             let mut residuals: Vec<_> = heldout
                 .iter()
@@ -282,8 +292,68 @@ impl OwnerOverlapGain {
             && after[0] < before[0] * 0.95
             && after[1] <= before[1]
             && after[2] <= before[2];
-        let summary = serde_json::json!({"accepted":accept,"fit_pair_cells":regions.values().map(Vec::len).sum::<usize>(),"heldout_patches":heldout.len(),"baseline_abs_log_residual_mean_median_p95":before,"candidate_abs_log_residual_mean_median_p95":after,"fallback":"original_same_content_overlap_field"});
+        let summary = serde_json::json!({"accepted":accept,"fit_pair_cells":regions.values().map(Vec::len).sum::<usize>(),"fit_patches":training.len(),"heldout_patches":heldout.len(),"solver":"bounded_coordinate_descent_on_rendered_gain_basis","baseline_abs_log_residual_mean_median_p95":before,"candidate_abs_log_residual_mean_median_p95":after,"fallback":"original_same_content_overlap_field"});
         (if accept { candidate } else { baseline.clone() }, summary)
+    }
+}
+
+type FitPatch = (u8, u8, f64, f64, f64, f64);
+
+fn fit_interpolated_field(candidate: &mut GainCells, baseline: &GainCells, patches: &[FitPatch]) {
+    let keys: Vec<_> = candidate.keys().copied().collect();
+    let indices: BTreeMap<_, _> = keys.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+    let mut values: Vec<_> = keys.iter().map(|k| candidate[k]).collect();
+    let anchors: Vec<_> = keys
+        .iter()
+        .map(|k| *baseline.get(k).unwrap_or(&0.0))
+        .collect();
+    let mut columns = vec![Vec::<(usize, f64)>::new(); keys.len()];
+    let mut residuals = Vec::with_capacity(patches.len());
+    let mut weights = Vec::with_capacity(patches.len());
+    for &(a, b, x, y, target, weight) in patches {
+        let mut row = Vec::new();
+        for (owner, sign) in [(a, 1.0), (b, -1.0)] {
+            let basis = local_basis(candidate, owner, x, y);
+            for (key, coefficient) in basis {
+                row.push((indices[&key], sign * coefficient));
+            }
+        }
+        let index = residuals.len();
+        residuals.push(target - row.iter().map(|&(i, c)| values[i] * c).sum::<f64>());
+        weights.push(weight);
+        for (i, coefficient) in row {
+            columns[i].push((index, coefficient));
+        }
+    }
+    // Fit the same spatial basis that the renderer uses, not hypothetical
+    // per-cell constants. Equal total weight per pair cell prevents dense cells
+    // from overruling independent overlaps. Coordinate updates preserve bounds.
+    for _ in 0..64 {
+        let mut largest: f64 = 0.0;
+        for (i, column) in columns.iter().enumerate() {
+            if column.is_empty() {
+                continue;
+            }
+            let mut gradient = 0.05 * (anchors[i] - values[i]);
+            let mut diagonal = 0.05;
+            for &(row, c) in column {
+                gradient += weights[row] * c * residuals[row];
+                diagonal += weights[row] * c * c;
+            }
+            let next = (values[i] + gradient / diagonal).clamp(-MAX_LOG_GAIN, MAX_LOG_GAIN);
+            let delta = next - values[i];
+            values[i] = next;
+            largest = largest.max(delta.abs());
+            for &(row, c) in column {
+                residuals[row] -= c * delta;
+            }
+        }
+        if largest < 1e-8 {
+            break;
+        }
+    }
+    for (key, value) in keys.into_iter().zip(values) {
+        candidate.insert(key, value);
     }
 }
 
@@ -337,6 +407,34 @@ fn local_gain(cells: &BTreeMap<(u8, u32, u32), f64>, owner: u8, x: f64, y: f64) 
     }
     // Do not normalize weak support into a full-strength extrapolation.
     (sum / weight.max(1.0)).clamp(-MAX_LOG_GAIN, MAX_LOG_GAIN)
+}
+
+fn local_basis(cells: &GainCells, owner: u8, x: f64, y: f64) -> Vec<((u8, u32, u32), f64)> {
+    let gx = (x / STEP) as i32;
+    let gy = (y / STEP) as i32;
+    let mut basis = Vec::with_capacity(9);
+    let mut weight = 0.0;
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            if gx + dx < 0 || gy + dy < 0 {
+                continue;
+            }
+            let cx = (gx + dx) as u32;
+            let cy = (gy + dy) as u32;
+            if cells.contains_key(&(owner, cx, cy)) {
+                let wx = (1.0 - (x - (f64::from(cx) + 0.5) * STEP).abs() / (STEP * 1.5)).max(0.0);
+                let wy = (1.0 - (y - (f64::from(cy) + 0.5) * STEP).abs() / (STEP * 1.5)).max(0.0);
+                let w = wx * wy;
+                basis.push(((owner, cx, cy), w));
+                weight += w;
+            }
+        }
+    }
+    // Do not normalize weak support into a full-strength extrapolation.
+    for (_, w) in &mut basis {
+        *w /= weight.max(1.0);
+    }
+    basis
 }
 
 #[cfg(test)]
@@ -459,5 +557,30 @@ mod tests {
             OwnerOverlapGain::default().refined(&GainCells::new()).0,
             GainCells::new()
         );
+    }
+
+    #[test]
+    fn fitted_basis_matches_renderer_at_sparse_support_and_cell_boundaries() {
+        let mut cells = GainCells::new();
+        for (x, y, gain) in [(0, 0, 0.02), (1, 0, -0.03), (0, 1, 0.01)] {
+            cells.insert((2, x, y), gain);
+        }
+        cells.insert((2, 8, 8), 0.01);
+        for x in [0.0, 255.0, 512.0, 760.0, 1024.0, 4096.0] {
+            for y in [0.0, 256.0, 512.0, 1024.0] {
+                let fitted: f64 = local_basis(&cells, 2, x, y)
+                    .iter()
+                    .map(|(key, weight)| cells[key] * weight)
+                    .sum();
+                assert!((fitted - local_gain(&cells, 2, x, y)).abs() < 1e-14);
+            }
+        }
+        let baseline = cells.clone();
+        let before = (0.03 - local_gain(&cells, 2, 760.0, 256.0)).abs();
+        fit_interpolated_field(&mut cells, &baseline, &[(2, 1, 760.0, 256.0, 0.03, 1.0)]);
+        let after = (0.03 - local_gain(&cells, 2, 760.0, 256.0)).abs();
+        assert!(after < before * 0.5);
+        assert_eq!(cells[&(2, 8, 8)], baseline[&(2, 8, 8)]);
+        assert!(cells.values().all(|v| v.abs() <= MAX_LOG_GAIN));
     }
 }
