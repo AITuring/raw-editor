@@ -214,9 +214,11 @@
         "checks.output_contract": true,
         "performance.raw_decode_count": 0,
         "performance.native_fusion_count": 0,
-        "output_sha256": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac",
+        "output_sha256": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02",
         "guard.strict.pass": true,
-        "guard.regression_only.pass": true
+        "guard.regression_only.pass": true,
+        "paper_audit.source_boundary.p95": 3.0,
+        "paper_audit.source_boundary.above_6": 0
       },
       "framed": true
     },

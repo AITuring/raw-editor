@@ -1,10 +1,10 @@
 {
-  "version": 3,
-  "scope": "Lanting45 explicit artwork framing: frozen painting-tone pixels, existing native QualityGate and source evidence. Real hardware reflections allowed; not a full-project release.",
+  "version": 4,
+  "scope": "Task6 Lanting45 explicit framing: heldout source-overlap gain graph fitted in the rendered spatial basis. Native QualityGate and source bindings unchanged; D4 visual confirmation pending, real hardware reflections retained.",
   "referencePath": "/Users/dp/Downloads/书画拼图/兰亭/DSC08854_FocusStack.jpg",
   "referenceSha": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
   "sourceCount": 45,
-  "outputSha": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac",
+  "outputSha": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02",
   "ownerSha": "921b12cce03e2bc85d1cd4b0a95c51fff4e3460ffcd18f61727fc612b2989145",
   "coverageSha": "2893910f831945dbef4cbdacce644240a2249b107a090cb423c5f32f86bf025b",
   "canvas": [
@@ -26,24 +26,65 @@
   ],
   "paper": {
     "minimumPoints": 1000,
-    "maximumBoundaryP95": 4,
+    "maximumBoundaryP95": 3,
     "maximumBoundaryStep": 7,
     "reflectionPolicy": "real hardware reflections allowed by user; paper domain remains primary",
-    "boundaryP95Decision": "2026-11-12 user decision (option a): I1 judged visually slightly better than v63 and comparable overall, so its measured cross-owner paper step P95=4 (v63: 3) is accepted as the regression ceiling. Restoring P95<=3 remains the first L1 item; this is a regression guard, not a QualityGate threshold."
+    "boundaryP95Decision": "2026-11-18 task6 machine result restores the requested P95<=3 and freezes measured >6 count at zero. Supersedes the temporary I1 ceiling of 4; no shared QualityGate threshold changed. Original user decision is preserved in priorBaseline.",
+    "maximumBoundaryAbove6": 0,
+    "referencePreviewSha": "affaf67b4a64d74b9b0799e02c28114f730d95a434dc06b6876321aec5802683"
   },
   "recordedLegacyGate": "pass",
-  "releaseReady": true,
-  "baselineBinding": "Re-frozen 2026-11-12 on the I1 base (v1 d6ba959b) and base candidate P1: TIFF byte-identical between both. Replaces the v60/v63 pixel binding; the v63 contract stays in git history.",
+  "releaseReady": false,
+  "baselineBinding": "Task6 r2 expected pixel repair: output SHA changed; inputs, reference, owner, coverage, canvas, full-source-union counts remain bound to I1. Existing regression sharpness-floor baselines remain byte-identical. Whole image and six native 1:1 pairs are attached for user review; no D4 claim.",
   "inputsSha": "00af0b142f22ef38138b078540b8156f75b5220557a93a5310d20caad120f4b1",
   "acceptedNativeEvidence": {
-    "candidate": "base-p1",
-    "binarySha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
-    "reportSha256": "be273e10436ce09e397b0c87ba2808d3843c5af8e7dcd3961f79f917fdb8f147",
+    "candidate": "task-6-paper-r2",
+    "commit": "72af6ea0bf011b3aea1d59a0e4cfe6570ac1e22b",
+    "binarySha256": "de905b0e6e1f3f620a88db2449a6df4f1672212d8e8f7fdc71862960f93db522",
+    "reportSha256": "effebdfc49e321fc2b93907dbec62c6051e003f30e83f149fd601e1daa141069",
     "roiCount": 8,
     "unresolvedPixels": 0,
     "captureStations": 44,
     "sources": 45,
-    "detailRepairs": 97,
-    "reportNote": "Hash after relocating the run from .worktrees/port-codex to output/acceptance/base-p1 (absolute paths rewritten); the report as written by the run hashed 45c00a173e978376844010225ee06cbe161447bc78a7b568dddd22edd8d7ba18."
+    "detailRepairs": 101,
+    "paperBoundary": {
+      "count": 506,
+      "median": 1.0,
+      "p95": 3.0,
+      "max": 6,
+      "above_6": 0
+    },
+    "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/lanting-r2/lanting/analysis.json",
+    "initialGuardNote": "Original v3 guard correctly rejected only output_pixels_changed. This raw rejection is retained; v4 strict verdict is a separate record, followed by an independent medium-matrix run."
+  },
+  "priorBaseline": {
+    "commit": "53348b36",
+    "contractSha256": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25",
+    "outputSha": "22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac",
+    "paper": {
+      "minimumPoints": 1000,
+      "maximumBoundaryP95": 4,
+      "maximumBoundaryStep": 7,
+      "reflectionPolicy": "real hardware reflections allowed by user; paper domain remains primary",
+      "boundaryP95Decision": "2026-11-12 user decision (option a): I1 judged visually slightly better than v63 and comparable overall, so its measured cross-owner paper step P95=4 (v63: 3) is accepted as the regression ceiling. Restoring P95<=3 remains the first L1 item; this is a regression guard, not a QualityGate threshold."
+    },
+    "acceptedNativeEvidence": {
+      "candidate": "base-p1",
+      "binarySha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+      "reportSha256": "be273e10436ce09e397b0c87ba2808d3843c5af8e7dcd3961f79f917fdb8f147",
+      "roiCount": 8,
+      "unresolvedPixels": 0,
+      "captureStations": 44,
+      "sources": 45,
+      "detailRepairs": 97,
+      "reportNote": "Hash after relocating the run from .worktrees/port-codex to output/acceptance/base-p1 (absolute paths rewritten); the report as written by the run hashed 45c00a173e978376844010225ee06cbe161447bc78a7b568dddd22edd8d7ba18."
+    }
+  },
+  "visualReview": {
+    "batch": "R20261118-1",
+    "status": "pending_user_review",
+    "D4": false,
+    "package": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/README.md",
+    "manifestSha256": "8bcbcac301220b0e6f13cfa63021db7c42f2fdd97d46e4f88cf928b9aeba672f"
   }
 }

@@ -1,7 +1,7 @@
 # 任务6：兰亭纸面接缝
 
 - 起点：v1 `53348b36`；工作区`.worktrees/task-6`，分支`lane/task-6/paper-seams`；同一执行者与L0，不启动并行agent。
-- 状态：实现与原生验证中，尚未验收。
+- 状态：r2受影响素材机器目标、快速层及本素材v4严格保护通过；中等层待跑，用户复看待确认，不计D4。
 - 目标：兰亭45张、显式取景、scale=1；纸面跨owner阶跃P95≤3，>6处数不超过同工具基线，QG pass/8ROI；输入/参考/owner/coverage/canvas不退化，RSS≤24GiB；视觉变化进入复看队列。
 - 保护：原始TIFF SHA `22b5a3717a2411f728b84d0ec1e4a1f852485abd38de43fc027610f8fedf35ac`；原始合同与其摘要保存在starting-state.json，不覆盖主工作区基线。
 - 修改区域：流式mosaic的owner_overlap_gain.rs（同位重叠残差联合校正）、必要的独立验证/诊断；不修改共享QualityGate阈值、全局开关、源图、其他素材基线。未改全局热点stitch_images.rs/report_schema。
@@ -11,7 +11,7 @@
 
 ## 记录
 
-尚未产生修复候选的真实验收结果。历史v57几何反馈及v58视觉/边界退化已读取，不采用参考图拟合生产颜色或几何。
+初始记录：历史v57几何反馈及v58视觉/边界退化已读取，不采用参考图拟合生产颜色或几何。首轮未达标，第二轮结果见下。
 
 ### 基线与审计环境
 
@@ -42,3 +42,17 @@
 ### r2：直接拟合实际渲染的增益基函数（待验证）
 
 保留r1图解为初值；用fit patch位置上的真实9邻格衰减/归一化系数，建立成对稀疏约束，64步有界coordinate descent。每个pair-cell总权重相同，旧场ridge仍0.05；holdout完全不参与拟合。原local_gain函数逐字保留，拒绝时不因浮点运算重排改变旧像素。新增测试核对拟合基与渲染基在稀疏支持和格边界一致、弱支持的残差改善、未约束节点不变、限幅。
+
+r1独占复跑已完成：TIFF与首轮相同（`731073bd…`）；QG pass/8ROI、P95=4、max=7、>6=2，owner/coverage/canvas/输入保护均通过，RSS12,517,588,992B，contended=false。因此保留未达标结论，并非并发负载导致。`r1-overlap-evidence.json`（13.05MiB）含13399对格及211211样本，用于定位真实插值约束，不拟合参考图。
+
+### r2真实结果：纸面目标通过，进入集成回归
+
+- 源码`72af6ea0bf011b3aea1d59a0e4cfe6570ac1e22b`，冻结`task-6-paper-r2`，binary SHA `de905b0e6e1f3f620a88db2449a6df4f1672212d8e8f7fdc71862960f93db522`，线程探针verified；6项定向测试、快速层7组全过，Rust1098通过/0失败/44忽略。
+- 完整45张、44站点，scale=1、显式取景；QG pass/8ROI、unresolved0、detail_repairs101；RSS11,103,862,784B（10.34GiB），内存门通过，contended（与quick相交），不作性能结论。
+- **纸面跨owner P95 4→3、max7→6、>6处2→0**；1008纸面点、506边。paper interior P95也4→3。RGB残差6/1/1不变；灰度MAE artwork4.05→3.99、bottom5.41→5.23，但wall6.59→6.66、rail5.53→5.57，保留轻微增差。holdout90948：mean0.013670、median0.008013、P950.047602，优于旧场及r1。
+- TIFF SHA `29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02`；画布31090×11008、owner/coverage SHA与旧合同一致，覆盖/owned421257787、输入/参考和所有原QG判据不变。源像素校正发生在冻结几何后；细节修补的测量随亮度变化，记录由97变101，未改修补阈值。
+- r2首次旧v3合同严格保护只报`output_pixels_changed`，原始rejected分析保留。目标通过且整图/全部6对裁片已实际打开复核后，准备本素材v4：固定新TIFF；P95上限4→3，新增>6上限0与固定参考缩略图SHA；owner/coverage/canvas/input绑定逐项不变。旧合同完整保存在priorBaseline/git，不改共享QG阈值、全局默认开关或其他素材基线；`focus-stack-regression-baselines.json`所有旧锐度floor完全保留，不用rebaseline。
+- 本素材v4 strict及regression-only通过，单独记录`r2-v4-{strict,regression-only}.json`，不改写首轮分析。数据绑定改动后再次跑四组Node合同/测试，通过。
+- 复看包`output/acceptance/task-6/review-r2/README.md`：整图+6对512×512 RGBA16原生裁片，逐张PNG/TIFF解码RGBA一致、原ICC保留；采样坐标及源/裁片摘要见manifest。导出占run槽并监控RSS，峰值4,262,199,296B（3.97GiB）。Agent看图未见这些位置有明显新笔画光晕/断裂或真实反光丢失；此为技术复核，不代替用户D4。已登记[复看队列](review-queue.md) R20261118-1，1/3，待看。
+- 文档保留策略：已逐字节核对r1两次TIFF一致，删除较旧重复TIFF，保留较新的r1-exclusive失败TIFF及两轮全部日志/报告；映射在`duplicate-r1-tiff-retention.json`，不触碰旧正式基线。
+- 下一步：rebase到v1、同一冻结r2运行中等层5例。未通过前不勾选任务6或宣称合入。

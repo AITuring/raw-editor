@@ -1,6 +1,6 @@
 {
   "task": 6,
-  "status": "in_progress_not_accepted",
+  "status": "machine_target_and_quick_pass_medium_pending_visual_pending",
   "target": {
     "maximum_boundary_p95": 3,
     "maximum_boundary_above_6": 2,
@@ -170,15 +170,262 @@
       "memory_gate_pass": true,
       "target_met": false,
       "decision": "rejected_as_task_completion: boundary P95 remains 4; original strict guard also correctly rejects changed TIFF pixels"
+    },
+    {
+      "label": "task-6-paper-r2",
+      "commit": "72af6ea0bf011b3aea1d59a0e4cfe6570ac1e22b",
+      "binary_sha256": "de905b0e6e1f3f620a88db2449a6df4f1672212d8e8f7fdc71862960f93db522",
+      "output_sha256": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02",
+      "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/lanting-r2/lanting/analysis.json",
+      "paper": {
+        "paper_points": 1008,
+        "adjacent_comparisons": 1937,
+        "median_residual_rgb": [
+          6.0,
+          1.0,
+          1.0
+        ],
+        "median_adjacent_step": 1,
+        "p95_adjacent_step": 3.0,
+        "maximum_adjacent_step": 7.0,
+        "source_boundary": {
+          "count": 506,
+          "median": 1.0,
+          "p95": 3.0,
+          "max": 6,
+          "above_6": 0
+        },
+        "source_interior": {
+          "count": 1431,
+          "median": 1.0,
+          "p95": 3.0,
+          "max": 7.0,
+          "above_6": 1
+        },
+        "zone_gray_mae": {
+          "wall": 6.66,
+          "rail": 5.57,
+          "artwork": 3.99,
+          "bottom_frame": 5.23
+        }
+      },
+      "audit_provenance": {
+        "method": "lanting_paper_sips_ffmpeg_v1",
+        "script_sha256": "dbbce8c9c65225835f623b1a81528bc89943542f38bf4f349b0df1bf2f0ed457",
+        "reference_sha256": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
+        "output_sha256": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02",
+        "reference_preview_sha256": "affaf67b4a64d74b9b0799e02c28114f730d95a434dc06b6876321aec5802683",
+        "current_preview_sha256": "27b5e096c4d09e124aefcf7fb41c1d55600b8b540e07871e2c907da8dce750c4",
+        "owner_sha256": "921b12cce03e2bc85d1cd4b0a95c51fff4e3460ffcd18f61727fc612b2989145",
+        "reference_rgb_sha256": "14bb712bce5251f55b078fce91b5b431f2c6cb281aa435b831fcd9b8df2e7b15",
+        "current_rgb_sha256": "62b2980f41534ad682624e880ef73f830052acbf47dc6819f47a574622b0c743"
+      },
+      "quality_gate": {
+        "verdict": "pass",
+        "roi_count": 8,
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "non_pass": [
+          "mtf50_normalized:not_applicable",
+          "boundary_stroke_alignment:not_applicable"
+        ],
+        "unresolved_pixels": 0,
+        "detail_repairs": 101
+      },
+      "checks": {
+        "inputs_unchanged": true,
+        "reference_unchanged": true,
+        "binary_unchanged": true,
+        "memory_gate_pass": true,
+        "runner_exit_zero": true,
+        "native_child_exit_zero": true,
+        "runner_summary_present": true,
+        "runner_failures_empty": true,
+        "quality_gate_pass": true,
+        "output_contract": true,
+        "report_source_digests": true,
+        "lanting_guard": false
+      },
+      "initial_v3_guard": {
+        "strict": {
+          "pass": false,
+          "failures": [
+            "output_pixels_changed"
+          ],
+          "status": "rejected",
+          "qualityPass": true,
+          "nativeEvidencePass": true,
+          "regressionOnly": false,
+          "contractSha": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25",
+          "reportSha": "effebdfc49e321fc2b93907dbec62c6051e003f30e83f149fd601e1daa141069",
+          "outputSha": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02"
+        },
+        "regression_only": {
+          "pass": false,
+          "failures": [
+            "output_pixels_changed"
+          ],
+          "status": "rejected",
+          "qualityPass": true,
+          "nativeEvidencePass": true,
+          "regressionOnly": true,
+          "contractSha": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25",
+          "reportSha": "effebdfc49e321fc2b93907dbec62c6051e003f30e83f149fd601e1daa141069",
+          "outputSha": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02"
+        }
+      },
+      "v4_strict": {
+        "pass": true,
+        "failures": [],
+        "status": "quality_and_regression_pass",
+        "qualityPass": true,
+        "nativeEvidencePass": true,
+        "regressionOnly": false,
+        "contractSha": "63b6c62a165063fb42e8b178de1823da58c0a074e78c4e05452178b5dfdb7667",
+        "reportSha": "effebdfc49e321fc2b93907dbec62c6051e003f30e83f149fd601e1daa141069",
+        "outputSha": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02"
+      },
+      "v4_regression_only": {
+        "pass": true,
+        "failures": [],
+        "status": "quality_and_regression_pass",
+        "qualityPass": true,
+        "nativeEvidencePass": true,
+        "regressionOnly": true,
+        "contractSha": "63b6c62a165063fb42e8b178de1823da58c0a074e78c4e05452178b5dfdb7667",
+        "reportSha": "effebdfc49e321fc2b93907dbec62c6051e003f30e83f149fd601e1daa141069",
+        "outputSha": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02"
+      },
+      "peak_rss_bytes": 11103862784,
+      "memory_gate_pass": true,
+      "target_met": true,
+      "decision": "D3 for this native scoped result under v4; medium integration matrix and user D4 remain pending"
     }
   ],
   "quick": {
     "status": "pass",
-    "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/matrix-r1-quick/matrix.json",
-    "rust_passed": 1097,
+    "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/matrix-r2-quick/matrix.json",
+    "rust_passed": 1098,
     "rust_failed": 0,
-    "rust_ignored": 44
+    "rust_ignored": 44,
+    "targeted_tests_passed": 6,
+    "post_binding_node_checks": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/post-binding-node.log"
   },
-  "canonical_contract_changed": false,
-  "visual_review": "not_submitted_candidate_target_not_met"
+  "canonical_contract_changed": "v4 prepared on task branch only, expected own-material pixel change; P95 tightened to3, above6 ceiling0, old v3 retained in priorBaseline/git",
+  "visual_review": {
+    "status": "pending_user_review",
+    "D4": false,
+    "agent_checked": "whole image and all six native before/after pairs; no obvious new ink halos, gaps or lost natural reflection in these crops",
+    "package": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/README.md",
+    "manifest": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/manifest.json",
+    "export_execution": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-render-execution.json"
+  },
+  "r1_exclusive_repeat": {
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/lanting-r1-exclusive/lanting",
+    "output_sha256": "731073bd38c83dc4643a7eefea5103c0ca0269effc788d7fb1c02729d920b0bf",
+    "same_tiff_as_r1": true,
+    "paper": {
+      "paper_points": 1008,
+      "adjacent_comparisons": 1937,
+      "median_residual_rgb": [
+        6.0,
+        1.0,
+        1.0
+      ],
+      "median_adjacent_step": 1.0,
+      "p95_adjacent_step": 3.5,
+      "maximum_adjacent_step": 7.0,
+      "source_boundary": {
+        "count": 506,
+        "median": 1.0,
+        "p95": 4,
+        "max": 7,
+        "above_6": 2
+      },
+      "source_interior": {
+        "count": 1431,
+        "median": 1.0,
+        "p95": 3.0,
+        "max": 7.0,
+        "above_6": 2
+      },
+      "zone_gray_mae": {
+        "wall": 6.59,
+        "rail": 5.69,
+        "artwork": 4.01,
+        "bottom_frame": 5.28
+      }
+    },
+    "quality_gate": {
+      "verdict": "pass",
+      "roi_count": 8,
+      "criteria": {
+        "local_scale_median": "pass",
+        "local_scale_pixel_ratio": "pass",
+        "effective_pixel_count": "pass",
+        "mtf50_normalized": "not_applicable",
+        "gradient_energy_normalized": "pass",
+        "noise_sigma_ratio": "pass",
+        "roi_delta_e00": "pass",
+        "boundary_stroke_alignment": "not_applicable",
+        "owner_sharpness_coverage": "pass"
+      },
+      "non_pass": [
+        "mtf50_normalized:not_applicable",
+        "boundary_stroke_alignment:not_applicable"
+      ],
+      "unresolved_pixels": 0,
+      "detail_repairs": 100
+    },
+    "peak_rss_bytes": 12517588992,
+    "memory_gate_pass": true,
+    "contended": false,
+    "guard": {
+      "strict": {
+        "pass": false,
+        "failures": [
+          "output_pixels_changed"
+        ],
+        "status": "rejected",
+        "qualityPass": true,
+        "nativeEvidencePass": true,
+        "regressionOnly": false,
+        "contractSha": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25",
+        "reportSha": "9021c2639d8c90e63f6d4c50f5c2369473b1977bd5432ec3b8ad3819c7f23937",
+        "outputSha": "731073bd38c83dc4643a7eefea5103c0ca0269effc788d7fb1c02729d920b0bf"
+      },
+      "regression_only": {
+        "pass": false,
+        "failures": [
+          "output_pixels_changed"
+        ],
+        "status": "rejected",
+        "qualityPass": true,
+        "nativeEvidencePass": true,
+        "regressionOnly": true,
+        "contractSha": "1d089caa9ff732d1b3802c8828a854134b852c6251e983fbf471bb009c69bd25",
+        "reportSha": "9021c2639d8c90e63f6d4c50f5c2369473b1977bd5432ec3b8ad3819c7f23937",
+        "outputSha": "731073bd38c83dc4643a7eefea5103c0ca0269effc788d7fb1c02729d920b0bf"
+      }
+    },
+    "overlap_evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/r1-overlap-evidence.json"
+  },
+  "artifact_retention": {
+    "reason": "tasks.md 6.3: retain only the latest failed native TIFF; identical later exclusive copy retained",
+    "removed_duplicate": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/lanting-r1/lanting/run/lanting-s1-task-6-r1.tiff",
+    "retained": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/lanting-r1-exclusive/lanting/run/lanting-s1-task-6-r1-exclusive.tiff",
+    "sha256": "731073bd38c83dc4643a7eefea5103c0ca0269effc788d7fb1c02729d920b0bf",
+    "removed_bytes": 2737925158,
+    "old_analysis_unchanged": true,
+    "retained_analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/lanting-r1-exclusive/lanting/analysis.json"
+  }
 }
