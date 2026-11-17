@@ -774,9 +774,29 @@
     "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-6/post-compat-node.log"
   },
   "integration": {
-    "status": "ready_for_local_v1_integration",
+    "status": "integrated_local_v1",
     "push_requested": false,
     "D4": false,
-    "D5": false
+    "D5": false,
+    "integration_commit": "2d3f45b3da1c4e45da148fdf8dedf8a54bfd858e",
+    "branch": "v1",
+    "verified_freeze": {
+      "label": "task-6-paper-verified",
+      "sha256": "de905b0e6e1f3f620a88db2449a6df4f1672212d8e8f7fdc71862960f93db522",
+      "wrapper_sha256": "0e5adb89f68687f41bdbb4e85cf464d96489a3e8021cbc62a5df4d00698dfee1",
+      "native_origin_commit": "72af6ea0bf011b3aea1d59a0e4cfe6570ac1e22b",
+      "frozen_by_commit": "2d3f45b3da1c4e45da148fdf8dedf8a54bfd858e",
+      "provenance_kind": "adopted_build_record",
+      "resource_contract": {
+        "preparation_threads": 1,
+        "rayon_threads": 1,
+        "version": 1,
+        "status": "verified",
+        "probe_stdout": "\nrunning 1 test\ntest panorama_stitching::alignment_tests::source_preparation::stack_resource_budget_contract ... STACK_RESOURCE_CONTRACT {\"preparation_threads\":1,\"rayon_threads\":1,\"version\":1}\nok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1141 filtered out; finished in 0.00s\n\n"
+      },
+      "same_executable_as_two_native_runs": true,
+      "current_native_source_matches_manifest": true
+    },
+    "pushed": false
   }
 }

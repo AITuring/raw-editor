@@ -35,7 +35,7 @@
 - 所有PNG路径、SHA、逐字节RGBA证明和ICC摘要：[manifest.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/manifest.json)。PNG与裁片均512×512、16位、无重采样；1-based裁切坐标与0-based窗口已由独立解码校验。
 - 用户记录：尚无。整图/关键裁片/颜色/细节/接缝均待用户确认；不自授D4；未回复不视为通过。
 - Agent初看：整图与C1–C6 before/after均已打开；这些位置未见明显新光晕、笔画断裂或真实反光丢失；这不是用户确认。
-- 结论适用范围：仅上述输入与r2 TIFF，不覆盖其他素材、任意未取景模式或桌面打包；中等层5/5已通过，由L0本地集成；视觉结论另记。
+- 结论适用范围：仅上述输入与r2 TIFF，不覆盖其他素材、任意未取景模式或桌面打包；中等层5/5已通过，已本地合入v1并发布task-6-paper-verified（与r2相同可执行文件）；视觉结论另记。
 
 ## 入队与关闭规则
 
