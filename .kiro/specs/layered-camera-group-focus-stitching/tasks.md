@@ -101,7 +101,7 @@
 
 ### 第 0 批：并行基础设施（N8.5）
 
-先完成本批，之后的任务才按 §6 的槽和目录规则运行。任务1的资源槽与冻结工具已验收，使用方式见 [stack-lab说明](../../../scripts/stack-lab/README.md)。任务2的单次运行、矩阵与内存门已验收；模板和完整两槽演练仍待任务3–4。
+先完成本批，之后的任务才按 §6 的槽和目录规则运行。任务1的资源槽与冻结工具已验收，使用方式见 [stack-lab说明](../../../scripts/stack-lab/README.md)。任务2的单次运行、矩阵与内存门已验收；任务3模板与复看队列已就绪；完整两槽演练仍待任务4。
 
 - [x] 1. 资源槽与冻结二进制工具（2026-11-17）
   - 目标：`slot.py build|run|exclusive|status` 与 `freeze.py --label <label> [--worktree <path>] [--adopt <exe>]`，行为按 §6.1、§6.2。
@@ -115,12 +115,13 @@
   - 修改：`scripts/stack-lab/run.py`、`matrix.py`、`lanting_audit.py`，新数据文件 `tests/acceptance/regression-matrix.json`（每套素材一行预期：TIFF SHA、QG、闭环、已知失败的失败特征）。
   - 资源：`run` 槽。依赖：1。冲突：无。
   - 完成标准：对 `base-2026-11-12` 跑一遍中等层，全部与 [base-p1 摘要](../../../docs/benchmarks/base-p1-codex-port.json) 一致；故意给错一条预期时矩阵报失败并自动用 `exclusive` 重跑。
-  - 验收：32项工具测试、快速层7项、中等层5/5通过；5份TIFF均与冻结基线相同，兰亭严格保护通过。独立副本故意写错SHA，两轮真实运行（run→exclusive）均保留该差异，矩阵按预期返回1。7次运行最大RSS10.371GiB≤24GiB，最终产物复核通过。见[任务卡](../../../docs/artwork-lanes/2-run-matrix.md)及[机器摘要](../../../docs/benchmarks/task-2-run-matrix.json)。任务3–4仍未完成。
+  - 验收：32项工具测试、快速层7项、中等层5/5通过；5份TIFF均与冻结基线相同，兰亭严格保护通过。独立副本故意写错SHA，两轮真实运行（run→exclusive）均保留该差异，矩阵按预期返回1。7次运行最大RSS10.371GiB≤24GiB，最终产物复核通过。见[任务卡](../../../docs/artwork-lanes/2-run-matrix.md)及[机器摘要](../../../docs/benchmarks/task-2-run-matrix.json)。此条仅验收任务2；任务3–4以各条状态为准。
 
-- [ ] 3. lane 卡与复看队列模板
+- [x] 3. lane 卡与复看队列模板（2026-11-17）
   - 目标：`docs/artwork-lanes/README.md`（lane 卡模板、诊断卡模板、新素材接入步骤）和 `docs/artwork-lanes/review-queue.md`（待看 ≤3 套、按批记录）。
   - 修改：`docs/artwork-lanes/`。资源：无。依赖：无。冲突：无。
   - 完成标准：诊断卡字段覆盖 §4 任务 5 的全部输出项；复看队列能看出当前待看几套、每批包含哪些路径。
+  - 验收：lane/诊断卡与新素材步骤齐全，覆盖任务5的9组输出字段；复看队列含当前表、批次和历史，跨批次待看≤3且绑定整图/原生裁片路径与版本。当前已登记0/3，不自动授予D4。17项文档核对通过；纯文档不重跑素材。见[模板说明](../../../docs/artwork-lanes/README.md)、[复看队列](../../../docs/artwork-lanes/review-queue.md)及[任务卡](../../../docs/artwork-lanes/3-templates.md)。任务4仍未完成。
 
 - [ ] 4. 线程上限核对与两槽演练
   - 目标：确认 §6.1 的上限不改变基线，并实际演练一次“一个编译 + 一个运行 + 一个排队”。
