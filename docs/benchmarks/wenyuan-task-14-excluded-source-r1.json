@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "task": 14,
+  "status": "rejected",
+  "production_impact": "schema8/report contract validation; no tone/density threshold change",
+  "binary": {
+    "label": "task-14-excluded-source-r1",
+    "sha256": "0c353860b134f216aedbc2aaf3f6ca5f809d186e1c713bc3a7ce89e8bb236971",
+    "commit": "d2dd973cf4c185c22bab0aa02771615a6d583a41"
+  },
+  "scope": {
+    "dataset": "wenyuan",
+    "inputs": 126,
+    "scale": 0.25,
+    "expectedSkipped": [
+      "DSC_4885.NEF"
+    ],
+    "station_count": 43
+  },
+  "source_contract": {
+    "report_source_digests": true,
+    "report_sources": 126,
+    "excluded_sources": [
+      {
+        "path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4885.NEF",
+        "sha256_before": "",
+        "sha256_after": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decoded": false
+      }
+    ],
+    "ordered": 125,
+    "decision": "closed_for_entry_contract_only"
+  },
+  "quality": {
+    "runner_failures": [
+      "layered native acceptance failed: native quality criterion failed: local_scale_median"
+    ],
+    "runner_verdict": "failed",
+    "quality_gate": {
+      "verdict": "pass",
+      "roi_count": 8,
+      "criteria": {
+        "local_scale_median": "not_applicable",
+        "local_scale_pixel_ratio": "pass",
+        "effective_pixel_count": "pass",
+        "mtf50_normalized": "not_applicable",
+        "gradient_energy_normalized": "pass",
+        "noise_sigma_ratio": "not_applicable",
+        "roi_delta_e00": "pass",
+        "boundary_stroke_alignment": "not_applicable",
+        "owner_sharpness_coverage": "pass"
+      },
+      "non_pass": [
+        "local_scale_median:not_applicable",
+        "mtf50_normalized:not_applicable",
+        "noise_sigma_ratio:not_applicable",
+        "boundary_stroke_alignment:not_applicable"
+      ],
+      "unresolved_pixels": null,
+      "detail_repairs": 0
+    },
+    "closure": "converged",
+    "output_contract": true
+  },
+  "tone_density": {
+    "tone_status": "degraded",
+    "tone_boundary_delta_e_max": 4.6045642865586744,
+    "tone_boundary_violation_count": 13,
+    "density_status": "bypassed",
+    "density_sample_count": 0,
+    "density_bypass_reason": "nonidentity_world_residual"
+  },
+  "resources": {
+    "peak_rss_bytes": 12694077440,
+    "memory_gate_pass": true,
+    "wall_seconds": 9666.514694213867,
+    "contended": false
+  },
+  "evidence": {
+    "stack_report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-excluded-source-r1/run/wenyuan-s0p25-task-14-excluded-source-r1-stack-reports/stack-report-18ca34b5-8b42-45c8-9239-dab0f3dab9fa.json",
+    "analysis_json": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-excluded-source-r1/analysis.json",
+    "contract_audit": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-excluded-source-r1/exclusion-contract-audit.json",
+    "tone_density_audit": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-excluded-source-r1/tone-density-audit.json"
+  },
+  "decision": "entry_contract_closed; keep Wenyuan below D2/D3 pending local-scale native failure and tone/density evidence"
+}
