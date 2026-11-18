@@ -79,3 +79,9 @@ native 仍拒绝，唯一 runner failure 为 tone boundary：最大 ΔE00 `8.778
 只读对比显示：0.25 使用 `supported_spatial_affine`，4 个 tile 被 clamp，source-fidelity strength 最小值 `1.0`；scale=1 切换为 `station_affine`，32 个 tile 被 clamp，source-fidelity strength 最小值降至 `0.111686`。对应 boundary ΔE00 从 `4.6045643/13` 变为 `8.7789013/142`。这说明 scale1 的 tone 模式/原生 source retention 是下一项实验入口；不放宽 1.5 阈值，也不直接启用生产 fallback。
 
 机器结果：[wenyuan-tone-mode-audit.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-tone-mode-audit.json)。
+
+## test-only tone source-fidelity 假设
+
+为验证 scale=1 的 `all_have_native_sources=false` 是否只是把 tone 路径切到 `station_affine`，加入了仅在 Rust library test binary 编译的开关 `RAW_EDITOR_TEST_FORCE_TONE_SOURCE_FIDELITY=1`。它只把本次调用传给 tone harmonizer 的 fidelity 布尔值强制为 true；生产构建没有该路径，默认行为不变，也不放宽 tone threshold 或启用 fallback。
+
+本次先完成 `cargo check --tests --offline` 和 `git diff --check`，未把编译通过当作质量改善证据。完整 scale=1 A/B 仍需独占长跑；后续先用 Wenyuan-10 bounded run 检查 tone mode、owner/clamp 与 boundary 输出，再决定是否值得消耗完整 126 输入的运行预算。
