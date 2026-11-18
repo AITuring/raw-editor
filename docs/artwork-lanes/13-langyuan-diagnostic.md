@@ -31,3 +31,9 @@ closure 虽然收敛，但 `residual_median_px=0.0809119`、`residual_p95_px=1.2
 使用 [langyuan_residual_support_audit.py](../../scripts/stack-lab/langyuan_residual_support_audit.py) 对现有 Stack_Report 的失败 world 坐标与 residual field 支持区域做只读交集审计。报告中的两块 residual 区域约为 `x=6046–6564、y=1449–2199`；15 个失败记录（local median 8、local ratio 6、boundary 1）全部在区域外，交集为 `0`。
 
 因此“强制 residual identity/禁用 residual”不会直接覆盖当前失败点；而且该开关还会解除 `nonidentity_world_residual` 的 density bypass，混入后续输出路径变化，不适合作为当前第一修复实验。机器结果保存在 `/Users/dp/Desktop/raw-editor/output/acceptance/task-13/langyuan-residual-support-audit.json`。下一步改做固定 station 的 source-to-world Jacobian sensitivity 审计，仍只读、不写生产 pose。
+
+## station geometry sensitivity
+
+对 14 个 local-scale failure records 做 source-to-world 只读 sensitivity：6 个 pixel-ratio=0 的点需要的理论 isotropic scale factor 为 `1.022799–1.509348` 才能达到 0.95；该计算只记录假设，不修改 homography、station pose 或 QG 阈值。机器结果保存在 `/Users/dp/Desktop/raw-editor/output/acceptance/task-13/langyuan-geometry-sensitivity-audit.json`。
+
+这个跨度说明它不是一个可直接套用的全局倍率修复；下一步若实现，必须固定单一 station/单一 pose 假设并保存 before/after 的 local-scale、boundary、closure、density 和来源证据，先在 0.25 做完整 QG，再决定是否启动 scale=1。
