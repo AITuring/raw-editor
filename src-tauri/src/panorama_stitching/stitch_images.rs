@@ -823,6 +823,13 @@ fn stitch_images_attempt<R: Runtime>(
             for source in &mut report.input.sources {
                 source.decoded = decoded_paths.contains(source.path.as_str());
             }
+            report.input.excluded_sources = report
+                .input
+                .sources
+                .iter()
+                .filter(|source| undecodable_paths.iter().any(|path| path == &source.path))
+                .cloned()
+                .collect();
             report.grouping.undecodable = undecodable;
 
             // The alignment image is the single proxy consumed by the
