@@ -1,0 +1,2181 @@
+{
+  "schema": 1,
+  "task": 12,
+  "status": "diagnostic_only_reproduced_failure_and_exported_owner_coverage",
+  "run": {
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-12/fengying-diagnostics-r1",
+    "binary": "base-2026-11-12",
+    "binary_sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+    "commit": "c0c1e5a9037fb4f8a8f8b983802848feb667b9ba",
+    "scale": 0.25,
+    "inputs": 110,
+    "resource": "exclusive",
+    "rayon_threads": "8",
+    "streaming_diagnostics": true,
+    "status": "rejected",
+    "exit_code": 1,
+    "peak_rss_bytes": 13988659200,
+    "memory_gate_pass": true,
+    "wall_seconds": 1934.7325282096863,
+    "selected_path": "legacy_single_layer_mosaic",
+    "closure": "not_run",
+    "output_sha256": "3fd5424c8b54cd319b4ecb2b2ad44539b4ac55a9e1d29435efc56c34b0116cbe",
+    "preview_sha256": "e77523ef421a75bab794569fdda1ca54aa9f5e8c16016daf4324b4b1c394d474",
+    "crop_sha256": {
+      "top-left": "adf994363c0089005252567138fc15a27eb05ca758bc2c6824ee4297c8445b76",
+      "top-center": "301c70a995fef82c5e45d8ce387ec360325b5c1da2b9b9774a5259dbcbb8969e",
+      "top-right": "0154b10f39ce911d54c02b51134b2b1d7ebb1422805c5c9d35582ad44d4c8b86",
+      "bottom-left": "a77c0c1179a2a035a5c054454c18615b860002cbbfaf5c0dc4581279004f1a37",
+      "bottom-center": "10723fed07dfec2d8bd03a44a161a47f8d5db8563e6351123ca69777da440dc8",
+      "bottom-right": "17754717ecb68f8cab8c663570c0d5fc31efefdfa01463a9d41677aa9d2db8a9"
+    }
+  },
+  "quality_gate": {
+    "verdict": "fail",
+    "roi_count": 8,
+    "criteria": {
+      "local_scale_median": "not_applicable",
+      "local_scale_pixel_ratio": "fail",
+      "effective_pixel_count": "pass",
+      "mtf50_normalized": "not_applicable",
+      "gradient_energy_normalized": "pass",
+      "noise_sigma_ratio": "pass",
+      "roi_delta_e00": "pass",
+      "boundary_stroke_alignment": "pass",
+      "owner_sharpness_coverage": "fail"
+    },
+    "non_pass": [
+      "local_scale_median:not_applicable",
+      "local_scale_pixel_ratio:fail",
+      "mtf50_normalized:not_applicable",
+      "owner_sharpness_coverage:fail"
+    ],
+    "unresolved_pixels": 0,
+    "detail_repairs": 409
+  },
+  "sources": {
+    "inputs": 110,
+    "report_sources": 104,
+    "ordered": 104,
+    "streamed": 104,
+    "lending": null,
+    "expected_skipped": [
+      "未标题-10-1.jpg",
+      "未标题-11 拷贝.jpg",
+      "未标题-12 拷贝.jpg",
+      "未标题-13-1.jpg",
+      "未标题-13.jpg",
+      "未标题-9.jpg"
+    ],
+    "covered_pixels": 77157204,
+    "owned_pixels": 77157204
+  },
+  "checks": {
+    "inputs_unchanged": true,
+    "reference_unchanged": true,
+    "binary_unchanged": true,
+    "memory_gate_pass": true,
+    "runner_exit_zero": false,
+    "native_child_exit_zero": true,
+    "runner_summary_present": true,
+    "runner_failures_empty": false,
+    "quality_gate_pass": false,
+    "output_contract": true,
+    "report_source_digests": true
+  },
+  "failed_criteria": [
+    {
+      "name": "local_scale_median",
+      "threshold": 0.98,
+      "threshold_min": null,
+      "threshold_max": null,
+      "measurable_count": 8,
+      "unmeasurable_count": 0,
+      "candidate_count": 8,
+      "eligible_count": 8,
+      "rejected_content_count": 0,
+      "rejected_content_reasons": {},
+      "rejected_content_examples": [],
+      "selection_mode": "station_evidence_shared_roi",
+      "unvisited_candidate_count": 0,
+      "reference_roi_limit": 0,
+      "content_not_applicable_count": 0,
+      "technical_unmeasurable_count": 0,
+      "station_statistics": [],
+      "verdict": "not_applicable",
+      "unmeasurable_reasons": {},
+      "measured": [
+        {
+          "world": {
+            "x": 284.0,
+            "y": -4310.0
+          },
+          "measured": 0.9996805278192374,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04844.ARW"
+        },
+        {
+          "world": {
+            "x": -3812.0,
+            "y": -4438.0
+          },
+          "measured": 1.0073599338052754,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04870.ARW"
+        },
+        {
+          "world": {
+            "x": -3428.0,
+            "y": -4822.0
+          },
+          "measured": 0.8887075044462407,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04916.ARW"
+        },
+        {
+          "world": {
+            "x": -3172.0,
+            "y": -5334.0
+          },
+          "measured": 1.4013835143540736,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04880.ARW"
+        },
+        {
+          "world": {
+            "x": 156.0,
+            "y": -5206.0
+          },
+          "measured": 1.4156914831539944,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04891.ARW"
+        },
+        {
+          "world": {
+            "x": 1692.0,
+            "y": -5078.0
+          },
+          "measured": 1.3904516647704006,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04894.ARW"
+        },
+        {
+          "world": {
+            "x": 3356.0,
+            "y": -5206.0
+          },
+          "measured": 1.4032167431971154,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04905.ARW"
+        },
+        {
+          "world": {
+            "x": -1508.0,
+            "y": -4950.0
+          },
+          "measured": 1.0924261050420787,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04920.ARW"
+        }
+      ],
+      "diagnostic": true,
+      "failed": [
+        {
+          "world": {
+            "x": 284.0,
+            "y": -4310.0
+          },
+          "measured": 0.9996805278192374,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04844.ARW"
+        },
+        {
+          "world": {
+            "x": -3812.0,
+            "y": -4438.0
+          },
+          "measured": 1.0073599338052754,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04870.ARW"
+        },
+        {
+          "world": {
+            "x": -3428.0,
+            "y": -4822.0
+          },
+          "measured": 0.8887075044462407,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04916.ARW"
+        },
+        {
+          "world": {
+            "x": -3172.0,
+            "y": -5334.0
+          },
+          "measured": 1.4013835143540736,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04880.ARW"
+        },
+        {
+          "world": {
+            "x": 156.0,
+            "y": -5206.0
+          },
+          "measured": 1.4156914831539944,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04891.ARW"
+        },
+        {
+          "world": {
+            "x": 1692.0,
+            "y": -5078.0
+          },
+          "measured": 1.3904516647704006,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04894.ARW"
+        },
+        {
+          "world": {
+            "x": 3356.0,
+            "y": -5206.0
+          },
+          "measured": 1.4032167431971154,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04905.ARW"
+        },
+        {
+          "world": {
+            "x": -1508.0,
+            "y": -4950.0
+          },
+          "measured": 1.0924261050420787,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04920.ARW"
+        }
+      ],
+      "shortfall_histogram": [],
+      "disagreement_veto_count": 0,
+      "unresolved_pixel_count": 0
+    },
+    {
+      "name": "local_scale_pixel_ratio",
+      "threshold": 0.99,
+      "threshold_min": null,
+      "threshold_max": null,
+      "measurable_count": 8,
+      "unmeasurable_count": 0,
+      "candidate_count": 8,
+      "eligible_count": 8,
+      "rejected_content_count": 0,
+      "rejected_content_reasons": {},
+      "rejected_content_examples": [],
+      "selection_mode": "station_evidence_shared_roi",
+      "unvisited_candidate_count": 0,
+      "reference_roi_limit": 0,
+      "content_not_applicable_count": 0,
+      "technical_unmeasurable_count": 0,
+      "station_statistics": [],
+      "verdict": "fail",
+      "unmeasurable_reasons": {},
+      "measured": [
+        {
+          "world": {
+            "x": 284.0,
+            "y": -4310.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04844.ARW"
+        },
+        {
+          "world": {
+            "x": -3812.0,
+            "y": -4438.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04870.ARW"
+        },
+        {
+          "world": {
+            "x": -3428.0,
+            "y": -4822.0
+          },
+          "measured": 0.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04916.ARW"
+        },
+        {
+          "world": {
+            "x": -3172.0,
+            "y": -5334.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04880.ARW"
+        },
+        {
+          "world": {
+            "x": 156.0,
+            "y": -5206.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04891.ARW"
+        },
+        {
+          "world": {
+            "x": 1692.0,
+            "y": -5078.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04894.ARW"
+        },
+        {
+          "world": {
+            "x": 3356.0,
+            "y": -5206.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04905.ARW"
+        },
+        {
+          "world": {
+            "x": -1508.0,
+            "y": -4950.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04920.ARW"
+        }
+      ],
+      "diagnostic": false,
+      "failed": [
+        {
+          "world": {
+            "x": -3428.0,
+            "y": -4822.0
+          },
+          "measured": 0.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04916.ARW"
+        }
+      ],
+      "shortfall_histogram": [],
+      "disagreement_veto_count": 0,
+      "unresolved_pixel_count": 0
+    },
+    {
+      "name": "mtf50_normalized",
+      "threshold": 0.93,
+      "threshold_min": null,
+      "threshold_max": null,
+      "measurable_count": 0,
+      "unmeasurable_count": 0,
+      "candidate_count": 423,
+      "eligible_count": 0,
+      "rejected_content_count": 423,
+      "rejected_content_reasons": {
+        "slanted_edge_angle_out_of_range": 133,
+        "slanted_edge_contrast_insufficient": 8,
+        "slanted_edge_line_fit_residual_exceeded": 10,
+        "slanted_edge_too_short": 272
+      },
+      "rejected_content_examples": [
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -3428.0,
+            "y": -4822.0
+          },
+          "reason": "slanted_edge_contrast_insufficient",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -3172.0,
+            "y": -5334.0
+          },
+          "reason": "slanted_edge_contrast_insufficient",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -1508.0,
+            "y": -4950.0
+          },
+          "reason": "slanted_edge_angle_out_of_range",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -3812.0,
+            "y": -4438.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 156.0,
+            "y": -5206.0
+          },
+          "reason": "slanted_edge_angle_out_of_range",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 1692.0,
+            "y": -5078.0
+          },
+          "reason": "slanted_edge_angle_out_of_range",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 3356.0,
+            "y": -5206.0
+          },
+          "reason": "slanted_edge_line_fit_residual_exceeded",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 284.0,
+            "y": -4310.0
+          },
+          "reason": "slanted_edge_angle_out_of_range",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 1180.0,
+            "y": -4182.0
+          },
+          "reason": "slanted_edge_angle_out_of_range",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 1180.0,
+            "y": -2774.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -3812.0,
+            "y": -2902.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -1380.0,
+            "y": -2262.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 2588.0,
+            "y": -1878.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 4380.0,
+            "y": -1494.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -3940.0,
+            "y": -1750.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -1508.0,
+            "y": -726.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 1564.0,
+            "y": -1366.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 4892.0,
+            "y": -598.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 2588.0,
+            "y": -854.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 668.0,
+            "y": -982.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -3940.0,
+            "y": -726.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 4636.0,
+            "y": -86.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 2332.0,
+            "y": 298.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -1508.0,
+            "y": 682.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 1820.0,
+            "y": 298.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -1124.0,
+            "y": 938.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 4636.0,
+            "y": 810.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -3940.0,
+            "y": 426.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 28.0,
+            "y": 1706.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 2844.0,
+            "y": 1066.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": -3940.0,
+            "y": 938.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        },
+        {
+          "criterion": "mtf50_normalized",
+          "world": {
+            "x": 4764.0,
+            "y": 1962.0
+          },
+          "reason": "slanted_edge_too_short",
+          "category": "content_not_applicable"
+        }
+      ],
+      "selection_mode": "station_slanted_edge_search_256_512",
+      "unvisited_candidate_count": 0,
+      "reference_roi_limit": 24,
+      "content_not_applicable_count": 0,
+      "technical_unmeasurable_count": 0,
+      "station_statistics": [],
+      "verdict": "not_applicable",
+      "unmeasurable_reasons": {},
+      "measured": [],
+      "diagnostic": false,
+      "failed": [],
+      "shortfall_histogram": [],
+      "disagreement_veto_count": 0,
+      "unresolved_pixel_count": 0
+    },
+    {
+      "name": "owner_sharpness_coverage",
+      "threshold": 0.99,
+      "threshold_min": null,
+      "threshold_max": null,
+      "measurable_count": 1,
+      "unmeasurable_count": 0,
+      "candidate_count": 0,
+      "eligible_count": 0,
+      "rejected_content_count": 0,
+      "rejected_content_reasons": {},
+      "rejected_content_examples": [],
+      "selection_mode": "",
+      "unvisited_candidate_count": 0,
+      "reference_roi_limit": 0,
+      "content_not_applicable_count": 0,
+      "technical_unmeasurable_count": 0,
+      "station_statistics": [
+        {
+          "station_id": 1,
+          "numerator": 0,
+          "denominator": 0,
+          "value": null,
+          "textured_pixel_count": 0,
+          "excluded_flat_pixel_count": 0,
+          "textured_low_confidence_count": 0,
+          "flat_low_confidence_count": 0,
+          "textured_low_confidence_ratio": null,
+          "flat_low_confidence_ratio": null,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": null,
+          "flat_shortfall_ratio": null
+        },
+        {
+          "station_id": 2,
+          "numerator": 2444333,
+          "denominator": 2444333,
+          "value": 1.0,
+          "textured_pixel_count": 2444333,
+          "excluded_flat_pixel_count": 312704,
+          "textured_low_confidence_count": 2444333,
+          "flat_low_confidence_count": 312704,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 3,
+          "numerator": 10802,
+          "denominator": 10802,
+          "value": 1.0,
+          "textured_pixel_count": 10802,
+          "excluded_flat_pixel_count": 238,
+          "textured_low_confidence_count": 10802,
+          "flat_low_confidence_count": 238,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 4,
+          "numerator": 610842,
+          "denominator": 610842,
+          "value": 1.0,
+          "textured_pixel_count": 610842,
+          "excluded_flat_pixel_count": 233641,
+          "textured_low_confidence_count": 610842,
+          "flat_low_confidence_count": 233641,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 5,
+          "numerator": 3626228,
+          "denominator": 3626228,
+          "value": 1.0,
+          "textured_pixel_count": 3626228,
+          "excluded_flat_pixel_count": 634804,
+          "textured_low_confidence_count": 3626228,
+          "flat_low_confidence_count": 634804,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 6,
+          "numerator": 1226324,
+          "denominator": 1226324,
+          "value": 1.0,
+          "textured_pixel_count": 1226324,
+          "excluded_flat_pixel_count": 221132,
+          "textured_low_confidence_count": 1226324,
+          "flat_low_confidence_count": 221132,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 7,
+          "numerator": 63768,
+          "denominator": 63768,
+          "value": 1.0,
+          "textured_pixel_count": 63768,
+          "excluded_flat_pixel_count": 236109,
+          "textured_low_confidence_count": 63768,
+          "flat_low_confidence_count": 236109,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 8,
+          "numerator": 66302,
+          "denominator": 66302,
+          "value": 1.0,
+          "textured_pixel_count": 66302,
+          "excluded_flat_pixel_count": 24398,
+          "textured_low_confidence_count": 66302,
+          "flat_low_confidence_count": 24398,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 9,
+          "numerator": 483240,
+          "denominator": 483240,
+          "value": 1.0,
+          "textured_pixel_count": 483240,
+          "excluded_flat_pixel_count": 250647,
+          "textured_low_confidence_count": 483240,
+          "flat_low_confidence_count": 250647,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 10,
+          "numerator": 175813,
+          "denominator": 179027,
+          "value": 0.9820474006714071,
+          "textured_pixel_count": 179027,
+          "excluded_flat_pixel_count": 55680,
+          "textured_low_confidence_count": 156199,
+          "flat_low_confidence_count": 46035,
+          "textured_low_confidence_ratio": 0.872488507320125,
+          "flat_low_confidence_ratio": 0.8267780172413793,
+          "textured_shortfall_count": 3214,
+          "flat_shortfall_count": 1863,
+          "textured_shortfall_ratio": 0.017952599328592892,
+          "flat_shortfall_ratio": 0.033459051724137934
+        },
+        {
+          "station_id": 11,
+          "numerator": 1047684,
+          "denominator": 1286007,
+          "value": 0.814679857885688,
+          "textured_pixel_count": 1286007,
+          "excluded_flat_pixel_count": 295406,
+          "textured_low_confidence_count": 1124285,
+          "flat_low_confidence_count": 219115,
+          "textured_low_confidence_ratio": 0.8742448524774749,
+          "flat_low_confidence_ratio": 0.7417418738955878,
+          "textured_shortfall_count": 238323,
+          "flat_shortfall_count": 86736,
+          "textured_shortfall_ratio": 0.18532014211431197,
+          "flat_shortfall_ratio": 0.2936162434073783
+        },
+        {
+          "station_id": 12,
+          "numerator": 3326353,
+          "denominator": 3592647,
+          "value": 0.9258780503623094,
+          "textured_pixel_count": 3592647,
+          "excluded_flat_pixel_count": 121342,
+          "textured_low_confidence_count": 3001360,
+          "flat_low_confidence_count": 117792,
+          "textured_low_confidence_ratio": 0.8354174512553001,
+          "flat_low_confidence_ratio": 0.9707438479669035,
+          "textured_shortfall_count": 266294,
+          "flat_shortfall_count": 34,
+          "textured_shortfall_ratio": 0.07412194963769053,
+          "flat_shortfall_ratio": 0.0002801997659507837
+        },
+        {
+          "station_id": 13,
+          "numerator": 5615448,
+          "denominator": 5910624,
+          "value": 0.950060095177768,
+          "textured_pixel_count": 5910624,
+          "excluded_flat_pixel_count": 392037,
+          "textured_low_confidence_count": 4761044,
+          "flat_low_confidence_count": 322406,
+          "textured_low_confidence_ratio": 0.8055061529882462,
+          "flat_low_confidence_ratio": 0.8223866624833881,
+          "textured_shortfall_count": 295176,
+          "flat_shortfall_count": 20480,
+          "textured_shortfall_ratio": 0.04993990482223197,
+          "flat_shortfall_ratio": 0.05223996714595816
+        },
+        {
+          "station_id": 14,
+          "numerator": 1002674,
+          "denominator": 1090896,
+          "value": 0.9191288628796879,
+          "textured_pixel_count": 1090896,
+          "excluded_flat_pixel_count": 97292,
+          "textured_low_confidence_count": 982036,
+          "flat_low_confidence_count": 74882,
+          "textured_low_confidence_ratio": 0.900210469192297,
+          "flat_low_confidence_ratio": 0.7696624594005673,
+          "textured_shortfall_count": 88222,
+          "flat_shortfall_count": 16384,
+          "textured_shortfall_ratio": 0.08087113712031212,
+          "flat_shortfall_ratio": 0.16840027957077663
+        },
+        {
+          "station_id": 15,
+          "numerator": 63907,
+          "denominator": 65094,
+          "value": 0.981764832396227,
+          "textured_pixel_count": 65094,
+          "excluded_flat_pixel_count": 3343,
+          "textured_low_confidence_count": 61604,
+          "flat_low_confidence_count": 3343,
+          "textured_low_confidence_ratio": 0.9463852275171291,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 1187,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.018235167603773004,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 16,
+          "numerator": 8838,
+          "denominator": 8838,
+          "value": 1.0,
+          "textured_pixel_count": 8838,
+          "excluded_flat_pixel_count": 6297,
+          "textured_low_confidence_count": 8838,
+          "flat_low_confidence_count": 6297,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 17,
+          "numerator": 426635,
+          "denominator": 426635,
+          "value": 1.0,
+          "textured_pixel_count": 426635,
+          "excluded_flat_pixel_count": 239697,
+          "textured_low_confidence_count": 426635,
+          "flat_low_confidence_count": 239697,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 18,
+          "numerator": 5733,
+          "denominator": 5733,
+          "value": 1.0,
+          "textured_pixel_count": 5733,
+          "excluded_flat_pixel_count": 13095,
+          "textured_low_confidence_count": 5733,
+          "flat_low_confidence_count": 13095,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 19,
+          "numerator": 106543,
+          "denominator": 114454,
+          "value": 0.9308805284218987,
+          "textured_pixel_count": 114454,
+          "excluded_flat_pixel_count": 6631,
+          "textured_low_confidence_count": 100118,
+          "flat_low_confidence_count": 6631,
+          "textured_low_confidence_ratio": 0.8747444388138466,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 7911,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.06911947157810125,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 20,
+          "numerator": 745470,
+          "denominator": 749566,
+          "value": 0.9945355045452969,
+          "textured_pixel_count": 749566,
+          "excluded_flat_pixel_count": 14543,
+          "textured_low_confidence_count": 561953,
+          "flat_low_confidence_count": 14543,
+          "textured_low_confidence_ratio": 0.74970449566816,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 4096,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.005464495454703121,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 21,
+          "numerator": 486158,
+          "denominator": 486158,
+          "value": 1.0,
+          "textured_pixel_count": 486158,
+          "excluded_flat_pixel_count": 5092,
+          "textured_low_confidence_count": 486158,
+          "flat_low_confidence_count": 5092,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 22,
+          "numerator": 296987,
+          "denominator": 296987,
+          "value": 1.0,
+          "textured_pixel_count": 296987,
+          "excluded_flat_pixel_count": 79207,
+          "textured_low_confidence_count": 296987,
+          "flat_low_confidence_count": 79207,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 23,
+          "numerator": 138480,
+          "denominator": 138480,
+          "value": 1.0,
+          "textured_pixel_count": 138480,
+          "excluded_flat_pixel_count": 2446,
+          "textured_low_confidence_count": 138480,
+          "flat_low_confidence_count": 2446,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 24,
+          "numerator": 377296,
+          "denominator": 377296,
+          "value": 1.0,
+          "textured_pixel_count": 377296,
+          "excluded_flat_pixel_count": 53818,
+          "textured_low_confidence_count": 377296,
+          "flat_low_confidence_count": 53818,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 25,
+          "numerator": 474911,
+          "denominator": 474911,
+          "value": 1.0,
+          "textured_pixel_count": 474911,
+          "excluded_flat_pixel_count": 40446,
+          "textured_low_confidence_count": 474911,
+          "flat_low_confidence_count": 40446,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 26,
+          "numerator": 118020,
+          "denominator": 118020,
+          "value": 1.0,
+          "textured_pixel_count": 118020,
+          "excluded_flat_pixel_count": 1556,
+          "textured_low_confidence_count": 118020,
+          "flat_low_confidence_count": 1556,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 27,
+          "numerator": 283497,
+          "denominator": 286181,
+          "value": 0.9906213200736597,
+          "textured_pixel_count": 286181,
+          "excluded_flat_pixel_count": 0,
+          "textured_low_confidence_count": 278865,
+          "flat_low_confidence_count": 0,
+          "textured_low_confidence_ratio": 0.9744357591873675,
+          "flat_low_confidence_ratio": null,
+          "textured_shortfall_count": 2684,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.009378679926340323,
+          "flat_shortfall_ratio": null
+        },
+        {
+          "station_id": 28,
+          "numerator": 413806,
+          "denominator": 433093,
+          "value": 0.9554668396857026,
+          "textured_pixel_count": 433093,
+          "excluded_flat_pixel_count": 4435,
+          "textured_low_confidence_count": 389262,
+          "flat_low_confidence_count": 4435,
+          "textured_low_confidence_ratio": 0.8987954088382865,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 19287,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.04453316031429739,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 29,
+          "numerator": 2371365,
+          "denominator": 2371365,
+          "value": 1.0,
+          "textured_pixel_count": 2371365,
+          "excluded_flat_pixel_count": 132897,
+          "textured_low_confidence_count": 2371365,
+          "flat_low_confidence_count": 132897,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 30,
+          "numerator": 236750,
+          "denominator": 236750,
+          "value": 1.0,
+          "textured_pixel_count": 236750,
+          "excluded_flat_pixel_count": 3486,
+          "textured_low_confidence_count": 236750,
+          "flat_low_confidence_count": 3486,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 31,
+          "numerator": 271,
+          "denominator": 271,
+          "value": 1.0,
+          "textured_pixel_count": 271,
+          "excluded_flat_pixel_count": 0,
+          "textured_low_confidence_count": 271,
+          "flat_low_confidence_count": 0,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": null,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": null
+        },
+        {
+          "station_id": 32,
+          "numerator": 363634,
+          "denominator": 372128,
+          "value": 0.977174520595064,
+          "textured_pixel_count": 372128,
+          "excluded_flat_pixel_count": 6881,
+          "textured_low_confidence_count": 353001,
+          "flat_low_confidence_count": 6881,
+          "textured_low_confidence_ratio": 0.9486010190042136,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 8494,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.022825479404935935,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 33,
+          "numerator": 2775845,
+          "denominator": 2775845,
+          "value": 1.0,
+          "textured_pixel_count": 2775845,
+          "excluded_flat_pixel_count": 169970,
+          "textured_low_confidence_count": 2775845,
+          "flat_low_confidence_count": 169970,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 34,
+          "numerator": 54475,
+          "denominator": 57317,
+          "value": 0.950416106914179,
+          "textured_pixel_count": 57317,
+          "excluded_flat_pixel_count": 413,
+          "textured_low_confidence_count": 45748,
+          "flat_low_confidence_count": 413,
+          "textured_low_confidence_ratio": 0.7981576146692954,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 2842,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.04958389308582096,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 35,
+          "numerator": 2272882,
+          "denominator": 2272882,
+          "value": 1.0,
+          "textured_pixel_count": 2272882,
+          "excluded_flat_pixel_count": 147585,
+          "textured_low_confidence_count": 2272882,
+          "flat_low_confidence_count": 147585,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 36,
+          "numerator": 703780,
+          "denominator": 703780,
+          "value": 1.0,
+          "textured_pixel_count": 703780,
+          "excluded_flat_pixel_count": 17856,
+          "textured_low_confidence_count": 703780,
+          "flat_low_confidence_count": 17856,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 37,
+          "numerator": 1950444,
+          "denominator": 2070973,
+          "value": 0.9418007863936421,
+          "textured_pixel_count": 2070973,
+          "excluded_flat_pixel_count": 57064,
+          "textured_low_confidence_count": 1684511,
+          "flat_low_confidence_count": 57064,
+          "textured_low_confidence_ratio": 0.8133910968419192,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 120529,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.05819921360635798,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 38,
+          "numerator": 1014173,
+          "denominator": 1094545,
+          "value": 0.9265704013996684,
+          "textured_pixel_count": 1094545,
+          "excluded_flat_pixel_count": 43880,
+          "textured_low_confidence_count": 930484,
+          "flat_low_confidence_count": 43880,
+          "textured_low_confidence_ratio": 0.8501103198132557,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 80372,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.07342959860033164,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 39,
+          "numerator": 58388,
+          "denominator": 58388,
+          "value": 1.0,
+          "textured_pixel_count": 58388,
+          "excluded_flat_pixel_count": 3037,
+          "textured_low_confidence_count": 58388,
+          "flat_low_confidence_count": 3037,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 40,
+          "numerator": 138939,
+          "denominator": 138939,
+          "value": 1.0,
+          "textured_pixel_count": 138939,
+          "excluded_flat_pixel_count": 0,
+          "textured_low_confidence_count": 138939,
+          "flat_low_confidence_count": 0,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": null,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": null
+        },
+        {
+          "station_id": 41,
+          "numerator": 2113963,
+          "denominator": 2113963,
+          "value": 1.0,
+          "textured_pixel_count": 2113963,
+          "excluded_flat_pixel_count": 127661,
+          "textured_low_confidence_count": 2113963,
+          "flat_low_confidence_count": 127661,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 42,
+          "numerator": 587818,
+          "denominator": 587818,
+          "value": 1.0,
+          "textured_pixel_count": 587818,
+          "excluded_flat_pixel_count": 7992,
+          "textured_low_confidence_count": 587818,
+          "flat_low_confidence_count": 7992,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 43,
+          "numerator": 1285290,
+          "denominator": 1327697,
+          "value": 0.9680597304957381,
+          "textured_pixel_count": 1327697,
+          "excluded_flat_pixel_count": 51919,
+          "textured_low_confidence_count": 697571,
+          "flat_low_confidence_count": 51919,
+          "textured_low_confidence_ratio": 0.5253992439540046,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 42407,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.03194026950426189,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 44,
+          "numerator": 647323,
+          "denominator": 691133,
+          "value": 0.9366113324063531,
+          "textured_pixel_count": 691133,
+          "excluded_flat_pixel_count": 57343,
+          "textured_low_confidence_count": 600796,
+          "flat_low_confidence_count": 57343,
+          "textured_low_confidence_ratio": 0.8692914388402811,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 43810,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.06338866759364695,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 45,
+          "numerator": 2420650,
+          "denominator": 2420650,
+          "value": 1.0,
+          "textured_pixel_count": 2420650,
+          "excluded_flat_pixel_count": 187474,
+          "textured_low_confidence_count": 2420650,
+          "flat_low_confidence_count": 187474,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 46,
+          "numerator": 2884869,
+          "denominator": 2884869,
+          "value": 1.0,
+          "textured_pixel_count": 2884869,
+          "excluded_flat_pixel_count": 234114,
+          "textured_low_confidence_count": 2884869,
+          "flat_low_confidence_count": 234114,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 47,
+          "numerator": 211024,
+          "denominator": 211024,
+          "value": 1.0,
+          "textured_pixel_count": 211024,
+          "excluded_flat_pixel_count": 4092,
+          "textured_low_confidence_count": 211024,
+          "flat_low_confidence_count": 4092,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 48,
+          "numerator": 252917,
+          "denominator": 259896,
+          "value": 0.9731469510881275,
+          "textured_pixel_count": 259896,
+          "excluded_flat_pixel_count": 0,
+          "textured_low_confidence_count": 158429,
+          "flat_low_confidence_count": 0,
+          "textured_low_confidence_ratio": 0.6095861421491674,
+          "flat_low_confidence_ratio": null,
+          "textured_shortfall_count": 6979,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.02685304891187244,
+          "flat_shortfall_ratio": null
+        },
+        {
+          "station_id": 49,
+          "numerator": 2402806,
+          "denominator": 2402806,
+          "value": 1.0,
+          "textured_pixel_count": 2402806,
+          "excluded_flat_pixel_count": 170427,
+          "textured_low_confidence_count": 2402806,
+          "flat_low_confidence_count": 170427,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 50,
+          "numerator": 336643,
+          "denominator": 351925,
+          "value": 0.9565759749946722,
+          "textured_pixel_count": 351925,
+          "excluded_flat_pixel_count": 4813,
+          "textured_low_confidence_count": 89079,
+          "flat_low_confidence_count": 4813,
+          "textured_low_confidence_ratio": 0.253119272572281,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 15282,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.04342402500532784,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 51,
+          "numerator": 894123,
+          "denominator": 949642,
+          "value": 0.9415369160167726,
+          "textured_pixel_count": 949642,
+          "excluded_flat_pixel_count": 56330,
+          "textured_low_confidence_count": 826015,
+          "flat_low_confidence_count": 56330,
+          "textured_low_confidence_ratio": 0.8698172574507025,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 55519,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.05846308398322737,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 52,
+          "numerator": 1786705,
+          "denominator": 1786705,
+          "value": 1.0,
+          "textured_pixel_count": 1786705,
+          "excluded_flat_pixel_count": 179089,
+          "textured_low_confidence_count": 1786705,
+          "flat_low_confidence_count": 179089,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 53,
+          "numerator": 1071004,
+          "denominator": 1071004,
+          "value": 1.0,
+          "textured_pixel_count": 1071004,
+          "excluded_flat_pixel_count": 154653,
+          "textured_low_confidence_count": 1071004,
+          "flat_low_confidence_count": 154653,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 54,
+          "numerator": 1831,
+          "denominator": 1831,
+          "value": 1.0,
+          "textured_pixel_count": 1831,
+          "excluded_flat_pixel_count": 2303,
+          "textured_low_confidence_count": 1831,
+          "flat_low_confidence_count": 2303,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 55,
+          "numerator": 2618623,
+          "denominator": 2618623,
+          "value": 1.0,
+          "textured_pixel_count": 2618623,
+          "excluded_flat_pixel_count": 101453,
+          "textured_low_confidence_count": 2618623,
+          "flat_low_confidence_count": 101453,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 56,
+          "numerator": 45214,
+          "denominator": 45214,
+          "value": 1.0,
+          "textured_pixel_count": 45214,
+          "excluded_flat_pixel_count": 5264,
+          "textured_low_confidence_count": 45214,
+          "flat_low_confidence_count": 5264,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 57,
+          "numerator": 1233643,
+          "denominator": 1233643,
+          "value": 1.0,
+          "textured_pixel_count": 1233643,
+          "excluded_flat_pixel_count": 120831,
+          "textured_low_confidence_count": 1233643,
+          "flat_low_confidence_count": 120831,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 58,
+          "numerator": 321399,
+          "denominator": 349958,
+          "value": 0.9183930643105744,
+          "textured_pixel_count": 349958,
+          "excluded_flat_pixel_count": 41992,
+          "textured_low_confidence_count": 298284,
+          "flat_low_confidence_count": 41992,
+          "textured_low_confidence_ratio": 0.8523422810737289,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 28559,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.08160693568942559,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 59,
+          "numerator": 1360174,
+          "denominator": 1427494,
+          "value": 0.9528404322540059,
+          "textured_pixel_count": 1427494,
+          "excluded_flat_pixel_count": 126830,
+          "textured_low_confidence_count": 1114655,
+          "flat_low_confidence_count": 126830,
+          "textured_low_confidence_ratio": 0.7808474151204838,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 67320,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.04715956774599403,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 60,
+          "numerator": 442472,
+          "denominator": 442472,
+          "value": 1.0,
+          "textured_pixel_count": 442472,
+          "excluded_flat_pixel_count": 72685,
+          "textured_low_confidence_count": 442472,
+          "flat_low_confidence_count": 72685,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 61,
+          "numerator": 563554,
+          "denominator": 563554,
+          "value": 1.0,
+          "textured_pixel_count": 563554,
+          "excluded_flat_pixel_count": 149777,
+          "textured_low_confidence_count": 563554,
+          "flat_low_confidence_count": 149777,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 62,
+          "numerator": 48132,
+          "denominator": 52858,
+          "value": 0.9105906390707178,
+          "textured_pixel_count": 52858,
+          "excluded_flat_pixel_count": 44260,
+          "textured_low_confidence_count": 43265,
+          "flat_low_confidence_count": 44260,
+          "textured_low_confidence_ratio": 0.818513753831019,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 4726,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.08940936092928223,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 63,
+          "numerator": 124,
+          "denominator": 124,
+          "value": 1.0,
+          "textured_pixel_count": 124,
+          "excluded_flat_pixel_count": 0,
+          "textured_low_confidence_count": 124,
+          "flat_low_confidence_count": 0,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": null,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": null
+        },
+        {
+          "station_id": 64,
+          "numerator": 184210,
+          "denominator": 184210,
+          "value": 1.0,
+          "textured_pixel_count": 184210,
+          "excluded_flat_pixel_count": 17909,
+          "textured_low_confidence_count": 184210,
+          "flat_low_confidence_count": 17909,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 65,
+          "numerator": 4786,
+          "denominator": 4786,
+          "value": 1.0,
+          "textured_pixel_count": 4786,
+          "excluded_flat_pixel_count": 329,
+          "textured_low_confidence_count": 4306,
+          "flat_low_confidence_count": 329,
+          "textured_low_confidence_ratio": 0.8997074801504388,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 66,
+          "numerator": 4928,
+          "denominator": 4928,
+          "value": 1.0,
+          "textured_pixel_count": 4928,
+          "excluded_flat_pixel_count": 62,
+          "textured_low_confidence_count": 4928,
+          "flat_low_confidence_count": 62,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 67,
+          "numerator": 1664555,
+          "denominator": 1664555,
+          "value": 1.0,
+          "textured_pixel_count": 1664555,
+          "excluded_flat_pixel_count": 173603,
+          "textured_low_confidence_count": 1664555,
+          "flat_low_confidence_count": 173603,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 68,
+          "numerator": 2822149,
+          "denominator": 2822149,
+          "value": 1.0,
+          "textured_pixel_count": 2822149,
+          "excluded_flat_pixel_count": 184547,
+          "textured_low_confidence_count": 2822149,
+          "flat_low_confidence_count": 184547,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 69,
+          "numerator": 1568586,
+          "denominator": 1997913,
+          "value": 0.7851122646481603,
+          "textured_pixel_count": 1997913,
+          "excluded_flat_pixel_count": 346914,
+          "textured_low_confidence_count": 1501586,
+          "flat_low_confidence_count": 269677,
+          "textured_low_confidence_ratio": 0.7515772708821655,
+          "flat_low_confidence_ratio": 0.7773598067532588,
+          "textured_shortfall_count": 429327,
+          "flat_shortfall_count": 60247,
+          "textured_shortfall_ratio": 0.21488773535183964,
+          "flat_shortfall_ratio": 0.17366551940826833
+        },
+        {
+          "station_id": 70,
+          "numerator": 737990,
+          "denominator": 737990,
+          "value": 1.0,
+          "textured_pixel_count": 737990,
+          "excluded_flat_pixel_count": 90479,
+          "textured_low_confidence_count": 737990,
+          "flat_low_confidence_count": 90479,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 71,
+          "numerator": 600555,
+          "denominator": 653458,
+          "value": 0.919041468617723,
+          "textured_pixel_count": 653458,
+          "excluded_flat_pixel_count": 15789,
+          "textured_low_confidence_count": 510602,
+          "flat_low_confidence_count": 15789,
+          "textured_low_confidence_ratio": 0.7813845725356489,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 52903,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.08095853138227706,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 72,
+          "numerator": 52829,
+          "denominator": 52829,
+          "value": 1.0,
+          "textured_pixel_count": 52829,
+          "excluded_flat_pixel_count": 50378,
+          "textured_low_confidence_count": 52829,
+          "flat_low_confidence_count": 50378,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 73,
+          "numerator": 924934,
+          "denominator": 1050780,
+          "value": 0.8802356344810521,
+          "textured_pixel_count": 1050780,
+          "excluded_flat_pixel_count": 98495,
+          "textured_low_confidence_count": 763858,
+          "flat_low_confidence_count": 98495,
+          "textured_low_confidence_ratio": 0.7269437941338815,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 125846,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.11976436551894783,
+          "flat_shortfall_ratio": 0.0
+        },
+        {
+          "station_id": 74,
+          "numerator": 544868,
+          "denominator": 544868,
+          "value": 1.0,
+          "textured_pixel_count": 544868,
+          "excluded_flat_pixel_count": 109254,
+          "textured_low_confidence_count": 544868,
+          "flat_low_confidence_count": 109254,
+          "textured_low_confidence_ratio": 1.0,
+          "flat_low_confidence_ratio": 1.0,
+          "textured_shortfall_count": 0,
+          "flat_shortfall_count": 0,
+          "textured_shortfall_ratio": 0.0,
+          "flat_shortfall_ratio": 0.0
+        }
+      ],
+      "verdict": "fail",
+      "unmeasurable_reasons": {},
+      "measured": [
+        {
+          "world": {
+            "x": -4068.0,
+            "y": -5462.0
+          },
+          "measured": 0.971364798589639,
+          "owner_path": ""
+        }
+      ],
+      "diagnostic": false,
+      "failed": [
+        {
+          "world": {
+            "x": -4068.0,
+            "y": -5462.0
+          },
+          "measured": 0.971364798589639,
+          "owner_path": ""
+        }
+      ],
+      "textured_pixel_count": 70239038,
+      "excluded_flat_pixel_count": 6918166,
+      "textured_low_confidence_ratio": 0.9233876750988531,
+      "flat_low_confidence_ratio": 0.9625964453584953,
+      "textured_shortfall_ratio": 0.028635201410361,
+      "flat_shortfall_ratio": 0.026848734187644527,
+      "shortfall_histogram": [
+        0,
+        1588752,
+        289499,
+        61940,
+        8192,
+        2743,
+        4776,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        55407
+      ],
+      "disagreement_veto_count": 0,
+      "unresolved_pixel_count": 0
+    }
+  ],
+  "diagnostics": {
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-12/fengying-diagnostics-r1/diagnostics",
+    "metadata": {
+      "analysis_height": 1716,
+      "analysis_scale": 4.82080078125,
+      "analysis_width": 2048,
+      "canvas_material_normalization_enabled": false,
+      "matched_tone_enabled": false,
+      "owner_gain": {
+        "accepted_owner_cells": 1555,
+        "candidate_pair_cells": 4117,
+        "cell_size_output_pixels": 512.0,
+        "dropped_cells": 0,
+        "max_gain": 1.08,
+        "method": "same_content_overlap_residual_gain",
+        "min_gain": 0.9259259259259258,
+        "samples": 87047,
+        "support_radius_output_pixels": 768.0,
+        "unsupported_gain": 1.0
+      },
+      "source_covered_pixels": 77157204,
+      "source_owned_pixels": 77157204,
+      "source_union_crop": [
+        35,
+        12,
+        9873,
+        8271
+      ],
+      "tone_observations": [],
+      "tone_replay": {
+        "extra_source_decodes": 0,
+        "geometry_feedback": false,
+        "method": "frozen_owner_low_frequency_tone_replay",
+        "owners": 0,
+        "pixels": 0
+      }
+    },
+    "owner_sha256": "3320983181a09354451bdba53204d3208ae06e1e92e1a6a5aa3e172f79ceeb7a",
+    "coverage_sha256": "d7331e9e711f04bff31820bd1c73155968e8cad351d5ad6475af6797afe26e06",
+    "source_overlap_sha256": "0a6ed1ce4038c129f4c1d6673ec0e7b2da2e0d1e839ac92d92d201890f541de9"
+  },
+  "owner_fallback_audit": {
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-12/fengying-owner-fallback-audit.json",
+    "method": "fengying_saved_owner_3x3_fallback_audit_v1",
+    "origin_world": [
+      -4068.0,
+      -5462.0
+    ],
+    "summary": {
+      "scale_failure_points": 9,
+      "scale_points_with_alternate_candidate": 0,
+      "boundary_failure_points": 0,
+      "boundary_points_with_alternate_candidate": 0,
+      "owner_coverage_failure_points": 1,
+      "owner_coverage_points_with_covered_neighbors": 0,
+      "decision": "defer_automatic_fallback_until_source_resampling_and_quality_gate_evidence",
+      "fallback_scope": "same 3x3 owner stencil, Coverage required, owner=0 excluded, no search expansion"
+    },
+    "failure_points": [
+      {
+        "criterion": "local_scale_median",
+        "world": {
+          "x": 284.0,
+          "y": -4310.0
+        },
+        "analysis": [
+          903,
+          239
+        ],
+        "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04844.ARW",
+        "center_owner": 35,
+        "owner_counts": {
+          "35": 9
+        },
+        "covered_neighbors": 9,
+        "alternate_candidates": [],
+        "fallback_candidate": false
+      },
+      {
+        "criterion": "local_scale_median",
+        "world": {
+          "x": -3812.0,
+          "y": -4438.0
+        },
+        "analysis": [
+          53,
+          212
+        ],
+        "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04870.ARW",
+        "center_owner": 51,
+        "owner_counts": {
+          "51": 9
+        },
+        "covered_neighbors": 9,
+        "alternate_candidates": [],
+        "fallback_candidate": false
+      },
+      {
+        "criterion": "local_scale_median",
+        "world": {
+          "x": -3428.0,
+          "y": -4822.0
+        },
+        "analysis": [
+          133,
+          133
+        ],
+        "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04916.ARW",
+        "center_owner": 59,
+        "owner_counts": {
+          "59": 9
+        },
+        "covered_neighbors": 9,
+        "alternate_candidates": [],
+        "fallback_candidate": false
+      },
+      {
+        "criterion": "local_scale_median",
+        "world": {
+          "x": -3172.0,
+          "y": -5334.0
+        },
+        "analysis": [
+          186,
+          27
+        ],
+        "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04880.ARW",
+        "center_owner": 64,
+        "owner_counts": {
+          "64": 9
+        },
+        "covered_neighbors": 9,
+        "alternate_candidates": [],
+        "fallback_candidate": false
+      },
+      {
+        "criterion": "local_scale_median",
+        "world": {
+          "x": 156.0,
+          "y": -5206.0
+        },
+        "analysis": [
+          876,
+          53
+        ],
+        "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04891.ARW",
+        "center_owner": 71,
+        "owner_counts": {
+          "71": 9
+        },
+        "covered_neighbors": 9,
+        "alternate_candidates": [],
+        "fallback_candidate": false
+      },
+      {
+        "criterion": "local_scale_median",
+        "world": {
+          "x": 1692.0,
+          "y": -5078.0
+        },
+        "analysis": [
+          1195,
+          80
+        ],
+        "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04894.ARW",
+        "center_owner": 73,
+        "owner_counts": {
+          "73": 9
+        },
+        "covered_neighbors": 9,
+        "alternate_candidates": [],
+        "fallback_candidate": false
+      },
+      {
+        "criterion": "local_scale_median",
+        "world": {
+          "x": 3356.0,
+          "y": -5206.0
+        },
+        "analysis": [
+          1540,
+          53
+        ],
+        "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04905.ARW",
+        "center_owner": 79,
+        "owner_counts": {
+          "79": 9
+        },
+        "covered_neighbors": 9,
+        "alternate_candidates": [],
+        "fallback_candidate": false
+      },
+      {
+        "criterion": "local_scale_median",
+        "world": {
+          "x": -1508.0,
+          "y": -4950.0
+        },
+        "analysis": [
+          531,
+          106
+        ],
+        "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04920.ARW",
+        "center_owner": 80,
+        "owner_counts": {
+          "80": 9
+        },
+        "covered_neighbors": 9,
+        "alternate_candidates": [],
+        "fallback_candidate": false
+      },
+      {
+        "criterion": "local_scale_pixel_ratio",
+        "world": {
+          "x": -3428.0,
+          "y": -4822.0
+        },
+        "analysis": [
+          133,
+          133
+        ],
+        "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04916.ARW",
+        "center_owner": 59,
+        "owner_counts": {
+          "59": 9
+        },
+        "covered_neighbors": 9,
+        "alternate_candidates": [],
+        "fallback_candidate": false
+      },
+      {
+        "criterion": "owner_sharpness_coverage",
+        "world": {
+          "x": -4068.0,
+          "y": -5462.0
+        },
+        "analysis": [
+          0,
+          0
+        ],
+        "owner_path": "",
+        "center_owner": 0,
+        "owner_counts": {
+          "0": 9
+        },
+        "covered_neighbors": 0,
+        "alternate_candidates": [],
+        "fallback_candidate": false
+      }
+    ]
+  },
+  "decision": "no production owner fallback or threshold change; all scale points had uniform 3x3 owner, and the owner coverage point had no covered neighbor; a future candidate needs source resampling plus full QG evidence.",
+  "limitations": [
+    "The run exports diagnostics through a new test-only stack-lab flag; it does not enable framed-artwork mode.",
+    "The diagnostic run and baseline have identical preview/crop digests and QG fields, but TIFF byte equality is not claimed because the raster export differs at low-level bytes between independent runs.",
+    "scale=0.25 remains D1 diagnostic evidence and cannot be promoted to native D2/D3/D4/D5."
+  ]
+}

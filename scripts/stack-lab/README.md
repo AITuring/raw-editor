@@ -68,6 +68,7 @@ python3 scripts/stack-lab/run.py --binary task-4-capped-r2 --lane task-2 --datas
 - 单次返回0仅表示原生质量/来源/输出/内存全部通过，或显式预览成功（预览状态为`rendered_without_quality_acceptance`，不计入原生验收）。拒绝、资源失败、分析错误返回非零。已启动的runner取消时写入中断状态并停止其进程组。
 - `contended`核对完整运行区间与build历史的重叠，包括运行中才开始又结束的编译；不是只看启动瞬间。独占运行不会把自身的build占用误记为争用。
 - 兰亭`--framed`只适用于完整45张、scale=1：运行目录内再隔离一层`lanting/`，纸面审计写到其独立父目录；执行严格及regression-only保护，任一失败都拒绝。图像解码、取景、纸面抽样和保护阈值沿用原基线。
+- 流式 mosaic 的 owner/coverage 诊断可显式使用`--streaming-diagnostics`；它只设置`RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR`并把导出写到该运行目录的`diagnostics/`，不启用 framed-artwork、不改变像素或质量门。执行记录保存开关和目录；该选项只用于 test-only 诊断。
 - 所有输出限制在`output/acceptance/<lane>/`，全局空闲<40GiB或lane已有输出≥20GiB时拒绝新运行。超限/取消的残留输出是失败证据，不能作为已交付图像。
 
 `--env RAW_EDITOR_KEY=VALUE`用于明确的非合同实验开关；内部输出/报告/内存/阈值等保护项不能覆盖。自定义数据根目录仍通过进程环境`RAW_EDITOR_FOCUS_STACK_DATA_ROOT`指定。

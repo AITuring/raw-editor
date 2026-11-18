@@ -35,6 +35,8 @@ def parse(argv=None):
     parser.add_argument('--scale', type=float, default=1)
     parser.add_argument('--label', required=True)
     parser.add_argument('--framed', action='store_true')
+    parser.add_argument('--streaming-diagnostics', action='store_true',
+                        help='export test-only streaming owner/coverage maps under the run directory')
     parser.add_argument('--preview-only', action='store_true')
     parser.add_argument('--exclusive', action='store_true')
     parser.add_argument('--estimate-gib', type=float)
@@ -234,6 +236,8 @@ def run(args):
                RAW_EDITOR_STACK_ALIGNMENT_CACHE=str(dest / 'source-alignment.json'))
     if args.framed:
         env.update(RAW_EDITOR_ARTWORK_FRAMED_OUTPUT='1', RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR=str(dest / 'diagnostics'))
+    elif args.streaming_diagnostics:
+        env['RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR'] = str(dest / 'diagnostics')
     for item in args.env:
         key, value = item.split('=', 1)
         if not key.startswith('RAW_EDITOR_') or key in env or any(token in key for token in ('OUTPUT', 'REPORT', 'MEMORY', 'THRESHOLD', 'QUALITY_GATE')):
@@ -248,6 +252,7 @@ def run(args):
         command += ['--preview-only']
     slot = read(Path(os.environ['STACK_LAB_HOLDER']))
     execution = dict(schema=1, dataset=args.dataset, subset=args.subset, scale=args.scale, framed=args.framed,
+                     streaming_diagnostics=args.streaming_diagnostics,
                      resource_contract=build.get('resource_contract'), preview_only=args.preview_only, lane=args.lane, label=args.label, binary=args.binary,
                      binary_sha256=build['sha256'], commit=build['commit'], inputs=inputs, inputs_sha256=sha_of(inputs),
                      reference=reference, command=command, runner_root=str(root), runner_sha256=sha(root / 'tests/focus-stack-regression.mjs'),
