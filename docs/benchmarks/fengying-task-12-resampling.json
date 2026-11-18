@@ -1,0 +1,345 @@
+{
+  "schema": 1,
+  "task": 12,
+  "status": "test_only_source_resampling_ab_recomputed_full_qg",
+  "production_impact": "no production fallback, owner change, threshold change, or default sampling change",
+  "experiment": {
+    "source": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04916.ARW",
+    "selector": "DSC04916.ARW",
+    "divisor": 1.25,
+    "other_sources": "default prefilter path",
+    "hook": "cfg(test) only; RAW_EDITOR_TEST_SOURCE_RESAMPLE_PATH + RAW_EDITOR_TEST_SOURCE_RESAMPLE_DIVISOR",
+    "marker_count": 1
+  },
+  "binary": {
+    "label": "task-12-source-resample-r1",
+    "sha256": "2ac9519aa3ff24d72e09acc1874de4346d57843e0764a7e642121bc5a790c60e",
+    "source_commit": "05bf7651bb8454e8829fce95c301ae8c1431d9ad",
+    "worktree": "/Users/dp/Desktop/raw-editor/.worktrees/task-12-resampling",
+    "build_json": "/Users/dp/Desktop/raw-editor/output/acceptance/binaries/task-12-source-resample-r1/build.json"
+  },
+  "run": {
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-12/fengying-resample-dsc04916-r1",
+    "scale": 0.25,
+    "inputs": 110,
+    "report_sources": 104,
+    "streamed": 104,
+    "expected_skipped": [
+      "未标题-10-1.jpg",
+      "未标题-11 拷贝.jpg",
+      "未标题-12 拷贝.jpg",
+      "未标题-13-1.jpg",
+      "未标题-13.jpg",
+      "未标题-9.jpg"
+    ],
+    "status": "rejected",
+    "runner_exit_code": 1,
+    "native_child_exit_code": 0,
+    "peak_rss_bytes": 14183464960,
+    "memory_gate_pass": true,
+    "wall_seconds": 1790.9384298324585,
+    "selected_path": "legacy_single_layer_mosaic",
+    "closure": "not_run",
+    "output_sha256": "98d52c1db3a235cb0f67f27ca1a102ea7199ebf3f0200c2c203fadc1e64e0a16",
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-12/fengying-resample-dsc04916-r1/run/fengying-s0p25-task-12-resample-dsc04916-r1-stack-reports/stack-report-44fe6f70-1df7-4c7a-ad9f-d5736f13823d.json",
+    "report_sha256": "4839faad8b6dfccd9319bcf707cb694f4c238e31c26d9be907c746711f309a3c"
+  },
+  "qg": {
+    "criteria": {
+      "local_scale_median": {
+        "verdict": "not_applicable",
+        "threshold": 0.98,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "failed_count": 8,
+        "dsc04916": 0.8887075044462407
+      },
+      "local_scale_pixel_ratio": {
+        "verdict": "fail",
+        "threshold": 0.99,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "failed_count": 1,
+        "dsc04916": 0.0
+      },
+      "effective_pixel_count": {
+        "verdict": "pass",
+        "threshold": 0.98,
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "failed_count": 0,
+        "dsc04916": null
+      },
+      "mtf50_normalized": {
+        "verdict": "not_applicable",
+        "threshold": 0.93,
+        "measurable_count": 0,
+        "unmeasurable_count": 0,
+        "failed_count": 0,
+        "dsc04916": null
+      },
+      "gradient_energy_normalized": {
+        "verdict": "pass",
+        "threshold": 0.95,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "failed_count": 0,
+        "dsc04916": 1.0000040636972913
+      },
+      "noise_sigma_ratio": {
+        "verdict": "pass",
+        "threshold": 0.85,
+        "measurable_count": 24,
+        "unmeasurable_count": 0,
+        "failed_count": 0,
+        "dsc04916": 0.9999826036198971
+      },
+      "roi_delta_e00": {
+        "verdict": "pass",
+        "threshold": 2.0,
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "failed_count": 0,
+        "dsc04916": 0.00182422416349092
+      },
+      "boundary_stroke_alignment": {
+        "verdict": "pass",
+        "threshold": 1.5,
+        "measurable_count": 43,
+        "unmeasurable_count": 0,
+        "failed_count": 0,
+        "dsc04916": null
+      },
+      "owner_sharpness_coverage": {
+        "verdict": "fail",
+        "threshold": 0.99,
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "failed_count": 1,
+        "dsc04916": null
+      }
+    },
+    "summary": {
+      "verdict": "fail",
+      "roi_count": 8,
+      "criteria": {
+        "local_scale_median": "not_applicable",
+        "local_scale_pixel_ratio": "fail",
+        "effective_pixel_count": "pass",
+        "mtf50_normalized": "not_applicable",
+        "gradient_energy_normalized": "pass",
+        "noise_sigma_ratio": "pass",
+        "roi_delta_e00": "pass",
+        "boundary_stroke_alignment": "pass",
+        "owner_sharpness_coverage": "fail"
+      },
+      "non_pass": [
+        "local_scale_median:not_applicable",
+        "local_scale_pixel_ratio:fail",
+        "mtf50_normalized:not_applicable",
+        "owner_sharpness_coverage:fail"
+      ],
+      "unresolved_pixels": 0,
+      "detail_repairs": 405
+    },
+    "source_counts": {
+      "inputs": 110,
+      "report_sources": 104,
+      "ordered": 104,
+      "streamed": 104,
+      "lending": null,
+      "expected_skipped": [
+        "未标题-10-1.jpg",
+        "未标题-11 拷贝.jpg",
+        "未标题-12 拷贝.jpg",
+        "未标题-13-1.jpg",
+        "未标题-13.jpg",
+        "未标题-9.jpg"
+      ],
+      "covered_pixels": 77157166,
+      "owned_pixels": 77157166
+    },
+    "checks": {
+      "inputs_unchanged": true,
+      "reference_unchanged": true,
+      "binary_unchanged": true,
+      "memory_gate_pass": true,
+      "runner_exit_zero": false,
+      "native_child_exit_zero": true,
+      "runner_summary_present": true,
+      "runner_failures_empty": false,
+      "quality_gate_pass": false,
+      "output_contract": true,
+      "report_source_digests": true
+    }
+  },
+  "baseline": {
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-12/fengying-diagnostics-r1",
+    "qg": {
+      "criteria": {
+        "local_scale_median": {
+          "verdict": "not_applicable",
+          "threshold": 0.98,
+          "measurable_count": 8,
+          "unmeasurable_count": 0,
+          "failed_count": 8,
+          "dsc04916": 0.8887075044462407
+        },
+        "local_scale_pixel_ratio": {
+          "verdict": "fail",
+          "threshold": 0.99,
+          "measurable_count": 8,
+          "unmeasurable_count": 0,
+          "failed_count": 1,
+          "dsc04916": 0.0
+        },
+        "effective_pixel_count": {
+          "verdict": "pass",
+          "threshold": 0.98,
+          "measurable_count": 1,
+          "unmeasurable_count": 0,
+          "failed_count": 0,
+          "dsc04916": null
+        },
+        "mtf50_normalized": {
+          "verdict": "not_applicable",
+          "threshold": 0.93,
+          "measurable_count": 0,
+          "unmeasurable_count": 0,
+          "failed_count": 0,
+          "dsc04916": null
+        },
+        "gradient_energy_normalized": {
+          "verdict": "pass",
+          "threshold": 0.95,
+          "measurable_count": 8,
+          "unmeasurable_count": 0,
+          "failed_count": 0,
+          "dsc04916": 1.000003867596132
+        },
+        "noise_sigma_ratio": {
+          "verdict": "pass",
+          "threshold": 0.85,
+          "measurable_count": 24,
+          "unmeasurable_count": 0,
+          "failed_count": 0,
+          "dsc04916": 0.999988904013345
+        },
+        "roi_delta_e00": {
+          "verdict": "pass",
+          "threshold": 2.0,
+          "measurable_count": 8,
+          "unmeasurable_count": 0,
+          "failed_count": 0,
+          "dsc04916": 0.001820791233494476
+        },
+        "boundary_stroke_alignment": {
+          "verdict": "pass",
+          "threshold": 1.5,
+          "measurable_count": 43,
+          "unmeasurable_count": 0,
+          "failed_count": 0,
+          "dsc04916": null
+        },
+        "owner_sharpness_coverage": {
+          "verdict": "fail",
+          "threshold": 0.99,
+          "measurable_count": 1,
+          "unmeasurable_count": 0,
+          "failed_count": 1,
+          "dsc04916": null
+        }
+      },
+      "summary": {
+        "verdict": "fail",
+        "roi_count": 8,
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "pass",
+          "owner_sharpness_coverage": "fail"
+        },
+        "non_pass": [
+          "local_scale_median:not_applicable",
+          "local_scale_pixel_ratio:fail",
+          "mtf50_normalized:not_applicable",
+          "owner_sharpness_coverage:fail"
+        ],
+        "unresolved_pixels": 0,
+        "detail_repairs": 409
+      }
+    },
+    "owner_coverage": 0.971364798589639,
+    "covered_owned_pixels": 77157204,
+    "detail_repairs": 409,
+    "preview_sha256": "e77523ef421a75bab794569fdda1ca54aa9f5e8c16016daf4324b4b1c394d474",
+    "crop_sha256": {
+      "top-left": "adf994363c0089005252567138fc15a27eb05ca758bc2c6824ee4297c8445b76",
+      "top-center": "301c70a995fef82c5e45d8ce387ec360325b5c1da2b9b9774a5259dbcbb8969e",
+      "top-right": "0154b10f39ce911d54c02b51134b2b1d7ebb1422805c5c9d35582ad44d4c8b86",
+      "bottom-left": "a77c0c1179a2a035a5c054454c18615b860002cbbfaf5c0dc4581279004f1a37",
+      "bottom-center": "10723fed07dfec2d8bd03a44a161a47f8d5db8563e6351123ca69777da440dc8",
+      "bottom-right": "17754717ecb68f8cab8c663570c0d5fc31efefdfa01463a9d41677aa9d2db8a9"
+    }
+  },
+  "delta": {
+    "local_scale_pixel_ratio": "unchanged fail; DSC04916 remains 0.0",
+    "owner_sharpness_coverage": {
+      "baseline": 0.971364798589639,
+      "experiment": 0.9713504991985897,
+      "delta": -1.42993910493e-05
+    },
+    "covered_owned_pixels": {
+      "baseline": 77157204,
+      "experiment": 77157166,
+      "delta": -38
+    },
+    "detail_repairs": {
+      "baseline": 409,
+      "experiment": 405,
+      "delta": -4
+    },
+    "self_sharpness_median": {
+      "baseline": 0.16457354720658937,
+      "experiment": 0.1659407754969992
+    },
+    "self_sharpness_p10": {
+      "baseline": 0.049491861818587085,
+      "experiment": 0.049522915318382536
+    },
+    "preview_changed": true,
+    "all_crop_digests_changed": true
+  },
+  "qg_source_visual": {
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-12/fengying-resample-dsc04916-r1/qg-source-visual",
+    "iteration_metadata_sha256": "55f482b9d29e8916c6887b9dae22433a53f95cc93beb1d0c1325cbe418945ca5",
+    "dsc04916_roi": {
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-12/fengying-resample-dsc04916-r1/qg-source-visual/process-82908/iteration-0001/roi-02",
+      "primary_owner": 59,
+      "station_id": 2,
+      "world_origin": [
+        -3428.0,
+        -4822.0
+      ],
+      "validity_counts": {
+        "1": 65536
+      },
+      "source_loader_calls_added": 0,
+      "reference_stage": "existing post-tone QG reference, no new load or resampling",
+      "output_rgb_f32le_sha256": "1701d2e9fd023923e8997c2039a0e5a8dcd9620f6db73a1e7301367f1a6b8b82",
+      "reference_rgb_f32le_sha256": "ee92f94d481c742c23222eb6cb138592417af0b2d01fd185a0aec3cba9b8f5cd",
+      "prepared_source_xy_sha256": "90327067d60c33e0fad5302413992dad18899cab0be830a979caf25d72799e87"
+    }
+  },
+  "decision": "reject production resampling/fallback for this failure: source resampling changes pixels and sharpness slightly but cannot change geometry-derived local_scale or create owner Coverage; proceed with geometry/owner root-cause work.",
+  "limitations": [
+    "scale=0.25 remains diagnostic D1 evidence; no native D2/D3/D4/D5 claim.",
+    "The experiment binary was a frozen dirty test candidate; build provenance is retained in build.json.",
+    "QG source visual reference is the existing post-tone QG reference and does not claim best-focus/all-candidate evidence."
+  ]
+}

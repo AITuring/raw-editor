@@ -36,4 +36,25 @@ QG 与 S2 基线一致：`legacy_single_layer_mosaic`、closure `not_run`、104 
 
 ## 结论与下一步
 
-当前仍是 D1 的 scale=0.25 诊断范围，任务12不勾选 D3。最小 fallback 假设没有收益证据：尺度失败点没有可替代 owner，owner 覆盖失败点没有 Coverage 支持。下一次若进入实现，必须先做独立 source resampling 并重新计算 local-scale、owner coverage、boundary、detail donor 和完整 QG；不得自动替换 owner、放宽阈值或把 0.25 结果外推到 native。
+当前仍是 D1 的 scale=0.25 诊断范围，任务12不勾选 D3。最小 fallback 假设没有收益证据：尺度失败点没有可替代 owner，owner 覆盖失败点没有 Coverage 支持。不得自动替换 owner、放宽阈值或把 0.25 结果外推到 native；后续应转向几何倍率与 owner coverage 根因。
+
+## 独立 source resampling A/B
+
+在同一输入范围上建立 test-only 实验二进制 `task-12-source-resample-r1`，只对
+`DSC04916.ARW` 强制 source divisor `1.25`，其余 103 个 RAW 保持默认预滤波；实验通过
+`cfg(test)` 开关读取 `RAW_EDITOR_TEST_SOURCE_RESAMPLE_PATH` 和
+`RAW_EDITOR_TEST_SOURCE_RESAMPLE_DIVISOR`，并把 divisor 写入 native registration，使 QG
+reference 重放同一 source sampling。运行目录为
+`/Users/dp/Desktop/raw-editor/output/acceptance/task-12/fengying-resample-dsc04916-r1`。
+
+完整 exclusive 重跑的峰值 RSS 为 `14183464960` bytes（13.21 GiB），native child exit=0，内存门通过。QG 九项逐项重算后仍为：
+
+- `local_scale_pixel_ratio=fail`，DSC04916 仍为 `0.0`；几何 local scale 仍为 `0.8887075`；
+- `owner_sharpness_coverage=fail`，`0.9713647986 → 0.9713504992`，覆盖/拥有像素减少 38；
+- `effective_pixel_count`、`gradient_energy_normalized`、`noise_sigma_ratio`、`roi_delta_e00`、`boundary_stroke_alignment` 保持 pass，MTF 保持 not_applicable，unresolved=0；
+- 预览与六个裁片 digest 全部改变，self sharpness median `0.16457 → 0.16594`，但没有门禁收益；detail repairs `409 → 405`。
+
+QG source visual capture 完整覆盖失败 ROI：`roi-02` 对应 station 2 / owner 59 / `DSC04916.ARW`，world origin `(-3428,-4822)`，`65536/65536` 像素有效映射，精确 RGB32F output/reference、prepared source XY、owners 和 validity 均已保存。机器摘要见
+[fengying-task-12-resampling.json](../benchmarks/fengying-task-12-resampling.json)。
+
+结论：该单源 resampling 只改变像素与锐度，不能改变几何 Jacobian 或制造 owner Coverage；不进入生产 resampling/fallback。下一步应转向 source-to-world 几何倍率和 owner coverage 根因。

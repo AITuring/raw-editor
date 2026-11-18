@@ -17,6 +17,8 @@ use nalgebra::{Point2, Point3};
 use rayon::prelude::*;
 #[cfg(test)]
 use std::collections::HashMap;
+#[cfg(test)]
+use std::path::Path;
 
 #[cfg(test)]
 #[path = "mosaic_diagnostics.rs"]
@@ -360,6 +362,54 @@ fn prefilter_minified_source(source: Rgb32FImage, scale: f64) -> (Rgb32FImage, f
     }
     let divisor = 1.0 / (scale * SOURCE_PREFILTER_OVERSAMPLING);
     (super::stitching::minify_rgb(&source, divisor), divisor)
+}
+
+/// Test-only source-density override for one named frame.  The normal path
+/// remains unchanged; an experiment must opt in with both a filename selector
+/// and a divisor greater than one.  The divisor is carried through the native
+/// registration evidence so the Quality_Gate replays the same source sampling.
+#[cfg(test)]
+pub(super) fn test_source_resampling_override(
+    source: Rgb32FImage,
+    scale: f64,
+    filename: &str,
+) -> (Rgb32FImage, f64) {
+    let Some(selector) = std::env::var_os("RAW_EDITOR_TEST_SOURCE_RESAMPLE_PATH") else {
+        return prefilter_minified_source(source, scale);
+    };
+    let selector = selector.to_string_lossy();
+    let matches = filename == selector
+        || Path::new(filename)
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy() == selector)
+        || filename.ends_with(selector.as_ref());
+    if !matches {
+        return prefilter_minified_source(source, scale);
+    }
+    let Ok(divisor) = std::env::var("RAW_EDITOR_TEST_SOURCE_RESAMPLE_DIVISOR")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .ok_or(())
+    else {
+        return prefilter_minified_source(source, scale);
+    };
+    if !(divisor.is_finite() && divisor > 1.0) {
+        return prefilter_minified_source(source, scale);
+    }
+    println!(
+        "  - TEST_SOURCE_RESAMPLING path={} divisor={divisor}",
+        filename
+    );
+    (super::stitching::minify_rgb(&source, divisor), divisor)
+}
+
+#[cfg(not(test))]
+pub(super) fn test_source_resampling_override(
+    source: Rgb32FImage,
+    scale: f64,
+    _filename: &str,
+) -> (Rgb32FImage, f64) {
+    prefilter_minified_source(source, scale)
 }
 
 /// The power-of-two prefilter every path except a focus scan keeps: halve
