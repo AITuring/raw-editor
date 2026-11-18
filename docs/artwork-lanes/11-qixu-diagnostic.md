@@ -30,3 +30,13 @@
 5. 先用 0.25 保存诊断验证，再决定是否值得跑原生；0.25 通过不能外推 D2/D3。
 
 本次不进入生产修复，也不勾选任务11。任务11的下一步依赖一个明确的单变量几何/owner 假设和可复现 ROI，而不是继续扩大素材运行规模。
+
+## 补充实验：保存 owner grid 的 3×3 fallback 审计
+
+使用正确的 test-only `RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR` 运行产物 `output/acceptance/task-11/qixu-1-diagnostics`，按 report 的 world origin `(-4581,1)` 和 metadata 的 analysis scale `3.2338867` 将失败点映射到 owner/coverage 平面。实验只读取 3×3 owner stencil，要求 Coverage，排除 owner=0，不扩大搜索范围。
+
+- 14 个 scale 失败采样点中，**0 个**有替代 owner 候选；所有 3×3 邻域是同一 owner。
+- 3 个 boundary 失败点中，**3 个**有混合 owner 邻域；它们只能作为几何候选，不能直接替换或视作修复。
+- owner coverage 失败点位于无 Coverage 邻域，**0 个**可用 fallback。
+
+因此当前最小 fallback 假设没有足够收益证据：scale/owner 失败不能靠同一 3×3 邻域补救，boundary 混合点需要独立 source resampling 和 QG 重算。审计脚本：[qixu_owner_fallback_audit.py](../../scripts/stack-lab/qixu_owner_fallback_audit.py)；报告：`/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-owner-fallback-audit.json`。本次不改生产 owner 选择。
