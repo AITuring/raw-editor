@@ -14136,5 +14136,16 @@
     }
   },
   "decision": "keep task14 at diagnosis: empty DSC_4885 input and report-source digest mismatch remain explicit; tone boundary deltaE max exceeds 1.5; output density is bypassed by nonidentity residual. Do not infer D2/D3 from QG aggregate pass or run scale1 yet.",
-  "next_step": "audit empty-source manifest/exclusion contract and tone/density entrance together, then make a single test-only contract or tone/residual hypothesis before any native run."
+  "next_step": "design and validate explicit excluded-source report contract plus tone/density test-only hypothesis before scale1",
+  "empty_source_contract_audit": {
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-empty-contract-audit.json",
+    "method": "wenyuan_empty_source_shadow_contract_audit_v1",
+    "checks": {
+      "formal_manifest_declares_exclusion": false,
+      "shadow_manifest_declares_exclusion": true,
+      "native_decode_failed": true,
+      "formal_report_source_digests": false
+    },
+    "decision": "manifest-only expectedSkipped change is insufficient; design report-source exclusion contract and rebaseline together"
+  }
 }

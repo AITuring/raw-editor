@@ -21,3 +21,9 @@ QG 的 local-scale、effective、gradient、owner 等有效门均 pass 或 not_a
 ## 结论与下一步
 
 任务14不跑 scale=1，也不修改 `expectedSkipped` 来制造来源通过。下一步先把空源文件登记/排除合同、density bypass 入口和 tone 违规拆成可验证的单变量 test-only 假设；完整 QG 与入口合同同时闭合后，才考虑 native。
+
+## 空源 shadow contract
+
+使用 [wenyuan_contract_audit.py](../../scripts/stack-lab/wenyuan_contract_audit.py) 做只读 shadow manifest 审计：若将 `DSC_4885.NEF` 加入 expectedSkipped，能表达“预期排除”，但当前 Stack_Report 仍包含该 source 记录（`sha256_before=""`、`decoded=false`），因此仅改 expectedSkipped 也不足以让 `report_source_digests` 通过；需要单独设计并评审“排除源不进入 report.sources”的入口合同，再重新生成 baseline。正式 manifest、sourceAggregateSha256 和历史基线均未修改。
+
+机器结果：`/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-empty-contract-audit.json`。
