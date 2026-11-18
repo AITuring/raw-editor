@@ -31,11 +31,12 @@
 
 本次不进入生产修复，也不勾选任务11。任务11的下一步依赖一个明确的单变量几何/owner 假设和可复现 ROI，而不是继续扩大素材运行规模。
 
+## 补充实验：保存 owner grid 的 3×3 fallback 审计
 
-## 补充重跑：owner/coverage诊断出口核对（2026-11-18）
+使用正确的 test-only `RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR` 运行产物 `output/acceptance/task-11/qixu-1-diagnostics`，按 report 的 world origin `(-4581,1)` 和 metadata 的 analysis scale `3.2338867` 将失败点映射到 owner/coverage 平面。实验只读取 3×3 owner stencil，要求 Coverage，排除 owner=0，不扩大搜索范围。
 
-- 命令：`run.py --binary base-2026-11-12 --dataset qixu-1 --scale 0.25 --exclusive --label diagnostics-r2`，请求 `RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR` 只读目录；输入75张、source SHA/参考保持。
-- 结果：仍 `rejected`、QG fail/8ROI、closure=`not_run`、report sources72、streamed70、owner coverage `0.9113826565`；RSS `15329722368` B（14.277GiB），内存门通过。
-- 失败项与基线一致：local-scale pixel ratio、boundary stroke、owner sharpness coverage；未解析像素为0。
-- 关键发现：输出目录没有生成 `diagnostics/metadata.json`、owner/coverage/source-overlap等逐tile文件。该环境变量在 `legacy_single_layer_mosaic` fallback路径没有可观测产物，无法用它验证3×3 owner fallback；因此不进入代码改动，也不把空诊断当成“无替代来源”。
-- 本次补充输出：`/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-diagnostics-r2`；完整日志、execution、analysis和TIFF均保留。
+- 14 个 scale 失败采样点中，**0 个**有替代 owner 候选；所有 3×3 邻域是同一 owner。
+- 3 个 boundary 失败点中，**3 个**有混合 owner 邻域；它们只能作为几何候选，不能直接替换或视作修复。
+- owner coverage 失败点位于无 Coverage 邻域，**0 个**可用 fallback。
+
+因此当前最小 fallback 假设没有足够收益证据：scale/owner 失败不能靠同一 3×3 邻域补救，boundary 混合点需要独立 source resampling 和 QG 重算。审计脚本：[qixu_owner_fallback_audit.py](../../scripts/stack-lab/qixu_owner_fallback_audit.py)；报告：`/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-owner-fallback-audit.json`。本次不改生产 owner 选择。
