@@ -65,3 +65,11 @@ owner oracle 的 bounded shared-world-field relaxation 没有联合可行解：�
 运行状态仍为 `rejected`，native child exit `101`，原因是既有 `local_scale_median:not_applicable`；QG 汇总 `pass`、TIFF 写出和 24GiB 内存门通过。tone 仍为 `degraded`，边界 ΔE00 最大 `4.6045642866`；density 仍为 `bypassed`、`sample_count=0`、`nonidentity_world_residual`。这次运行只证明排除源入口合同，不授予 D2/D3。
 
 机器结果：[wenyuan-task-14-excluded-source-r1.json](../benchmarks/wenyuan-task-14-excluded-source-r1.json)。
+
+## scale=1 native 验证（r1）
+
+在入口契约闭合后，用同一 schema-8 冻结二进制 `task-14-excluded-source-r1` 完成 Wenyuan 126 输入 scale=1 独占运行。native 几何质量门首次进入真实尺度：`local_scale_median=pass`、`local_scale_pixel_ratio=pass`、closure `converged`；QG 汇总 `pass`，TIFF 为 `24681×13091` RGBA16，内存门通过（峰值 `12939411456` bytes，wall `17192.31s`）。
+
+native 仍拒绝，唯一 runner failure 为 tone boundary：最大 ΔE00 `8.778901254993071`，142 个违规；density 仍因 `nonidentity_world_residual` bypass，`sample_count=0`，没有 native 密度证明。来源合同继续通过（`report_source_digests=true`，1 条 excluded source）。本次没有超 24GiB 或跑不完证据，不启动任务15。
+
+机器结果：[wenyuan-task-14-scale1-r1.json](../benchmarks/wenyuan-task-14-scale1-r1.json)。

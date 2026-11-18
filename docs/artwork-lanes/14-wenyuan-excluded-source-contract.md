@@ -76,3 +76,7 @@
 ## 全量 r1 验证结果
 
 manifest 已在隔离分支登记 `expectedSkipped=["DSC_4885.NEF"]`，并用 schema-8 冻结二进制完成 Wenyuan 126 输入 scale=0.25 全量运行。`report_source_digests=true`，排除记录和空文件 SHA 均闭合；runner 仍因既有 `local_scale_median` native criterion 拒绝，证明入口合同与质量验收已被分离记录。
+
+## scale=1 结果
+
+排除源入口合同已在 scale=1 复用并通过；native 几何门也通过。剩余阻断转为 tone boundary（最大 ΔE00 `8.778901254993071`）与 density bypass，不再是空源或 `local_scale_median` 入口问题。
