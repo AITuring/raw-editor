@@ -14248,5 +14248,13 @@
     "runner_manifest_baseline_enabled": false,
     "checks": "20 report unit tests passed; cargo check --tests --offline passed",
     "decision": "keep runner and manifest unchanged until schema review and fresh baseline"
+  },
+  "excluded_source_runner_contract": {
+    "script": "scripts/stack-lab/run.py",
+    "status": "implemented_opt_in_not_enabled_for_wenyuan",
+    "behavior": "schema8 excluded_sources are filtered before active digest equality; old reports retain old behavior",
+    "synthetic_tests": "20/20 passed",
+    "wenyuan_manifest_changed": false,
+    "decision": "do not add expectedSkipped or rebaseline until L0 review"
   }
 }

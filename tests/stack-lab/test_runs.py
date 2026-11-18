@@ -43,6 +43,10 @@ const r={input:{source_count:files.length,sources:files.map(p=>({path:p,sha256_b
  output:{path:tiff,width:2,height:2,written:mode!=='missing_output',artifact_validation:'pass',bit_depth:16,alpha_preserved:true},
  performance:{source_preflight:{raw_decode_count:4},native_fusion_cache:{max_bytes:1073741824,peak_bytes:200,fusion_count:1},source_render_cache:{max_bytes:536870912,peak_bytes:100}}};
 if(mode==='bad_source')r.input.sources[0].sha256_after='0'.repeat(64);
+if(mode==='excluded_source_contract'){
+ const excludedPath=files[files.length-1];
+ r.input.excluded_sources=[{path:excludedPath,decoded:false,sha256_before:'',sha256_after:sha(excludedPath)}];
+}
 const reports=path.join(out,'fixture-stack-reports');fs.mkdirSync(reports);
 fs.writeFileSync(path.join(reports,'stack-report-main.json'),JSON.stringify(r));
 if(mode==='aux_report')fs.writeFileSync(path.join(reports,'stack-report-aux.json'),JSON.stringify({output:{}}));
@@ -154,6 +158,19 @@ class RunsTest(fixtures.ToolsTest):
             (code, _, _), dest=self.run_one(mode,mode)
             self.assertNotEqual(code,0)
             self.assertEqual(json.loads((dest/'analysis.json').read_text())['status'],'rejected')
+
+    def test_schema8_excluded_source_contract_filters_active_digest_check(self):
+        self.manifest['datasets'][0]['expectedSkipped'] = ['2.NEF']
+        (self.root/'tests/acceptance/focus-stack-datasets.json').write_text(json.dumps(self.manifest))
+        code, _, err = self.run_tool(
+            'run.py', '--binary', 'fixture', '--lane', 'task-2', '--dataset', 'sleeping',
+            '--label', 'excluded-contract', '--env', 'RAW_EDITOR_TEST_MODE=excluded_source_contract')
+        self.assertEqual(code, 0, err)
+        dest = self.root/'output/acceptance/task-2/sleeping-excluded-contract'
+        analysis = json.loads((dest/'analysis.json').read_text())
+        self.assertEqual(analysis['status'], 'quality_accepted')
+        self.assertTrue(analysis['checks']['report_source_digests'])
+        self.assertEqual(analysis['sources']['expected_skipped'], ['2.NEF'])
 
     def test_select_measured_report_and_reject_ambiguous_evidence(self):
         self.assertEqual(self.run_one('aux','aux_report')[0][0],0)

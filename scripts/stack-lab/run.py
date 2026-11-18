@@ -160,14 +160,46 @@ def analyse(dest, execution, build, directory, entry):
     }
     if execution['preview_only']:
         checks['output_contract'] = output_exists  # preview never qualifies as native acceptance
-    report_sources = (report.get('input') or {}).get('sources') or []
+    input_report = report.get('input') or {}
+    report_sources = input_report.get('sources') or []
     by_path = {item['path']: item['sha256'] for item in execution['inputs']}
     expected_paths = {p for p in by_path if Path(p).name not in (entry.get('expectedSkipped', []) if not execution.get('subset') else [])}
-    report_paths = [item.get('path') for item in report_sources]
-    checks['report_source_digests'] = (bool(report_sources) and len(set(report_paths)) == len(report_paths)
+    excluded_records = input_report.get('excluded_sources')
+    excluded_paths = {
+        item.get('path') for item in excluded_records or []
+        if isinstance(item, dict) and isinstance(item.get('path'), str)
+    }
+    # Schema-8 reports may retain every selected source in `sources` for
+    # compatibility while duplicating decode failures in `excluded_sources`.
+    # Filter those explicit records before applying the historical active-path
+    # equality check. Reports without the field keep the old behavior.
+    active_report_sources = (
+        [item for item in report_sources if item.get('path') not in excluded_paths]
+        if excluded_paths else report_sources
+    )
+    excluded_contract = True
+    if excluded_paths:
+        expected_excluded_paths = {
+            path for path in by_path
+            if Path(path).name in (entry.get('expectedSkipped', []) if not execution.get('subset') else [])
+        }
+        excluded_contract = (
+            excluded_paths == expected_excluded_paths
+            and all(
+                item.get('decoded') is False
+                and item.get('sha256_before') in (None, '')
+                and item.get('sha256_after') == by_path.get(item.get('path'))
+                for item in (excluded_records or [])
+                if isinstance(item, dict)
+            )
+            and len(excluded_records or []) == len(expected_excluded_paths)
+        )
+    report_paths = [item.get('path') for item in active_report_sources]
+    checks['report_source_digests'] = (bool(active_report_sources) and excluded_contract
+        and len(set(report_paths)) == len(report_paths)
         and set(report_paths) == expected_paths and all(
         item.get('path') in by_path and item.get('sha256_before') == by_path[item['path']]
-        and item.get('sha256_after') == by_path[item['path']] for item in report_sources))
+        and item.get('sha256_after') == by_path[item['path']] for item in active_report_sources))
     passed = all(v is True for v in checks.values()) and not execution['preview_only']
     preview_success = execution['preview_only'] and all(checks[k] is True for k in
         ('inputs_unchanged', 'reference_unchanged', 'binary_unchanged', 'report_source_digests', 'memory_gate_pass',

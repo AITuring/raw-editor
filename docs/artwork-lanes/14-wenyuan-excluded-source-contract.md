@@ -66,3 +66,9 @@
 分支 `lane/task-14/excluded-report-schema` 已在 Stack_Report schema 8 中加入 `input.excluded_sources`。解码失败后，native 复制对应 `SourceRecord`（保留 `decoded=false` 和 `sha256_before`），终止写报告时对活动源与排除源共同执行 `sha256_after` 重检；原有 `input.sources` 保持不变，旧消费者不会因字段迁移而丢失记录。正式 runner、manifest 和 baseline 尚未启用该字段。
 
 定向 Rust 报告测试 20/20 通过，`cargo check --tests --offline` 通过。完整真实素材回归仍待 runner/schema 评审后进行。
+
+## runner opt-in 判定实现
+
+`run.py` 已支持 schema-8 的 `input.excluded_sources`：保留旧 `input.sources` 记录后，先过滤明确排除路径，再对活动源做原有前后摘要相等检查；排除记录必须与非 subset manifest 的 `expectedSkipped` 一一对应，且 `decoded=false`、`sha256_before` 为空、`sha256_after` 等于 execution 摘要。没有 `excluded_sources` 的旧报告继续走旧逻辑。
+
+合成 schema-8 runner 回归测试 20/20 通过；真实 Wenyuan manifest 尚未增加 `expectedSkipped`，因此正式入口仍保持拒绝，等待评审和重基线。
