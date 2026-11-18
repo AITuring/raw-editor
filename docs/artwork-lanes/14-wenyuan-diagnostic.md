@@ -53,3 +53,7 @@ owner oracle 的 bounded shared-world-field relaxation 没有联合可行解：�
 ## 空源恢复核查
 
 只读搜索 `/Users/dp/Downloads`、`/Users/dp/Desktop` 和 `/private/tmp` 后，`DSC_4885.NEF` 只有一个本地副本：0 bytes，SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`。没有可用于补源或重生成的非空副本；不能伪造源文件或据此重基线。
+
+## 排除源契约设计稿
+
+已将 shadow contract 固化为 [14-wenyuan-excluded-source-contract.md](14-wenyuan-excluded-source-contract.md)：活动 `sources` 与 `excluded_sources` 分离，保留空源的 decode/摘要证据，并要求选中、活动、排除三项计数闭合。该设计仍待 L0 评审和正式 report/runner 实现；不改变当前入口判定。

@@ -14219,5 +14219,17 @@
     "bytes": 0,
     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "decision": "no_nonempty_local_copy_found; do not fabricate source or rebaseline"
+  },
+  "excluded_source_contract_spec": {
+    "document": "docs/artwork-lanes/14-wenyuan-excluded-source-contract.md",
+    "status": "design_only_pending_review_and_rebaseline",
+    "formal_runner_changed": false,
+    "formal_manifest_changed": false,
+    "required_counts": {
+      "selected_source_count": 126,
+      "active_source_count": 125,
+      "excluded_source_count": 1
+    },
+    "decision": "do not enable until report schema and runner are reviewed and a fresh 0.25 baseline is generated"
   }
 }
