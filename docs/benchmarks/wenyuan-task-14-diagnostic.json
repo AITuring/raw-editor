@@ -14136,7 +14136,7 @@
     }
   },
   "decision": "keep task14 at diagnosis: empty DSC_4885 input and report-source digest mismatch remain explicit; tone boundary deltaE max exceeds 1.5; output density is bypassed by nonidentity residual. Do not infer D2/D3 from QG aggregate pass or run scale1 yet.",
-  "next_step": "select one reproducible cfg(test)-only hypothesis; close excluded-source entry contract and full 0.25 QG before considering scale1",
+  "next_step": "tone owner oracle rejected bounded relaxation; preserve identity fallback and resolve excluded-source report contract before any native-scale decision",
   "empty_source_contract_audit": {
     "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-empty-contract-audit.json",
     "method": "wenyuan_empty_source_shadow_contract_audit_v1",
@@ -14187,5 +14187,23 @@
     "output_density_bypass_reason": "nonidentity_world_residual",
     "native_density_proven": false,
     "test_only_override_found": false
+  },
+  "tone_oracle_audit": {
+    "scope": "wenyuan-10",
+    "scale": 0.25,
+    "binary": "base-2026-11-12",
+    "run": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-10-tone-oracle-r1",
+    "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-10-tone-oracle-r1/analysis.json",
+    "owner_oracle": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-10-tone-oracle-r1/owner/tone-owner-source-fidelity.json",
+    "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-tone-oracle-audit.json",
+    "feasible_joint_solution": false,
+    "identity_fallback": true,
+    "boundary_required_relaxation": 0.743408203125,
+    "owner_maximum_feasible_relaxation": 0.0,
+    "pareto_gap": 0.743408203125,
+    "native_acceptance": "rejected_local_scale_median_not_applicable_child_exit_101",
+    "memory_gate_pass": true,
+    "peak_rss_bytes": 10260135936,
+    "decision": "hypothesis_rejected_no_production_fallback"
   }
 }
