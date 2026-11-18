@@ -72,3 +72,7 @@
 `run.py` 已支持 schema-8 的 `input.excluded_sources`：保留旧 `input.sources` 记录后，先过滤明确排除路径，再对活动源做原有前后摘要相等检查；排除记录必须与非 subset manifest 的 `expectedSkipped` 一一对应，且 `decoded=false`、`sha256_before` 为空、`sha256_after` 等于 execution 摘要。没有 `excluded_sources` 的旧报告继续走旧逻辑。
 
 合成 schema-8 runner 回归测试 20/20 通过；真实 Wenyuan manifest 尚未增加 `expectedSkipped`，因此正式入口仍保持拒绝，等待评审和重基线。
+
+## 全量 r1 验证结果
+
+manifest 已在隔离分支登记 `expectedSkipped=["DSC_4885.NEF"]`，并用 schema-8 冻结二进制完成 Wenyuan 126 输入 scale=0.25 全量运行。`report_source_digests=true`，排除记录和空文件 SHA 均闭合；runner 仍因既有 `local_scale_median` native criterion 拒绝，证明入口合同与质量验收已被分离记录。

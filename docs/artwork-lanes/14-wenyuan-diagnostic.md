@@ -57,3 +57,11 @@ owner oracle 的 bounded shared-world-field relaxation 没有联合可行解：�
 ## 排除源契约设计稿
 
 已将 shadow contract 固化为 [14-wenyuan-excluded-source-contract.md](14-wenyuan-excluded-source-contract.md)：活动 `sources` 与 `excluded_sources` 分离，保留空源的 decode/摘要证据，并要求选中、活动、排除三项计数闭合。该设计仍待 L0 评审和正式 report/runner 实现；不改变当前入口判定。
+
+## schema-8 + expectedSkipped 全量验证（r1）
+
+使用冻结二进制 `task-14-excluded-source-r1`（SHA `0c353860b134f216aedbc2aaf3f6ca5f809d186e1c713bc3a7ce89e8bb236971`）和 manifest `expectedSkipped=["DSC_4885.NEF"]` 完成 Wenyuan 126 输入、scale=0.25 独占运行。来源合同已闭合：`report_source_digests=true`；Stack_Report 保留 126 条原始 `sources`，并新增 1 条 `input.excluded_sources`，`decoded=false`、`sha256_before=""`、`sha256_after` 等于空文件 SHA。活动输入 125 张，ordered 125 张。
+
+运行状态仍为 `rejected`，native child exit `101`，原因是既有 `local_scale_median:not_applicable`；QG 汇总 `pass`、TIFF 写出和 24GiB 内存门通过。tone 仍为 `degraded`，边界 ΔE00 最大 `4.6045642866`；density 仍为 `bypassed`、`sample_count=0`、`nonidentity_world_residual`。这次运行只证明排除源入口合同，不授予 D2/D3。
+
+机器结果：[wenyuan-task-14-excluded-source-r1.json](../benchmarks/wenyuan-task-14-excluded-source-r1.json)。
