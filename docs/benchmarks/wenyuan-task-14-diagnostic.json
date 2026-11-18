@@ -14147,5 +14147,26 @@
       "formal_report_source_digests": false
     },
     "decision": "manifest-only expectedSkipped change is insufficient; design report-source exclusion contract and rebaseline together"
+  },
+  "excluded_source_contract": {
+    "status": "test_only_shadow_contract_passes_formal_contract_still_fails",
+    "script": "scripts/stack-lab/wenyuan_exclusion_contract_audit.py",
+    "excluded": [
+      "DSC_4885.NEF"
+    ],
+    "strict_contract": {
+      "report_paths_equal_active_inputs": false,
+      "analysis_report_source_digests": false,
+      "passes": false
+    },
+    "proposed_contract": {
+      "active_report_paths_equal_active_inputs": true,
+      "active_source_digests_match": true,
+      "excluded_records_are_explicit_and_empty": true,
+      "passes": true,
+      "rule": "exclude named source from active report path equality while requiring decoded=false, empty sha256_before, and sha256_after equal to the immutable empty-file SHA"
+    },
+    "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-exclusion-contract-audit.json",
+    "decision": "design_only; do not change formal manifest, runner, or historical baseline"
   }
 }

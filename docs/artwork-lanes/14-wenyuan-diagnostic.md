@@ -27,3 +27,11 @@ QG 的 local-scale、effective、gradient、owner 等有效门均 pass 或 not_a
 使用 [wenyuan_contract_audit.py](../../scripts/stack-lab/wenyuan_contract_audit.py) 做只读 shadow manifest 审计：若将 `DSC_4885.NEF` 加入 expectedSkipped，能表达“预期排除”，但当前 Stack_Report 仍包含该 source 记录（`sha256_before=""`、`decoded=false`），因此仅改 expectedSkipped 也不足以让 `report_source_digests` 通过；需要单独设计并评审“排除源不进入 report.sources”的入口合同，再重新生成 baseline。正式 manifest、sourceAggregateSha256 和历史基线均未修改。
 
 机器结果：`/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-empty-contract-audit.json`。
+
+## 排除源 report shadow contract（test-only）
+
+脚本 [wenyuan_exclusion_contract_audit.py](../../scripts/stack-lab/wenyuan_exclusion_contract_audit.py) 对任务5冻结报告同时检查严格合同与候选合同。严格合同仍失败：报告含 126 条 source 记录而活动输入只有 125 条，`report_source_digests=false`。候选合同把 `DSC_4885.NEF` 从活动 source path equality 中排除，但要求保留明确记录：`decoded=false`、`sha256_before` 为空、`sha256_after` 等于该空文件的不可变 SHA；基线审计通过（活动源路径/摘要均匹配，排除记录完整）。
+
+这只是入口设计证据，不是正式验收，也没有写入 manifest、runner 或历史基线。若要采用，必须让 report schema、路径集合检查和重生成 baseline 一起变更，并继续单独处理 tone degraded 与 density bypass。
+
+机器结果：[wenyuan-exclusion-contract-audit.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-exclusion-contract-audit.json)。
