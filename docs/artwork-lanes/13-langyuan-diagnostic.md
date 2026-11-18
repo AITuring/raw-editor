@@ -25,3 +25,9 @@ closure 虽然收敛，但 `residual_median_px=0.0809119`、`residual_p95_px=1.2
 ## 结论与下一步
 
 本任务不跑 scale=1，也不把 10 张历史通过替代84张全量验收。下一轮应先做一个只读/test-only 的 station/residual 单变量实验：固定上述 world 坐标，记录 residual 前后、local scale、boundary、source relation 和 density-bypass 状态；在 0.25 重新验证后，才决定是否值得推进原生。参考图/导出后配准链不得反馈修改生产几何。
+
+## residual 支持域审计
+
+使用 [langyuan_residual_support_audit.py](../../scripts/stack-lab/langyuan_residual_support_audit.py) 对现有 Stack_Report 的失败 world 坐标与 residual field 支持区域做只读交集审计。报告中的两块 residual 区域约为 `x=6046–6564、y=1449–2199`；15 个失败记录（local median 8、local ratio 6、boundary 1）全部在区域外，交集为 `0`。
+
+因此“强制 residual identity/禁用 residual”不会直接覆盖当前失败点；而且该开关还会解除 `nonidentity_world_residual` 的 density bypass，混入后续输出路径变化，不适合作为当前第一修复实验。机器结果保存在 `/Users/dp/Desktop/raw-editor/output/acceptance/task-13/langyuan-residual-support-audit.json`。下一步改做固定 station 的 source-to-world Jacobian sensitivity 审计，仍只读、不写生产 pose。
