@@ -49,3 +49,7 @@ QG 的 local-scale、effective、gradient、owner 等有效门均 pass 或 not_a
 owner oracle 的 bounded shared-world-field relaxation 没有联合可行解：边界要达到门槛至少需要 relaxation `0.743408203125`，owner-fidelity 的最大可行 relaxation 是 `0.0`，Pareto gap 为 `0.743408203125`，最终回退 identity。这个单变量 tone relaxation 假设被否定；不能把它升级为生产 fallback。`tone-final-world` sink 在自身 24 个窗口上测得最大 ΔE00 `0.2666573`，但它不替代 formal owner oracle/QG 判定。
 
 机器结果：[wenyuan-tone-oracle-audit.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-tone-oracle-audit.json)。
+
+## 空源恢复核查
+
+只读搜索 `/Users/dp/Downloads`、`/Users/dp/Desktop` 和 `/private/tmp` 后，`DSC_4885.NEF` 只有一个本地副本：0 bytes，SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`。没有可用于补源或重生成的非空副本；不能伪造源文件或据此重基线。

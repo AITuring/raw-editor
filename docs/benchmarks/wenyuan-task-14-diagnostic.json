@@ -14205,5 +14205,19 @@
     "memory_gate_pass": true,
     "peak_rss_bytes": 10260135936,
     "decision": "hypothesis_rejected_no_production_fallback"
+  },
+  "source_recovery_audit": {
+    "searched_roots": [
+      "/Users/dp/Downloads",
+      "/Users/dp/Desktop",
+      "/private/tmp"
+    ],
+    "matches": [
+      "/Users/dp/Downloads/书画拼图/文苑图/DSC_4885.NEF"
+    ],
+    "match_count": 1,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "decision": "no_nonempty_local_copy_found; do not fabricate source or rebaseline"
   }
 }
