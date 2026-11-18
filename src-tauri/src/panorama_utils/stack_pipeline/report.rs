@@ -64,6 +64,11 @@ mod tests {
             "an empty source list must still be present"
         );
         assert_eq!(
+            value["input"]["excluded_sources"],
+            Value::Array(Vec::new()),
+            "the excluded source contract must be explicit even when empty"
+        );
+        assert_eq!(
             value["input"]["feature_provider"]["selected"],
             Value::from("rust_fast_brief")
         );
@@ -586,6 +591,39 @@ mod tests {
             sources[1].sha256_before, sources[1].sha256_after,
             "a source rewritten behind the pipeline's back must stay visible in the report"
         );
+    }
+
+    #[test]
+    fn the_terminating_write_rechecks_excluded_source_digests() {
+        let recorder = StackReportRecorder::isolated("stack-test-1", None)
+            .with_source_digest_recheck(Box::new(|paths| {
+                assert_eq!(paths, ["/tmp/active.NEF", "/tmp/empty.NEF"]);
+                vec![
+                    "aa".repeat(32),
+                    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string(),
+                ]
+            }));
+        recorder.update(|report| {
+            report.input.sources = vec![SourceRecord {
+                path: "/tmp/active.NEF".to_string(),
+                sha256_before: "aa".repeat(32),
+                ..Default::default()
+            }];
+            report.input.excluded_sources = vec![SourceRecord {
+                path: "/tmp/empty.NEF".to_string(),
+                decoded: false,
+                ..Default::default()
+            }];
+        });
+
+        recorder.write_once();
+        let report = recorder.snapshot();
+        assert_eq!(report.input.sources[0].sha256_after, "aa".repeat(32));
+        assert_eq!(
+            report.input.excluded_sources[0].sha256_after,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert!(!report.input.excluded_sources[0].decoded);
     }
 
     #[test]

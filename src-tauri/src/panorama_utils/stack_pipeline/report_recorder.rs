@@ -283,8 +283,9 @@ impl StackReportRecorder {
         });
     }
 
-    /// Re-read every Source_RAW listed in `input.sources` and record the digest
-    /// in `sha256_after` (requirement 4.8 / 12.8).
+    /// Re-read every Source_RAW listed in `input.sources` or
+    /// `input.excluded_sources` and record the digest in `sha256_after`
+    /// (requirement 4.8 / 12.8).
     ///
     /// The digests are taken outside the report lock: hashing tens of RAW files
     /// must not block a concurrent observation point, and the closure has no
@@ -295,22 +296,28 @@ impl StackReportRecorder {
         let Some(recheck) = self.source_digest_recheck.as_ref() else {
             return;
         };
-        let paths = self
+        let report = self
             .report
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let source_count = report.input.sources.len();
+        let paths = report
             .input
             .sources
             .iter()
+            .chain(report.input.excluded_sources.iter())
             .map(|source| source.path.clone())
             .collect::<Vec<_>>();
+        drop(report);
         if paths.is_empty() {
             return;
         }
         let digests = recheck(&paths);
         self.update(|report| {
-            for (source, digest) in report.input.sources.iter_mut().zip(digests) {
-                source.sha256_after = digest;
+            let (source_digests, excluded_digests) =
+                digests.split_at(source_count.min(digests.len()));
+            for (source, digest) in report.input.sources.iter_mut().zip(source_digests) {
+                source.sha256_after = digest.clone();
                 if !source.sha256_before.is_empty()
                     && !source.sha256_after.is_empty()
                     && source.sha256_before != source.sha256_after
@@ -320,6 +327,14 @@ impl StackReportRecorder {
                         source.path, source.sha256_before, source.sha256_after
                     );
                 }
+            }
+            for (source, digest) in report
+                .input
+                .excluded_sources
+                .iter_mut()
+                .zip(excluded_digests)
+            {
+                source.sha256_after = digest.clone();
             }
         });
     }

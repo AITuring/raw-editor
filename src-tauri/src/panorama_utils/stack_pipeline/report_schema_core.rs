@@ -30,7 +30,7 @@ impl Default for FeatureProviderReport {
 }
 
 /// Bumped whenever the serialized shape of [`StackReport`] changes.
-pub(crate) const STACK_REPORT_SCHEMA: u32 = 7;
+pub(crate) const STACK_REPORT_SCHEMA: u32 = 8;
 
 /// 64 GiB Virtual_Tile cache budget (requirement 4.4).
 pub(crate) const VIRTUAL_TILE_CACHE_LIMIT_BYTES: u64 = 68_719_476_736;
@@ -200,6 +200,12 @@ pub(crate) struct InputReport {
     pub source_count: usize,
     pub max_sources: usize,
     pub sources: Vec<SourceRecord>,
+    /// Explicit records for selected sources that failed decode and were
+    /// excluded from station/compositor inputs.  `sources` remains unchanged
+    /// for backward-compatible consumers; this field closes the exclusion
+    /// contract without making a failed source look silently missing.
+    #[serde(default)]
+    pub excluded_sources: Vec<SourceRecord>,
     /// The shared proxy budget and per-source coordinate metadata used by
     /// feature, geometry and seam analysis (requirements 16.1–16.2).
     #[serde(default)]

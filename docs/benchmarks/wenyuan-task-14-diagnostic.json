@@ -14239,5 +14239,14 @@
     "passes": true,
     "formal_runner_changed": false,
     "formal_manifest_changed": false
+  },
+  "excluded_source_report_implementation": {
+    "branch": "lane/task-14/excluded-report-schema",
+    "schema": 8,
+    "field": "input.excluded_sources",
+    "production_report_field_added": true,
+    "runner_manifest_baseline_enabled": false,
+    "checks": "20 report unit tests passed; cargo check --tests --offline passed",
+    "decision": "keep runner and manifest unchanged until schema review and fresh baseline"
   }
 }

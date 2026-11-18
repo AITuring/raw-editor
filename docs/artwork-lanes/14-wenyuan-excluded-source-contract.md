@@ -60,3 +60,9 @@
 脚本 [wenyuan_excluded_source_candidate.py](../../scripts/stack-lab/wenyuan_excluded_source_candidate.py) 将任务5实际 Stack_Report 只读投影到候选 schema。126 个选中输入被拆为 125 个活动源和 1 个排除源；活动路径/摘要、排除记录和计数闭合均为 `true`。这证明 schema 能表达当前报告，但不改变正式 runner 的判定。
 
 机器摘要：[wenyuan-excluded-source-candidate.json](/Users/dp/Desktop/raw-editor/docs/benchmarks/wenyuan-excluded-source-candidate.json)。
+
+## 最小 report 实现（待 runner 启用）
+
+分支 `lane/task-14/excluded-report-schema` 已在 Stack_Report schema 8 中加入 `input.excluded_sources`。解码失败后，native 复制对应 `SourceRecord`（保留 `decoded=false` 和 `sha256_before`），终止写报告时对活动源与排除源共同执行 `sha256_after` 重检；原有 `input.sources` 保持不变，旧消费者不会因字段迁移而丢失记录。正式 runner、manifest 和 baseline 尚未启用该字段。
+
+定向 Rust 报告测试 20/20 通过，`cargo check --tests --offline` 通过。完整真实素材回归仍待 runner/schema 评审后进行。
