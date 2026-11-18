@@ -30,3 +30,12 @@
 5. 先用 0.25 保存诊断验证，再决定是否值得跑原生；0.25 通过不能外推 D2/D3。
 
 本次不进入生产修复，也不勾选任务11。任务11的下一步依赖一个明确的单变量几何/owner 假设和可复现 ROI，而不是继续扩大素材运行规模。
+
+
+## 补充重跑：owner/coverage诊断出口核对（2026-11-18）
+
+- 命令：`run.py --binary base-2026-11-12 --dataset qixu-1 --scale 0.25 --exclusive --label diagnostics-r2`，请求 `RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR` 只读目录；输入75张、source SHA/参考保持。
+- 结果：仍 `rejected`、QG fail/8ROI、closure=`not_run`、report sources72、streamed70、owner coverage `0.9113826565`；RSS `15329722368` B（14.277GiB），内存门通过。
+- 失败项与基线一致：local-scale pixel ratio、boundary stroke、owner sharpness coverage；未解析像素为0。
+- 关键发现：输出目录没有生成 `diagnostics/metadata.json`、owner/coverage/source-overlap等逐tile文件。该环境变量在 `legacy_single_layer_mosaic` fallback路径没有可观测产物，无法用它验证3×3 owner fallback；因此不进入代码改动，也不把空诊断当成“无替代来源”。
+- 本次补充输出：`/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-diagnostics-r2`；完整日志、execution、analysis和TIFF均保留。

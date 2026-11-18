@@ -82,7 +82,7 @@
 
 | 范围                     | QG与最终结论                                          | 关键数据                                                                                                           | 证据                                                                   |
 | ------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| 任务11祁序到D3诊断（2026-11-18） | 基线失败链和最小实验边界完成，未改生产代码 | 祁序1/2 QG失败分别含scale/boundary/owner与noise失败，来源排序合同也不一致；25%诊断不能外推原生，任务未勾选 | [任务卡](artwork-lanes/11-qixu-diagnostic.md) |
+| 任务11祁序到D3诊断（2026-11-18） | 基线失败链和最小实验边界完成，未改生产代码 | 祁序1/2 QG失败分别含scale/boundary/owner与noise失败，来源排序合同也不一致；25%诊断不能外推原生，任务未勾选 | [任务卡](artwork-lanes/11-qixu-diagnostic.md) / [补充机器摘要](benchmarks/qixu-task-11-diagnostic.json) |
 | 任务9来源锁定修图设计（2026-11-18） | 设计文档完成，未改生产实现 | 定义source/owner/Coverage/footprint锁定、撤销事件、坐标系/digest、导出sidecar、人工区域QG排除和stale规则；任务已勾选 | [任务卡](artwork-lanes/9-source-lock-design.md) |
 | 任务8注册 provider 对照（2026-11-18） | provider边界、fallback和能力审计完成；实际SIFT/AKAZE/ECC/learned对照被依赖缺失阻断 | Rust FAST/BRIEF默认保留；Rust6/6、Python2/2通过；cv2/onnxruntime/sidecar均不可用，未伪造质量分数，任务未勾选 | [任务8摘要](benchmarks/task-8-provider-audit.json) / [任务卡](artwork-lanes/8-provider-audit.md) |
 | 任务7阆苑置换检验（2026-11-18）（2026-11-18） | test-only离线实验完成，不改生产路径或门槛 | 84张只读代理、76条真实跨组边、1000次非相邻置换；随机NCC P99=0.976218，真实39/76高于；0–2原生证据与代理分布不在同一统计域，未替换门槛 | [任务7摘要](benchmarks/langyuan-task-7-permutation.json) / [任务卡](artwork-lanes/7-permutation.md) |

@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "task": 11,
+  "status": "diagnostic_only_reproduced_failure_and_missing_diagnostic_export",
+  "supplemental_run": {
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-diagnostics-r2",
+    "binary": "base-2026-11-12",
+    "scale": 0.25,
+    "inputs": 75,
+    "status": "rejected",
+    "qg": {
+      "verdict": "fail",
+      "roi_count": 8,
+      "criteria": {
+        "local_scale_median": "not_applicable",
+        "local_scale_pixel_ratio": "fail",
+        "effective_pixel_count": "pass",
+        "mtf50_normalized": "not_applicable",
+        "gradient_energy_normalized": "pass",
+        "noise_sigma_ratio": "pass",
+        "roi_delta_e00": "pass",
+        "boundary_stroke_alignment": "fail",
+        "owner_sharpness_coverage": "fail"
+      },
+      "non_pass": [
+        "local_scale_median:not_applicable",
+        "local_scale_pixel_ratio:fail",
+        "mtf50_normalized:not_applicable",
+        "boundary_stroke_alignment:fail",
+        "owner_sharpness_coverage:fail"
+      ],
+      "unresolved_pixels": 0,
+      "detail_repairs": 30
+    },
+    "sources": {
+      "inputs": 75,
+      "report_sources": 72,
+      "ordered": 72,
+      "streamed": 70,
+      "lending": null,
+      "expected_skipped": [],
+      "covered_pixels": 16275362,
+      "owned_pixels": 16275362
+    },
+    "checks": {
+      "inputs_unchanged": true,
+      "reference_unchanged": true,
+      "binary_unchanged": true,
+      "memory_gate_pass": true,
+      "runner_exit_zero": false,
+      "native_child_exit_zero": true,
+      "runner_summary_present": true,
+      "runner_failures_empty": false,
+      "quality_gate_pass": false,
+      "output_contract": true,
+      "report_source_digests": false
+    },
+    "peak_rss_bytes": 15329722368,
+    "output_sha256": "e032aed6cb63241f47c53dc9cfca3cd8e719f83bf4bbb512060edb919a5c2115",
+    "diagnostics_files": [],
+    "diagnostics_exit": "legacy_single_layer_mosaic did not publish requested metadata"
+  },
+  "decision": "no production change; next implementation requires a test-only owner/coverage export path or fixture with explicit tile maps before trying fallback"
+}
