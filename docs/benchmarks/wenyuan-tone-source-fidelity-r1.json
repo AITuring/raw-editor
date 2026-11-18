@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_test_only_tone_source_fidelity_bounded_v1",
+  "binary": "task-14-tone-source-fidelity-r1",
+  "binary_sha256": "be548ea9ee12625300b14d05ae463d8b7e63b52b848d056aa1d29b45ed7c4ecd",
+  "hook": "RAW_EDITOR_TEST_FORCE_TONE_SOURCE_FIDELITY=1",
+  "production_default_unchanged": true,
+  "full_scale1_ab_pending": true,
+  "runs": [
+    {
+      "label": "wenyuan-10-tone-source-fidelity-r1",
+      "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-10-tone-source-fidelity-r1",
+      "scale": 0.25,
+      "inputs": 10,
+      "status": "rejected",
+      "runner_failures": [
+        "layered native acceptance failed: native quality criterion failed: local_scale_median"
+      ],
+      "qg": "pass",
+      "memory_gate_pass": true,
+      "peak_rss_bytes": 11297472512,
+      "closure": "converged",
+      "report_source_digests": true,
+      "tone": {
+        "correction_model": "supported_spatial_affine",
+        "boundary_delta_e00_max": 0.26665730175228364,
+        "violations": 0,
+        "clamped_tiles": 0,
+        "min_source_fidelity_strength": 1.0
+      },
+      "density": {
+        "status": "applied",
+        "factor": 1.16015625,
+        "sample_count": 26462,
+        "invalid_probe_count": 0,
+        "boundary_probe_count": 1266,
+        "bypass_reason": null,
+        "minimum_scale": 0.8620956029926986,
+        "median_scale": 0.9934414757865875
+      },
+      "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-10-tone-source-fidelity-r1/run/wenyuan-10-s0p25-task-14-tone-source-fidelity-r1-stack-reports/stack-report-349a4b2a-7539-4d49-b905-c121fc577b0e.json"
+    },
+    {
+      "label": "wenyuan-10-tone-source-fidelity-scale1-r1",
+      "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-10-tone-source-fidelity-scale1-r1",
+      "scale": 1.0,
+      "inputs": 10,
+      "status": "quality_accepted",
+      "runner_failures": [],
+      "qg": "pass",
+      "memory_gate_pass": true,
+      "peak_rss_bytes": 11837079552,
+      "closure": "converged",
+      "report_source_digests": true,
+      "tone": {
+        "correction_model": "supported_spatial_affine",
+        "boundary_delta_e00_max": 0.17721104551329495,
+        "violations": 0,
+        "clamped_tiles": 0,
+        "min_source_fidelity_strength": 1.0
+      },
+      "density": {
+        "status": "applied",
+        "factor": 1.1796875,
+        "sample_count": 423613,
+        "invalid_probe_count": 0,
+        "boundary_probe_count": 19473,
+        "bypass_reason": null,
+        "minimum_scale": 0.8481999286680006,
+        "median_scale": 0.9947204478470713
+      },
+      "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-10-tone-source-fidelity-scale1-r1/run/wenyuan-10-s1-task-14-tone-source-fidelity-scale1-r1-stack-reports/stack-report-52b7e0a6-f2c5-43a8-82c3-2783d45710a9.json"
+    }
+  ]
+}

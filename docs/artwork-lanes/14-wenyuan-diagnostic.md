@@ -85,3 +85,5 @@ native 仍拒绝，唯一 runner failure 为 tone boundary：最大 ΔE00 `8.778
 为验证 scale=1 的 `all_have_native_sources=false` 是否只是把 tone 路径切到 `station_affine`，加入了仅在 Rust library test binary 编译的开关 `RAW_EDITOR_TEST_FORCE_TONE_SOURCE_FIDELITY=1`。它只把本次调用传给 tone harmonizer 的 fidelity 布尔值强制为 true；生产构建没有该路径，默认行为不变，也不放宽 tone threshold 或启用 fallback。
 
 本次先完成 `cargo check --tests --offline` 和 `git diff --check`，未把编译通过当作质量改善证据。完整 scale=1 A/B 仍需独占长跑；后续先用 Wenyuan-10 bounded run 检查 tone mode、owner/clamp 与 boundary 输出，再决定是否值得消耗完整 126 输入的运行预算。
+
+bounded 结果已落到 [wenyuan-tone-source-fidelity-r1.json](../benchmarks/wenyuan-tone-source-fidelity-r1.json)：0.25 与 scale=1 的 Wenyuan-10 都没有 excluded source，实际仍走 `supported_spatial_affine`，没有触发强制开关的分支；scale=1 子集完整通过 native acceptance，ΔE00 最大 `0.177211`、0 个 tone 违规、density `applied`，内存峰值 `11837079552` bytes。0.25 子集仍因 `local_scale_median:not_applicable` 被拒绝。这个结果只能证明 bounded 合同和 hook 不破坏短跑，不能证明它改善了完整 126 输入 scale=1 的 mode shift；完整 A/B 仍待独占运行。
