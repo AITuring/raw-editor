@@ -73,3 +73,9 @@ owner oracle 的 bounded shared-world-field relaxation 没有联合可行解：�
 native 仍拒绝，唯一 runner failure 为 tone boundary：最大 ΔE00 `8.778901254993071`，142 个违规；density 仍因 `nonidentity_world_residual` bypass，`sample_count=0`，没有 native 密度证明。来源合同继续通过（`report_source_digests=true`，1 条 excluded source）。本次没有超 24GiB 或跑不完证据，不启动任务15。
 
 机器结果：[wenyuan-task-14-scale1-r1.json](../benchmarks/wenyuan-task-14-scale1-r1.json)。
+
+## scale1 tone mode audit
+
+只读对比显示：0.25 使用 `supported_spatial_affine`，4 个 tile 被 clamp，source-fidelity strength 最小值 `1.0`；scale=1 切换为 `station_affine`，32 个 tile 被 clamp，source-fidelity strength 最小值降至 `0.111686`。对应 boundary ΔE00 从 `4.6045643/13` 变为 `8.7789013/142`。这说明 scale1 的 tone 模式/原生 source retention 是下一项实验入口；不放宽 1.5 阈值，也不直接启用生产 fallback。
+
+机器结果：[wenyuan-tone-mode-audit.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-tone-mode-audit.json)。

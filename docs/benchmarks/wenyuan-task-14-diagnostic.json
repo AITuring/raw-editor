@@ -14136,7 +14136,7 @@
     }
   },
   "decision": "keep task14 at diagnosis: empty DSC_4885 input and report-source digest mismatch remain explicit; tone boundary deltaE max exceeds 1.5; output density is bypassed by nonidentity residual. Do not infer D2/D3 from QG aggregate pass or run scale1 yet.",
-  "next_step": "investigate scale1 tone boundary violations and nonidentity residual density bypass; preserve geometry pass and do not loosen tone threshold",
+  "next_step": "investigate scale1 station_affine fallback and native-source retention with a bounded test-only hypothesis; preserve geometry pass, tone threshold, and density bypass evidence",
   "empty_source_contract_audit": {
     "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-empty-contract-audit.json",
     "method": "wenyuan_empty_source_shadow_contract_audit_v1",
@@ -14286,5 +14286,18 @@
     "peak_rss_bytes": 12939411456,
     "wall_seconds": 17192.31351494789,
     "task15_triggered": false
+  },
+  "tone_mode_audit": {
+    "script": "scripts/stack-lab/wenyuan_tone_mode_audit.py",
+    "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-tone-mode-audit.json",
+    "scale025_model": "supported_spatial_affine",
+    "scale1_model": "station_affine",
+    "scale025_clamped_tiles": 4,
+    "scale1_clamped_tiles": 32,
+    "scale025_source_fidelity_min": 1.0,
+    "scale1_source_fidelity_min": 0.1116861736227694,
+    "scale025_boundary_delta_e_max": 4.6045642865586744,
+    "scale1_boundary_delta_e_max": 8.778901254993071,
+    "decision": "investigate native source retention or bounded test-only tone-mode hypothesis; do not loosen tone threshold"
   }
 }
