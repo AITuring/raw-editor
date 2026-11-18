@@ -1,0 +1,354 @@
+{
+  "schema": 1,
+  "method": "wenyuan_tone_density_read_only_audit_v1",
+  "production_impact": "read-only report and source-marker inspection; no manifest, baseline, or production code writes",
+  "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/wenyuan-baseline-r1/run/wenyuan-s0p25-task-5-baseline-r1-stack-reports/stack-report-5259420f-544f-48ed-b839-d0bd7cce75ec.json",
+  "run_id": "5259420f-544f-48ed-b839-d0bd7cce75ec",
+  "selected_path": "layered_virtual_tile",
+  "closure": {
+    "status": "converged",
+    "residual_identity": false
+  },
+  "degradation": {
+    "result": "degraded",
+    "entry_count": 858,
+    "reason_counts": {
+      "station_relation_scale_out_of_range": 233,
+      "fusion_low_sharpness_region": 230,
+      "closure_unreliable_pair_p95": 166,
+      "station_relation_edge_strength_mismatch": 138,
+      "grouping_accumulated_motion": 34,
+      "residual_warp_cell_reverted": 17,
+      "tone_boundary_delta_e_exceeded": 13,
+      "topology_index_ambiguous": 10,
+      "station_pose_local_scale_exceeded": 9,
+      "tone_gain_clamped": 4,
+      "station_relation_edge_orientation_mismatch": 3,
+      "source_decode_failed": 1
+    }
+  },
+  "tone": {
+    "status": "degraded",
+    "correction_model": "supported_spatial_affine",
+    "geometry_active_relation_count": 162,
+    "low_pass_sigma_world_px": 64.0,
+    "boundary_delta_e": {
+      "max": 4.6045642865586744,
+      "threshold": 1.5,
+      "violation_count": 13,
+      "violations_descending": [
+        {
+          "left": 5,
+          "right": 32,
+          "delta_e00": 4.6045642865586744,
+          "world": {
+            "left": 5888.0,
+            "top": 1280.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 37,
+          "right": 35,
+          "delta_e00": 3.2804196927674845,
+          "world": {
+            "left": 4096.0,
+            "top": 3072.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 39,
+          "right": 37,
+          "delta_e00": 2.900824550279382,
+          "world": {
+            "left": 2560.0,
+            "top": 3072.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 37,
+          "right": 35,
+          "delta_e00": 2.6112034607631602,
+          "world": {
+            "left": 4352.0,
+            "top": 3072.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 39,
+          "right": 37,
+          "delta_e00": 2.1739938019621476,
+          "world": {
+            "left": 2560.0,
+            "top": 2816.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 10,
+          "right": 2,
+          "delta_e00": 2.1690799879287415,
+          "world": {
+            "left": 1792.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 10,
+          "right": 2,
+          "delta_e00": 2.147608913503158,
+          "world": {
+            "left": 1536.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 5,
+          "right": 32,
+          "delta_e00": 1.9828786434842884,
+          "world": {
+            "left": 5632.0,
+            "top": 1280.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 9,
+          "right": 2,
+          "delta_e00": 1.8813644349972183,
+          "world": {
+            "left": 1536.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 37,
+          "right": 35,
+          "delta_e00": 1.721658522366833,
+          "world": {
+            "left": 4096.0,
+            "top": 2816.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 37,
+          "right": 35,
+          "delta_e00": 1.7166410450514389,
+          "world": {
+            "left": 3840.0,
+            "top": 2816.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 10,
+          "right": 2,
+          "delta_e00": 1.615521830842925,
+          "world": {
+            "left": 2048.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 37,
+          "right": 35,
+          "delta_e00": 1.5822255591969583,
+          "world": {
+            "left": 3840.0,
+            "top": 2560.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        }
+      ],
+      "pair_counts": {
+        "10↔2": 3,
+        "37↔35": 5,
+        "39↔37": 2,
+        "5↔32": 2,
+        "9↔2": 1
+      },
+      "pair_max": {
+        "10↔2": 2.1690799879287415,
+        "37↔35": 3.2804196927674845,
+        "39↔37": 2.900824550279382,
+        "5↔32": 4.6045642865586744,
+        "9↔2": 1.8813644349972183
+      }
+    },
+    "degradation": {
+      "tone_reason_counts": {
+        "tone_boundary_delta_e_exceeded": 13,
+        "tone_gain_clamped": 4
+      },
+      "tone_gain_clamped_station_indices": [
+        34,
+        36,
+        38,
+        39
+      ]
+    }
+  },
+  "density": {
+    "status": "bypassed",
+    "factor": 1.0,
+    "sample_count": 0,
+    "invalid_probe_count": 0,
+    "boundary_probe_count": 10643,
+    "bypass_reason": "nonidentity_world_residual",
+    "residual_identity": false,
+    "explicit_no_op": true,
+    "no_op_is_due_to_nonidentity_residual": true,
+    "native_density_proven": false,
+    "decision": "density evidence unavailable: nonidentity residual bypassed native Jacobian sampling"
+  },
+  "quality_gate_non_pass_regions": [
+    {
+      "name": "local_scale_median",
+      "verdict": "not_applicable",
+      "measurable_count": 8,
+      "unmeasurable_count": 0,
+      "failed_count": 8,
+      "failed_examples": [
+        {
+          "world": {
+            "x": -646.0,
+            "y": -154.0
+          },
+          "measured": 1.5356320961255374,
+          "owner_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4844.NEF"
+        },
+        {
+          "world": {
+            "x": 1530.0,
+            "y": -154.0
+          },
+          "measured": 1.6072199087756758,
+          "owner_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4829.NEF"
+        },
+        {
+          "world": {
+            "x": -1414.0,
+            "y": -26.0
+          },
+          "measured": 1.478547230176488,
+          "owner_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4851.NEF"
+        },
+        {
+          "world": {
+            "x": -2182.0,
+            "y": 230.0
+          },
+          "measured": 1.4365782515766936,
+          "owner_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4855.NEF"
+        },
+        {
+          "world": {
+            "x": 3322.0,
+            "y": 1382.0
+          },
+          "measured": 1.4063118101367182,
+          "owner_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4835.NEF"
+        },
+        {
+          "world": {
+            "x": 2426.0,
+            "y": 1510.0
+          },
+          "measured": 1.376979732913541,
+          "owner_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4839.NEF"
+        },
+        {
+          "world": {
+            "x": 634.0,
+            "y": 1894.0
+          },
+          "measured": 1.2645757406928577,
+          "owner_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4848.NEF"
+        },
+        {
+          "world": {
+            "x": -1670.0,
+            "y": 2022.0
+          },
+          "measured": 1.1595534765386084,
+          "owner_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4865.NEF"
+        }
+      ]
+    },
+    {
+      "name": "mtf50_normalized",
+      "verdict": "not_applicable",
+      "measurable_count": 0,
+      "unmeasurable_count": 8,
+      "failed_count": 0,
+      "failed_examples": []
+    },
+    {
+      "name": "noise_sigma_ratio",
+      "verdict": "not_applicable",
+      "measurable_count": 5,
+      "unmeasurable_count": 3,
+      "failed_count": 0,
+      "failed_examples": []
+    },
+    {
+      "name": "boundary_stroke_alignment",
+      "verdict": "not_applicable",
+      "measurable_count": 2,
+      "unmeasurable_count": 18171,
+      "failed_count": 0,
+      "failed_examples": []
+    }
+  ],
+  "test_only_evidence": {
+    "source_checks": [
+      {
+        "path": "src-tauri/src/panorama_stitching/output_density.rs",
+        "markers": [
+          "nonidentity_residual_and_missing_evidence_are_explicit_bypasses",
+          "Some(\"nonidentity_world_residual\")"
+        ],
+        "role": "cfg(test) density no-op contract and production bypass reason",
+        "exists": true,
+        "all_markers_present": true,
+        "production_override_path": false
+      },
+      {
+        "path": "src-tauri/src/panorama_utils/stitching/test_tone_capture.rs",
+        "markers": [
+          "set_test_tone_capture_directory",
+          "capture_test_contour_probe",
+          "capture_test_seam_grid"
+        ],
+        "role": "cfg(test) tone tile/contour/seam capture only",
+        "exists": true,
+        "all_markers_present": true,
+        "production_override_path": false
+      }
+    ],
+    "tone_override": "no test-only switch found; capture hooks are diagnostic sinks",
+    "density_override": "no test-only density factor override found; only explicit bypass/no-op path"
+  },
+  "decision": "keep Wenyuan at diagnosis: tone violations are localized but explicit, and density is a no-op bypass with no native sampling evidence; do not infer scale=1 safety"
+}
