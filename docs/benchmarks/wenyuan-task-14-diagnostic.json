@@ -14231,5 +14231,13 @@
       "excluded_source_count": 1
     },
     "decision": "do not enable until report schema and runner are reviewed and a fresh 0.25 baseline is generated"
+  },
+  "excluded_source_candidate_fixture": {
+    "script": "scripts/stack-lab/wenyuan_excluded_source_candidate.py",
+    "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-excluded-source-candidate.json",
+    "summary": "126 selected = 125 active + 1 excluded; active paths/digests, excluded record, and counts all pass",
+    "passes": true,
+    "formal_runner_changed": false,
+    "formal_manifest_changed": false
   }
 }
