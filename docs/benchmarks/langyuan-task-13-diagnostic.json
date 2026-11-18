@@ -628,7 +628,7 @@
     "report_source_digests": true
   },
   "decision": "keep task13 at diagnostic stage: local-scale failures include six pixel-ratio zeros, one boundary sample reaches 4px, and output-density protection is bypassed by nonidentity_world_residual; do not infer native D2/D3 from this 0.25 run or from 10-image history.",
-  "next_step": "run a fixed-station source-to-world Jacobian sensitivity audit (read-only/test-only) before any scale=1 run",
+  "next_step": "select one station/pose hypothesis and run a 0.25 full-QG test-only experiment before scale1",
   "residual_support_audit": {
     "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-13/langyuan-residual-support-audit.json",
     "method": "langyuan_failure_residual_support_audit_v1",
@@ -641,5 +641,17 @@
       "decision": "residual_identity_or_disable_experiment_cannot_explain_current_failures_when_all_failed_points_are_outside_recorded_support"
     },
     "decision": "do_not_run_residual_identity_full_run_yet"
+  },
+  "geometry_sensitivity_audit": {
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-13/langyuan-geometry-sensitivity-audit.json",
+    "method": "langyuan_failure_geometry_sensitivity_audit_v1",
+    "summary": {
+      "failure_points": 14,
+      "points_below_0_95": 6,
+      "minimum_required_scale_factor": 1.0227992853623264,
+      "maximum_required_scale_factor": 1.5093482446611677,
+      "decision": "sensitivity_only; required scale factors are evidence for a geometry hypothesis, not an instruction to alter source poses"
+    },
+    "decision": "sensitivity_only_no_pose_write"
   }
 }
