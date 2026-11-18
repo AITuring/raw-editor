@@ -7,22 +7,14 @@
       "id": "lanting",
       "label": "兰亭",
       "directory": "兰亭",
-      "sourceExtensions": [
-        ".jpg",
-        ".jpeg"
-      ],
-      "excludePatterns": [
-        "*_FocusStack*.jpg",
-        "褚摹兰亭-比较满意版.jpg"
-      ],
+      "sourceExtensions": [".jpg", ".jpeg"],
+      "excludePatterns": ["*_FocusStack*.jpg", "褚摹兰亭-比较满意版.jpg"],
       "expectedSourceCount": 45,
       "sourceBytes": 553287579,
       "sourceAggregateSha256": "3d4c7d49e5caee948bb59dc55ab64bf92b5965f2cdebd88dc3b158af88b9f167",
       "baseline": true,
       "referenceOutput": "DSC08854_FocusStack.jpg",
-      "referenceAliases": [
-        "DSC08854_FocusStack1.jpg"
-      ],
+      "referenceAliases": ["DSC08854_FocusStack1.jpg"],
       "referenceBytes": 150622610,
       "referenceSha256": "9981d5ff735ffaed21d0908c5165a984aef8c71e580dcff566fee92d57d845c2",
       "referenceDimensions": {
@@ -34,9 +26,7 @@
       "id": "mayuan-psd",
       "label": "马远（PSD）",
       "directory": "马远",
-      "sourceExtensions": [
-        ".psd"
-      ],
+      "sourceExtensions": [".psd"],
       "excludePatterns": [],
       "expectedSourceCount": 14,
       "sourceBytes": 19753757872,
@@ -48,9 +38,7 @@
       "id": "langyuan",
       "label": "阆苑女仙",
       "directory": "阆苑女仙",
-      "sourceExtensions": [
-        ".nef"
-      ],
+      "sourceExtensions": [".nef"],
       "excludePatterns": [],
       "expectedSourceCount": 84,
       "sourceBytes": 5011254251,
@@ -68,9 +56,7 @@
       "id": "wenyuan",
       "label": "文苑图",
       "directory": "文苑图",
-      "sourceExtensions": [
-        ".nef"
-      ],
+      "sourceExtensions": [".nef"],
       "excludePatterns": [],
       "expectedSourceCount": 126,
       "sourceBytes": 6985740554,
@@ -82,17 +68,13 @@
           "first": 10
         }
       ],
-      "expectedSkipped": [
-        "DSC_4885.NEF"
-      ]
+      "expectedSkipped": ["DSC_4885.NEF"]
     },
     {
       "id": "qixu-1",
       "label": "祁序1",
       "directory": "祁序1",
-      "sourceExtensions": [
-        ".nef"
-      ],
+      "sourceExtensions": [".nef"],
       "excludePatterns": [],
       "expectedSourceCount": 75,
       "sourceBytes": 4516277858,
@@ -103,9 +85,7 @@
       "id": "qixu-2",
       "label": "祁序2",
       "directory": "祁序2",
-      "sourceExtensions": [
-        ".nef"
-      ],
+      "sourceExtensions": [".nef"],
       "excludePatterns": [],
       "expectedSourceCount": 98,
       "sourceBytes": 5736644234,
@@ -116,9 +96,7 @@
       "id": "mayuan-2",
       "label": "马远2",
       "directory": "马远2",
-      "sourceExtensions": [
-        ".nef"
-      ],
+      "sourceExtensions": [".nef"],
       "excludePatterns": [],
       "expectedSourceCount": 47,
       "sourceBytes": 2806559947,
@@ -129,29 +107,19 @@
       "id": "sleeping",
       "label": "睡觉",
       "directory": "睡觉",
-      "sourceExtensions": [
-        ".nef"
-      ],
+      "sourceExtensions": [".nef"],
       "excludePatterns": [],
       "expectedSourceCount": 45,
       "sourceBytes": 2560845422,
       "sourceAggregateSha256": "459477eb2eeabfe410665d8aef98a554035f8201d179e64b47ddf30ebc17f39f",
       "baseline": false,
-      "regressionSubsets": [
-        {
-          "id": "sleeping-9-6479",
-          "start": 18,
-          "count": 9
-        }
-      ]
+      "regressionSubsets": [{ "id": "sleeping-9-6479", "start": 18, "count": 9 }]
     },
     {
       "id": "fengying-main",
       "label": "枫鹰雉鸡",
       "directory": "枫鹰雉鸡",
-      "sourceExtensions": [
-        ".arw"
-      ],
+      "sourceExtensions": [".arw"],
       "excludePatterns": [],
       "expectedSourceCount": 63,
       "baseline": false
@@ -160,9 +128,7 @@
       "id": "fengying-head",
       "label": "枫鹰雉鸡 / toubu",
       "directory": "枫鹰雉鸡/toubu",
-      "sourceExtensions": [
-        ".arw"
-      ],
+      "sourceExtensions": [".arw"],
       "excludePatterns": [],
       "expectedSourceCount": 17,
       "baseline": false
@@ -171,10 +137,7 @@
       "id": "fengying-bottom",
       "label": "枫鹰雉鸡 / 枫鹰底部",
       "directory": "枫鹰雉鸡/枫鹰底部",
-      "sourceExtensions": [
-        ".arw",
-        ".nef"
-      ],
+      "sourceExtensions": [".arw", ".nef"],
       "excludePatterns": [],
       "expectedSourceCount": 24,
       "baseline": false
@@ -182,41 +145,22 @@
     {
       "id": "qixu",
       "label": "祁序1 + 祁序2（两次拍摄一起选）",
-      "directories": [
-        "祁序1",
-        "祁序2"
-      ],
-      "sourceExtensions": [
-        ".nef"
-      ],
+      "directories": ["祁序1", "祁序2"],
+      "sourceExtensions": [".nef"],
       "excludePatterns": [],
       "expectedSourceCount": 173,
       "sourceBytes": 10252922092,
       "sourceAggregateSha256": "18ac9289a3b5e346c6bbc04559be7be43917df0967df847084b96b4ab3785300",
       "inputOrder": "reverse",
-      "expectedSkipped": [
-        "DSC_3842.NEF",
-        "DSC_3910.NEF",
-        "DSC_3911.NEF",
-        "DSC_6708.NEF"
-      ],
+      "expectedSkipped": ["DSC_3842.NEF", "DSC_3910.NEF", "DSC_3911.NEF", "DSC_6708.NEF"],
       "baseline": true,
       "notes": "整个两个文件夹倒序传入，和在图库里从最后一张往前选一样；DSC_3910/3911/6708 和其它照片都对不上，DSC_3842 斜拍过整幅画，堆栈应自动跳过这 4 张。"
     },
     {
       "id": "fengying",
       "label": "枫鹰雉鸡（整个文件夹）",
-      "directories": [
-        "枫鹰雉鸡",
-        "枫鹰雉鸡/toubu",
-        "枫鹰雉鸡/枫鹰底部"
-      ],
-      "sourceExtensions": [
-        ".arw",
-        ".nef",
-        ".jpg",
-        ".jpeg"
-      ],
+      "directories": ["枫鹰雉鸡", "枫鹰雉鸡/toubu", "枫鹰雉鸡/枫鹰底部"],
+      "sourceExtensions": [".arw", ".nef", ".jpg", ".jpeg"],
       "excludePatterns": [],
       "expectedSourceCount": 110,
       "sourceBytes": 8468603302,
