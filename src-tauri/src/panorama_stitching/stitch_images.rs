@@ -113,6 +113,75 @@ const MAX_SKIPPED_SCAN_SOURCES_DENOMINATOR: usize = 20;
 /// A focus stack whose sources are at least this share camera RAWs is a
 /// camera-RAW stack.
 const RAW_STACK_NUMERATOR: usize = 4;
+
+#[cfg(test)]
+fn apply_test_geometry_sensitivity(
+    tile_infos: &[ImageInfo],
+    tile_group_indices: &HashMap<usize, usize>,
+    group_slices: &[&[&ImageInfo]],
+    homographies: &mut HashMap<usize, Matrix3<f64>>,
+) {
+    let Some(selector) = std::env::var("RAW_EDITOR_TEST_FOCUS_GROUP_SOURCE_ID").ok() else {
+        return;
+    };
+    let Ok(source_id) = selector.parse::<usize>() else {
+        return;
+    };
+    let Ok(factor) = std::env::var("RAW_EDITOR_TEST_FOCUS_GROUP_SCALE")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .ok_or(())
+    else {
+        return;
+    };
+    if !(factor.is_finite() && factor > 0.0 && factor != 1.0) {
+        return;
+    }
+    let Some(group_index) = group_slices
+        .iter()
+        .position(|members| members.iter().any(|image| image.id == source_id))
+    else {
+        return;
+    };
+    let Some((&tile_id, _)) = tile_group_indices
+        .iter()
+        .find(|(_, index)| **index == group_index)
+    else {
+        return;
+    };
+    let Some(info) = tile_infos.iter().find(|info| info.id == tile_id) else {
+        return;
+    };
+    let center_x = f64::from(info.width) * 0.5;
+    let center_y = f64::from(info.height) * 0.5;
+    let around_center = Matrix3::new(
+        factor,
+        0.0,
+        center_x * (1.0 - factor),
+        0.0,
+        factor,
+        center_y * (1.0 - factor),
+        0.0,
+        0.0,
+        1.0,
+    );
+    if let Some(pose) = homographies.get_mut(&tile_id) {
+        *pose *= around_center;
+        println!(
+            "  - TEST_GEOMETRY_SENSITIVITY source_id={} tile_id={} factor={factor}",
+            source_id, tile_id
+        );
+    }
+}
+
+#[cfg(not(test))]
+fn apply_test_geometry_sensitivity(
+    _tile_infos: &[ImageInfo],
+    _tile_group_indices: &HashMap<usize, usize>,
+    _group_slices: &[&[&ImageInfo]],
+    _homographies: &mut HashMap<usize, Matrix3<f64>>,
+) {
+}
 const RAW_STACK_DENOMINATOR: usize = 5;
 
 /// The first attempt of a scan that found frames aligning with none of the
@@ -3303,6 +3372,12 @@ fn stitch_images_attempt<R: Runtime>(
                             }
                             density_closure_evidence = closure.clone();
                             tile_homographies = solved;
+                            apply_test_geometry_sensitivity(
+                                &tile_infos,
+                                &tile_group_indices,
+                                &group_slices,
+                                &mut tile_homographies,
+                            );
                             if closure.geometry_model != "bounded_station_field" {
                                 record_residual_warp_for_station_relations(
                                     &tile_infos,
