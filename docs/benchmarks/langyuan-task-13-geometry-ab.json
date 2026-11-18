@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "task": 13,
+  "status": "test_only_geometry_sensitivity_subset_rejected",
+  "production_impact": "cfg(test) pose sensitivity only; no production pose/threshold/matrix change",
+  "experiment": {
+    "dataset": "langyuan",
+    "subset": "langyuan-10",
+    "source_id": 1,
+    "source": "DSC_3681.NEF",
+    "factor": 1.5093482446611677,
+    "selector_env": "RAW_EDITOR_TEST_FOCUS_GROUP_SOURCE_ID=1",
+    "factor_env": "RAW_EDITOR_TEST_FOCUS_GROUP_SCALE=1.5093482446611677",
+    "marker": "TEST_GEOMETRY_SENSITIVITY source_id=1"
+  },
+  "binary": {
+    "label": "task-13-focus-scale-r1",
+    "sha256": "20a54e35e02586dd030b4cef0c8131417da24c7dbebae539d3d75c9ba4dc4b27",
+    "commit": "1b638eb278f2749795b87a8780a86f91b757086b",
+    "build_json": "/Users/dp/Desktop/raw-editor/output/acceptance/binaries/task-13-focus-scale-r1/build.json"
+  },
+  "run": {
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-13/langyuan-10-focus-scale-dsc3681-r1",
+    "scale": 0.25,
+    "status": "rejected",
+    "runner_exit_code": 1,
+    "native_child_exit_code": 1,
+    "peak_rss_bytes": 10869293056,
+    "memory_gate_pass": true,
+    "selected_path": "layered_virtual_tile",
+    "closure": "no_constraints",
+    "output_sha256": "8b676425621c4a28a75df7d5f9692f37eb4e27b965b250af935bf6d724991c0b",
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-13/langyuan-10-focus-scale-dsc3681-r1/run/langyuan-10-s0p25-task-13-focus-scale-dsc3681-r1-stack-reports/stack-report-5f82a879-8a09-4b35-bdbf-4fe2244a94b4.json"
+  },
+  "qg": {
+    "verdict": "pass",
+    "roi_count": 8,
+    "criteria": {
+      "local_scale_median": "not_applicable",
+      "local_scale_pixel_ratio": "pass",
+      "effective_pixel_count": "pass",
+      "mtf50_normalized": "not_applicable",
+      "gradient_energy_normalized": "pass",
+      "noise_sigma_ratio": "not_applicable",
+      "roi_delta_e00": "pass",
+      "boundary_stroke_alignment": "not_applicable",
+      "owner_sharpness_coverage": "pass"
+    },
+    "non_pass": [
+      "local_scale_median:not_applicable",
+      "mtf50_normalized:not_applicable",
+      "noise_sigma_ratio:not_applicable",
+      "boundary_stroke_alignment:not_applicable"
+    ],
+    "unresolved_pixels": null,
+    "detail_repairs": 0
+  },
+  "checks": {
+    "inputs_unchanged": true,
+    "reference_unchanged": true,
+    "binary_unchanged": true,
+    "memory_gate_pass": true,
+    "runner_exit_zero": false,
+    "native_child_exit_zero": false,
+    "runner_summary_present": true,
+    "runner_failures_empty": false,
+    "quality_gate_pass": true,
+    "output_contract": true,
+    "report_source_digests": true
+  },
+  "summary": {
+    "native_acceptance": "rejected: native station geometry is not connected and converged",
+    "quality_gate": "pass",
+    "outcome": "degraded",
+    "output": {
+      "width": 3835,
+      "height": 3609
+    },
+    "stitch_seconds": 222.68,
+    "self_sharpness_median": 0.03344757629390672,
+    "self_sharpness_p10": 0.010135904490570008
+  },
+  "sensitivity_effects": {
+    "output_density_factor": 1.248047,
+    "closure": "no_constraints",
+    "native_acceptance": "rejected: native station geometry is not connected and converged",
+    "collateral": "large pose factor changed density/output path and reduced self sharpness; do not promote to full84"
+  },
+  "decision": "reject this high-factor station pose hypothesis and stop before full84."
+}

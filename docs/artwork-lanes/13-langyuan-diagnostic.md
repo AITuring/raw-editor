@@ -37,3 +37,9 @@ closure 虽然收敛，但 `residual_median_px=0.0809119`、`residual_p95_px=1.2
 对 14 个 local-scale failure records 做 source-to-world 只读 sensitivity：6 个 pixel-ratio=0 的点需要的理论 isotropic scale factor 为 `1.022799–1.509348` 才能达到 0.95；该计算只记录假设，不修改 homography、station pose 或 QG 阈值。机器结果保存在 `/Users/dp/Desktop/raw-editor/output/acceptance/task-13/langyuan-geometry-sensitivity-audit.json`。
 
 这个跨度说明它不是一个可直接套用的全局倍率修复；下一步若实现，必须固定单一 station/单一 pose 假设并保存 before/after 的 local-scale、boundary、closure、density 和来源证据，先在 0.25 做完整 QG，再决定是否启动 scale=1。
+
+## 几何 sensitivity 子集 A/B
+
+对包含最坏点 `DSC_3681.NEF` 的 `langyuan-10` 子集做了 test-only pose sensitivity：绕虚拟 station group 中心施加 factor `1.5093482447`。hook 命中并记录 marker，但该高倍率导致 output-density factor `1.248047`、closure `no_constraints`，native acceptance 以 `native station geometry is not connected and converged` 拒绝；QG ROI 表面 pass 不能抵消这个 native 几何拒绝，self sharpness median 仅 `0.03345`。
+
+因此停止把该倍率推广到84张全量。机器摘要：[langyuan-task-13-geometry-ab.json](../benchmarks/langyuan-task-13-geometry-ab.json)。
