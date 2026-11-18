@@ -130,6 +130,15 @@ class RunsTest(fixtures.ToolsTest):
         self.assertEqual(len(execution['inputs']),2)
         self.assertEqual(self.run_one()[0][0],1)
 
+    def test_streaming_diagnostics_export_is_explicit_and_recorded(self):
+        (code, _, err), dest = self.run_one('diagnostics', None, '--streaming-diagnostics')
+        self.assertEqual(code, 0, err)
+        execution = json.loads((dest / 'execution.json').read_text())
+        self.assertTrue(execution['streaming_diagnostics'])
+        self.assertEqual(execution['environment']['RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR'],
+                         str(dest / 'diagnostics'))
+        self.assertFalse(execution['framed'])
+
     def test_missing_usage_and_over_limit_fail_even_with_pass_qg(self):
         for mode in ('missing_usage','over_memory','invalid_usage'):
             (code, _, _), dest=self.run_one(mode,mode)
