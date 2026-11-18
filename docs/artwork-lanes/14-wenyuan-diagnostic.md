@@ -41,3 +41,11 @@ QG 的 local-scale、effective、gradient、owner 等有效门均 pass 或 not_a
 脚本 [wenyuan_tone_density_audit.py](../../scripts/stack-lab/wenyuan_tone_density_audit.py) 对冻结 Stack_Report 与源码标记做只读核查：tone 为 `degraded`，13 个 boundary ΔE 违规，最大 `4.6045642866`（station 5↔32，world `(5888,1280,256,256)`）；另有 4 个 `tone_gain_clamped` station（34、36、38、39）。output density 为 `bypassed`、factor `1.0`、`sample_count=0`，原因 `nonidentity_world_residual`，因此没有 native Jacobian 密度证据。源码检查只找到 cfg(test) capture/no-op 标记，没有 tone 或 density 数值覆盖开关。
 
 机器结果：[wenyuan-tone-density-audit.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-tone-density-audit.json)。
+
+## tone owner oracle A/B（Wenyuan-10，scale=0.25）
+
+在冻结 `base-2026-11-12` 上只开启现有 `RAW_EDITOR_TONE_OWNER_FIDELITY_DIR` 与 `RAW_EDITOR_TONE_DIAGNOSTICS_DIR` sink，运行 `wenyuan-10` 子集。运行本身保持 `report_source_digests=true`、QG `pass`、内存门通过（峰值 `10260135936` bytes），但 native acceptance 因 `local_scale_median` 的 not_applicable 判定退出（child exit `101`），所以这是诊断证据而非接受结果。
+
+owner oracle 的 bounded shared-world-field relaxation 没有联合可行解：边界要达到门槛至少需要 relaxation `0.743408203125`，owner-fidelity 的最大可行 relaxation 是 `0.0`，Pareto gap 为 `0.743408203125`，最终回退 identity。这个单变量 tone relaxation 假设被否定；不能把它升级为生产 fallback。`tone-final-world` sink 在自身 24 个窗口上测得最大 ΔE00 `0.2666573`，但它不替代 formal owner oracle/QG 判定。
+
+机器结果：[wenyuan-tone-oracle-audit.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-tone-oracle-audit.json)。

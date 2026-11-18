@@ -347,8 +347,13 @@
         "production_override_path": false
       }
     ],
-    "tone_override": "no test-only switch found; capture hooks are diagnostic sinks",
-    "density_override": "no test-only density factor override found; only explicit bypass/no-op path"
+    "tone_override": "no production tone override; existing owner-fidelity oracle and tone-final-world capture sinks are read-only diagnostics",
+    "density_override": "no test-only density factor override found; only explicit bypass/no-op path",
+    "tone_oracle_paths": {
+      "owner_fidelity": "RAW_EDITOR_TONE_OWNER_FIDELITY_DIR",
+      "final_world": "RAW_EDITOR_TONE_DIAGNOSTICS_DIR",
+      "production_mutation": false
+    }
   },
-  "decision": "keep Wenyuan at diagnosis: tone violations are localized but explicit, and density is a no-op bypass with no native sampling evidence; do not infer scale=1 safety"
+  "decision": "keep Wenyuan at diagnosis: formal tone violations remain explicit, the Wenyuan-10 owner oracle has no feasible joint relaxation, and density is a no-op bypass with no native sampling evidence; do not infer scale=1 safety"
 }

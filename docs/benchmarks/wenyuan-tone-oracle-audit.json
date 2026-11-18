@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "method": "wenyuan_tone_owner_oracle_audit_v1",
+  "production_impact": "read-only classification of cfg(test) tone-owner oracle; no panorama, manifest, runner, or threshold write",
+  "analysis": "output/acceptance/task-14/wenyuan-10-tone-oracle-r1/analysis.json",
+  "owner_oracle": "output/acceptance/task-14/wenyuan-10-tone-oracle-r1/owner/tone-owner-source-fidelity.json",
+  "tone_final_world": {
+    "summary": {
+      "held_out_improvement_gate": {
+        "after_median_delta_e00": 0.0,
+        "after_p95_delta_e00": 0.0,
+        "applied": false,
+        "before_median_delta_e00": 0.0,
+        "before_p95_delta_e00": 0.0,
+        "samples": 0
+      },
+      "maximum_delta_e00": 0.26665730175228364,
+      "spatial_field_enabled": false,
+      "spatial_iterations": 4,
+      "status": "applied",
+      "threshold": 1.5,
+      "violations": 0,
+      "window_count": 24
+    }
+  },
+  "run": {
+    "status": "rejected",
+    "selected_path": "layered_virtual_tile",
+    "closure": "converged",
+    "quality_gate": {
+      "verdict": "pass",
+      "roi_count": 8,
+      "criteria": {
+        "local_scale_median": "not_applicable",
+        "local_scale_pixel_ratio": "pass",
+        "effective_pixel_count": "pass",
+        "mtf50_normalized": "not_applicable",
+        "gradient_energy_normalized": "pass",
+        "noise_sigma_ratio": "not_applicable",
+        "roi_delta_e00": "pass",
+        "boundary_stroke_alignment": "not_applicable",
+        "owner_sharpness_coverage": "pass"
+      },
+      "non_pass": [
+        "local_scale_median:not_applicable",
+        "mtf50_normalized:not_applicable",
+        "noise_sigma_ratio:not_applicable",
+        "boundary_stroke_alignment:not_applicable"
+      ],
+      "unresolved_pixels": null,
+      "detail_repairs": 0
+    },
+    "native_child_exit_code": 101,
+    "peak_rss_bytes": 10260135936
+  },
+  "oracle": {
+    "family": "bounded_shared_world_field_linear_relaxation",
+    "feasible_joint_solution": false,
+    "identity_fallback": true,
+    "selected_relaxation": null,
+    "boundary_required_relaxation": 0.743408203125,
+    "owner_maximum_feasible_relaxation": 0.0,
+    "pareto_gap": 0.743408203125,
+    "relaxation_resolution": 0.000244140625,
+    "boundary_baseline_max_delta_e00": 5.46458912422005,
+    "boundary_selected_max_delta_e00": 5.46458912422005,
+    "boundary_threshold": 1.5,
+    "owner_baseline_max": 1.4702800801067502,
+    "owner_selected_max": 1.4702800801067502,
+    "owner_candidate_full_max": 2.0608153092165167,
+    "owner_candidate_full_violations": 1,
+    "owner_formal_pass": false,
+    "holdout_baseline_p95": 1.7329915572836,
+    "holdout_selected_p95": 1.7329915572836
+  },
+  "decision": "hypothesis_rejected_no_joint_tone_relaxation; boundary improvement requires a relaxation outside owner-fidelity feasibility; preserve identity fallback and keep task14 at diagnosis"
+}
