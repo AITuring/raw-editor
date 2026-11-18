@@ -53,6 +53,17 @@ use super::{
     capture_test_tone_fields, capture_test_tone_tile, write_station_owner_trace,
 };
 
+#[cfg(test)]
+fn force_tone_source_fidelity_for_test() -> bool {
+    let enabled = std::env::var("RAW_EDITOR_TEST_FORCE_TONE_SOURCE_FIDELITY")
+        .ok()
+        .is_some_and(|value| matches!(value.as_str(), "1" | "true" | "TRUE"));
+    if enabled {
+        println!("  - TEST_FORCE_TONE_SOURCE_FIDELITY enabled");
+    }
+    enabled
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn focus_tile_ownership_stitcher_with_finishing<R: Runtime, F, T>(
     images: &[&ImageInfo],
@@ -1336,6 +1347,17 @@ where
         #[cfg(test)]
         capture_test_tone_fields(&panorama, &source_owner_ids, &tone_tiles);
 
+        let tone_source_fidelity = all_have_native_sources
+            || {
+                #[cfg(test)]
+                {
+                    force_tone_source_fidelity_for_test()
+                }
+                #[cfg(not(test))]
+                {
+                    false
+                }
+            };
         let tone_report = tone::harmonize_tone_tiles_with_fidelity(
             &mut panorama,
             &source_owner_ids,
@@ -1343,7 +1365,7 @@ where
             &tone_tiles,
             &panorama_mask,
             &tone_relations,
-            all_have_native_sources,
+            tone_source_fidelity,
         );
         println!(
             "  - Tone_Harmonizer: status={:?}, tiles={}, boundary_max_delta_e00={:.3}",
