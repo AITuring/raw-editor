@@ -82,6 +82,7 @@
 
 | 范围                     | QG与最终结论                                          | 关键数据                                                                                                           | 证据                                                                   |
 | ------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| 任务9来源锁定修图设计（2026-11-18） | 设计文档完成，未改生产实现 | 定义source/owner/Coverage/footprint锁定、撤销事件、坐标系/digest、导出sidecar、人工区域QG排除和stale规则；任务已勾选 | [任务卡](artwork-lanes/9-source-lock-design.md) |
 | 任务8注册 provider 对照（2026-11-18） | provider边界、fallback和能力审计完成；实际SIFT/AKAZE/ECC/learned对照被依赖缺失阻断 | Rust FAST/BRIEF默认保留；Rust6/6、Python2/2通过；cv2/onnxruntime/sidecar均不可用，未伪造质量分数，任务未勾选 | [任务8摘要](benchmarks/task-8-provider-audit.json) / [任务卡](artwork-lanes/8-provider-audit.md) |
 | 任务7阆苑置换检验（2026-11-18）（2026-11-18） | test-only离线实验完成，不改生产路径或门槛 | 84张只读代理、76条真实跨组边、1000次非相邻置换；随机NCC P99=0.976218，真实39/76高于；0–2原生证据与代理分布不在同一统计域，未替换门槛 | [任务7摘要](benchmarks/langyuan-task-7-permutation.json) / [任务卡](artwork-lanes/7-permutation.md) |
 | 任务6兰亭纸面接缝（2026-11-18） | 规定实现和机器验证通过，本地合入；用户复看待确认，仍D3 | 同位重叠图/渲染基拟合、holdout与8%界限；纸面P95=3、max6、>6=0，QG pass/8ROI；输入/owner/coverage/canvas保持；Rust1098/0/44、Node19、quick7、medium5/5；同二进制两次TIFF相同，中等最大RSS10.726GiB；仅本素材v4及矩阵更新，旧锐度floor/其他素材保持；复看队列1/3 | [任务6摘要](benchmarks/lanting-task-6-paper-seams.json) / [任务卡](artwork-lanes/6-paper-seams.md) |

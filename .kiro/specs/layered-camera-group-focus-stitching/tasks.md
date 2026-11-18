@@ -161,9 +161,10 @@
   - 目标：FAST/BRIEF、SIFT 或 AKAZE、ECC 精修、LightGlue+DISK/ALIKED（ONNX）对照，指标见[开源对比 §10.2](../../../docs/focus-stack-open-source-comparison.md)；provider 只提交候选，最终门禁不变；不用 SuperPoint 权重和 MASt3R。
   - 修改：注册实验区域中与任务 7 不同的文件、`docs/`。资源：少量 `build`。依赖：1。冲突：无。
 
-- [ ] 9. 来源锁定修图设计（N5.5，只写文档）
+- [x] 9. 来源锁定修图设计（N5.5，只写文档，2026-11-18)
   - 目标：交互与数据合同：owner 覆盖层格式、可选来源的判定（有效 Coverage 且已配准）、撤销、导出与 Stack_Report 记录、人工区域不计入自动 QG。
   - 修改：`docs/` 新文件。资源：无。依赖：无。冲突：无。
+  - 验收：完成来源/owner/Coverage/footprint锁定合同、撤销事件链、坐标系/digest绑定、导出sidecar和人工区域QG排除规则；仅文档，无生产实现。见[任务卡](../../../docs/artwork-lanes/9-source-lock-design.md)。
 
 - 10. 书画接缝诊断（可选）：在 [brightness-seam.md](../../../docs/tasks/brightness-seam.md) 的 BR.5–BR.7 跟踪，本文件不另勾选。修改前端与诊断区域，少量 `build`，与本批其他任务无冲突。
 
