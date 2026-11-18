@@ -628,5 +628,18 @@
     "report_source_digests": true
   },
   "decision": "keep task13 at diagnostic stage: local-scale failures include six pixel-ratio zeros, one boundary sample reaches 4px, and output-density protection is bypassed by nonidentity_world_residual; do not infer native D2/D3 from this 0.25 run or from 10-image history.",
-  "next_step": "prepare one station/residual-only test-only experiment with saved world coordinates and no threshold change, then rerun 0.25 before considering scale1."
+  "next_step": "run a fixed-station source-to-world Jacobian sensitivity audit (read-only/test-only) before any scale=1 run",
+  "residual_support_audit": {
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-13/langyuan-residual-support-audit.json",
+    "method": "langyuan_failure_residual_support_audit_v1",
+    "summary": {
+      "failure_points": 15,
+      "failure_points_inside_residual_region": 0,
+      "failure_points_outside_residual_region": 15,
+      "local_scale_failure_points_outside": 14,
+      "boundary_failure_points_outside": 1,
+      "decision": "residual_identity_or_disable_experiment_cannot_explain_current_failures_when_all_failed_points_are_outside_recorded_support"
+    },
+    "decision": "do_not_run_residual_identity_full_run_yet"
+  }
 }
