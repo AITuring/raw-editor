@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "method": "wenyuan_excluded_source_candidate_fixture_v1",
+  "production_impact": "read-only projection; no manifest, runner, Stack_Report, or source write",
+  "origin": {
+    "execution": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/wenyuan-baseline-r1/execution.json",
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/wenyuan-baseline-r1/run/wenyuan-s0p25-task-5-baseline-r1-stack-reports/stack-report-5259420f-544f-48ed-b839-d0bd7cce75ec.json"
+  },
+  "input_counts": {
+    "selected_source_count": 126,
+    "active_source_count": 125,
+    "excluded_source_count": 1
+  },
+  "excluded_sources": [
+    {
+      "path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4885.NEF",
+      "reason": "empty_source",
+      "decoded": false,
+      "sha256_before": "",
+      "sha256_after": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "validation": {
+    "active_paths_equal_selected_minus_excluded": true,
+    "active_digests_match": true,
+    "excluded_records_valid": true,
+    "counts_close": true,
+    "passes": true
+  },
+  "decision": "fixture_only; review schema and regenerate a fresh baseline before formal adoption",
+  "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-excluded-source-candidate.json"
+}

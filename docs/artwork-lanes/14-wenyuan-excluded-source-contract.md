@@ -54,3 +54,9 @@
 - 评审并实现 report schema 与 runner 的活动/排除集合判定；
 - 用同一冻结二进制和输入摘要重生成 baseline，随后再决定是否进入 scale=1。
 
+
+## 实际报告投影验证
+
+脚本 [wenyuan_excluded_source_candidate.py](../../scripts/stack-lab/wenyuan_excluded_source_candidate.py) 将任务5实际 Stack_Report 只读投影到候选 schema。126 个选中输入被拆为 125 个活动源和 1 个排除源；活动路径/摘要、排除记录和计数闭合均为 `true`。这证明 schema 能表达当前报告，但不改变正式 runner 的判定。
+
+机器摘要：[wenyuan-excluded-source-candidate.json](/Users/dp/Desktop/raw-editor/docs/benchmarks/wenyuan-excluded-source-candidate.json)。
