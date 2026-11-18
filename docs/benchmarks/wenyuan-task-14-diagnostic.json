@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "task": 14,
-  "status": "baseline_root_cause_audit_only_no_native_run",
+  "status": "diagnostic_audits_complete_no_native_run",
   "production_impact": "read_only audit of existing task5 baseline; no production code, threshold, matrix, or scale1 run",
   "baseline": {
     "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/wenyuan-baseline-r1",
@@ -14136,7 +14136,7 @@
     }
   },
   "decision": "keep task14 at diagnosis: empty DSC_4885 input and report-source digest mismatch remain explicit; tone boundary deltaE max exceeds 1.5; output density is bypassed by nonidentity residual. Do not infer D2/D3 from QG aggregate pass or run scale1 yet.",
-  "next_step": "design and validate explicit excluded-source report contract plus tone/density test-only hypothesis before scale1",
+  "next_step": "select one reproducible cfg(test)-only hypothesis; close excluded-source entry contract and full 0.25 QG before considering scale1",
   "empty_source_contract_audit": {
     "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-empty-contract-audit.json",
     "method": "wenyuan_empty_source_shadow_contract_audit_v1",
@@ -14168,5 +14168,24 @@
     },
     "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-exclusion-contract-audit.json",
     "decision": "design_only; do not change formal manifest, runner, or historical baseline"
+  },
+  "tone_density_audit": {
+    "script": "scripts/stack-lab/wenyuan_tone_density_audit.py",
+    "evidence": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-tone-density-audit.json",
+    "tone_status": "degraded",
+    "tone_boundary_violation_count": 13,
+    "tone_boundary_delta_e_max": 4.6045642865586744,
+    "tone_gain_clamped_station_indices": [
+      34,
+      36,
+      38,
+      39
+    ],
+    "output_density_status": "bypassed",
+    "output_density_factor": 1.0,
+    "output_density_sample_count": 0,
+    "output_density_bypass_reason": "nonidentity_world_residual",
+    "native_density_proven": false,
+    "test_only_override_found": false
   }
 }

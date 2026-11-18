@@ -1,6 +1,6 @@
 # 任务14：文苑126张到 D2/D3 诊断边界
 
-- 更新：2026-11-18；状态：入口/密度/tone 审计完成，原生推进未开始；分支 `lane/task-14/wenyuan-diagnostic`。
+- 更新：2026-11-18；状态：入口/密度/tone 审计完成，原生推进未开始；分支 `v1`。
 - 输入：文苑图全量126张，scale=0.25；沿用任务5冻结 `base-2026-11-12`，不改生产代码、阈值、矩阵或正式基线。
 - 依据：任务5输出 `/Users/dp/Desktop/raw-editor/output/acceptance/task-5/wenyuan-baseline-r1` 及 [S2-wenyuan](S2-wenyuan.md)。
 
@@ -20,7 +20,7 @@ QG 的 local-scale、effective、gradient、owner 等有效门均 pass 或 not_a
 
 ## 结论与下一步
 
-任务14不跑 scale=1，也不修改 `expectedSkipped` 来制造来源通过。下一步先把空源文件登记/排除合同、density bypass 入口和 tone 违规拆成可验证的单变量 test-only 假设；完整 QG 与入口合同同时闭合后，才考虑 native。
+任务14不跑 scale=1，也不修改 `expectedSkipped` 来制造来源通过。空源排除合同与 density/tone 只读审计已经完成；当前仍没有完整入口合同、原生 density 采样或 tone 通过证据。下一步只能选择一个可复现的 test-only 单变量假设，先在同一 0.25 范围闭合入口合同和完整 QG，再决定是否推进 native。
 
 ## 空源 shadow contract
 
@@ -35,3 +35,9 @@ QG 的 local-scale、effective、gradient、owner 等有效门均 pass 或 not_a
 这只是入口设计证据，不是正式验收，也没有写入 manifest、runner 或历史基线。若要采用，必须让 report schema、路径集合检查和重生成 baseline 一起变更，并继续单独处理 tone degraded 与 density bypass。
 
 机器结果：[wenyuan-exclusion-contract-audit.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-exclusion-contract-audit.json)。
+
+## tone / density 只读审计
+
+脚本 [wenyuan_tone_density_audit.py](../../scripts/stack-lab/wenyuan_tone_density_audit.py) 对冻结 Stack_Report 与源码标记做只读核查：tone 为 `degraded`，13 个 boundary ΔE 违规，最大 `4.6045642866`（station 5↔32，world `(5888,1280,256,256)`）；另有 4 个 `tone_gain_clamped` station（34、36、38、39）。output density 为 `bypassed`、factor `1.0`、`sample_count=0`，原因 `nonidentity_world_residual`，因此没有 native Jacobian 密度证据。源码检查只找到 cfg(test) capture/no-op 标记，没有 tone 或 density 数值覆盖开关。
+
+机器结果：[wenyuan-tone-density-audit.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-tone-density-audit.json)。
