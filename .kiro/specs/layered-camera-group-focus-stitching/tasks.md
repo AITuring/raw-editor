@@ -152,9 +152,10 @@
   - 资源：`build` + `run`。依赖：1、2。冲突：任务 11、12（同区域）。
   - 验收：同位重叠图直接拟合渲染增益基，独立holdout与旧场回退、8%限幅；纸面P95 4→3、max7→6、>6处2→0，QG pass/8ROI、unresolved0，输入/owner/coverage/canvas保持。快速7组、Rust1098/0/44、最新Node19项、中等5/5均过；r2同冻结二进制两次原生TIFF相同，中等最大RSS10.726GiB。只更新本素材v4加严合同及矩阵行，其他素材/旧锐度floor/共享QG阈值不变。已本地合入；[任务卡](../../../docs/artwork-lanes/6-paper-seams.md)、[机器摘要](../../../docs/benchmarks/lanting-task-6-paper-seams.json)、[复看队列](../../../docs/artwork-lanes/review-queue.md)R20261118-1待看1/3，仍D3，不自授D4/D5。
 
-- [ ] 7. 置换检验离线实验（PF.8）
+- [x] 7. 置换检验离线实验（PF.8，2026-11-18）
   - 目标：用已保存的匹配点和代理图，统计随机不相邻机位对能达到的相似度分布，与现有固定门槛对照，看能否识别重复题字/人物造成的假边；阆苑 0–2 为第一条测试边。只写 test-only 代码和报告，不改生产路径。
   - 修改：注册实验区域（新测试模块）、`docs/`。资源：少量 `build`。依赖：1。冲突：无。
+  - 验收：阆苑84张只读代理/保存匹配点完成1000次确定置换，真实跨组边76条；随机NCC P99=0.976218，真实边39/76高于；0–2原生64 inliers/1.260px与代理NCC不在同一统计域。仅test-only，未改生产路径、Stack_Report、阈值或素材基线。见[任务卡](../../../docs/artwork-lanes/7-permutation.md)及[机器摘要](../../../docs/benchmarks/langyuan-task-7-permutation.json)。
 
 - [ ] 8. 注册 provider 离线对照（PF.10 注册部分）
   - 目标：FAST/BRIEF、SIFT 或 AKAZE、ECC 精修、LightGlue+DISK/ALIKED（ONNX）对照，指标见[开源对比 §10.2](../../../docs/focus-stack-open-source-comparison.md)；provider 只提交候选，最终门禁不变；不用 SuperPoint 权重和 MASt3R。

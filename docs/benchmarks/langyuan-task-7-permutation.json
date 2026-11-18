@@ -1,0 +1,573 @@
+{
+  "schema": 1,
+  "task": 7,
+  "title": "Langyuan permutation null experiment",
+  "updated": "2026-11-18",
+  "status": "completed_test_only_no_production_change",
+  "method": {
+    "schema": 1,
+    "method": "saved_proxy_global_pose_permutation_ncc_v1",
+    "scope": "Langyuan84 baseline proxies; non-adjacent source replacement with accepted-edge geometry",
+    "production_impact": "test_only_no_stack_report_no_threshold_no_pose_write",
+    "seed": 8762272649496,
+    "permutations_requested": 1000,
+    "permutations_usable": 1000,
+    "accepted_cross_group_edges": 76,
+    "adjacent_real_scores": {
+      "count": 76,
+      "p50": 0.9813962163734186,
+      "p95": 0.9932356451275293,
+      "p99": 0.9935420355587342,
+      "max": 0.9935420355587342
+    },
+    "non_adjacent_null_scores": {
+      "count": 1000,
+      "p50": 0.8849716771150103,
+      "p95": 0.9658871845685284,
+      "p99": 0.9762178507638203,
+      "max": 0.9873009532152335
+    },
+    "null_p99_threshold": 0.9762178507638203,
+    "real_scores_above_null_p99": 39,
+    "langyuan_0_2_edge": {
+      "record_inliers": 64,
+      "record_error": 1.2600017949752624,
+      "record_hull_support": 0.3612926093269467,
+      "proxy_ncc": {
+        "ncc": 0.7462064667650444,
+        "samples": 66
+      },
+      "homography_layout": "transposed_from_nalgebra_flattened_record",
+      "planes": "/Users/dp/Desktop/raw-editor/output/acceptance/langyuan-v44-joint-field/candidate-repeat/langyuan-10/planes"
+    },
+    "sources": {
+      "alignment": "/Users/dp/Desktop/raw-editor/output/acceptance/task-5/langyuan-baseline-r1/source-alignment.json",
+      "alignment_sha256": "ab22db8a9ac12826a0d45d8854f8f998e94923f8814dda212f9805c97195d142",
+      "proxy_directory": "/Users/dp/Desktop/raw-editor/work/analysis/langyuan_thumbs",
+      "proxy_sha256": {
+        "0": "6373afa5eb3e11f758ac2769b135ef2816a39e562c249395ba0a94acef9bb6a5",
+        "1": "35fbc86538a46665ad7cedc99b64f8024c340c866088cca061d0713e5d95aff6",
+        "2": "a7a0595bdc11a51feb2d5d6bb6580d8856e36c28db32f20e23e7a532b35ee02d",
+        "3": "28765125f6b072a1ee8e5562b7b399045fcb191c205d3536177e439c5184d827",
+        "4": "6ede601e7f7749df0d70166fad40cf99c60dd28ffca3f50bbbae2d89a31287fa",
+        "5": "9f8b4281dcf2683ccf8666b8f6e49c1601c97e88f5c8d84cd1d2a8e482b2ddac",
+        "6": "4665e120127b72ce7f460f3909f8701746bbc6e915e73e456941c7a8bcb2adf9",
+        "7": "73fbb5843e1c3a1ddd111826f25ccd30828cfa573275d81eeb99d7c08db098d1",
+        "8": "2a0addf8240b571c6621bbf82f4a0c08da82f521e3ceb293d7a9ea7860a62775",
+        "9": "6d8dcb46e09e31761127392a84ee76f3ab9aa40cfc7f957bdfb6a3531e50fbca",
+        "10": "52e5ffb75bfdc9acc2d5c0fd846b5d22496d6cabbc4562c5d861fa46be20f14c",
+        "11": "818d37cd83cacffd1718f179c163e3e4b5de1bf9fb126ba6a1739682195546c7",
+        "12": "faff07c23a894d8fc4052caa10b3d36933e5882b3c9e2c52ed5c6770092e0be3",
+        "13": "310f4a8bc65aef91623d50e0bc3fb36499056b5664c5feb59ff81fc29271f044",
+        "14": "b3078c820019d3e1a74f3b5b2de1c336bc4bb6a3c404bd4ab89d5378af8c05c4",
+        "15": "e65041828e538f59f3a8671cc3b8acfb3e9d4e1064cd0cf3b7eecdf438d75ffb",
+        "16": "8a75d072553347782d34d82df4e1934b47a584f17c0be4c63dc95429be157ac8",
+        "17": "c5ebf6fb81a7dd15815021aaf98be38c751e279d77b681732b2fef7e0a307e52",
+        "18": "2e8129e8946ed0602c88a0f00608d9b1b0a627bff1b67dcb426bbdf8ae9eaa97",
+        "19": "c2a3caaeacbd23c0bffb433e5a5c0e4133c63cdc04f3bc4119bc7ad12421b689",
+        "20": "4766cf7d2d8c2728fba20c39af989bac38794320f784ec7e44432e94336a4f1f",
+        "21": "09d70209f1cbc46fea9b3ba6144386bc9fc93e8b0595bbc4356f7274f37b0a25",
+        "22": "8c78f97642f5f29c3fc755b31bf076702caa10a28e0c66aeffbeceaffd72ba76",
+        "23": "a9fe8fc1977e7f87210d1c02e799e279d1d4f7b93f3b8ede88f1d52fe98a2dfb",
+        "24": "8ba49b35c5e96d8539fe0c774991e0ab932706a6990f594c30a2ed88ac882bd4",
+        "25": "8ec34df65bcc434386defa76fea9e1c5a4c2940e6bcaaa173a48edcd5843c612",
+        "26": "b2a1a54905ec54dd1b622097aed715c986094bc72eafe1c962d1f3a4b1e33e83",
+        "27": "e0d39168440792a9557edf5b677d814cef1076f7e9e175507a08f2f843d3fab1",
+        "28": "940fb61005e689e54fbc37ec6fd8b5a1bcdd321a070d45de82b72359b72e38a2",
+        "29": "4501a356a74842abbeb1f0b8d9db24664aa16a599ae12db401e201b4c6ce05c7",
+        "30": "47b62b68f852c5cc335274db43c8b7be523f97c7474e6f6f19e86315f48b7ec3",
+        "31": "03d6a97eb74b0756f3dde4ae7d3f831493fae2e63cdc522213ad678811bae52e",
+        "32": "fba3a27f4f54a8eb6446f3f060dcaccaefd728e99a081e7d5dfaf6372cd99e5a",
+        "33": "8547098815168f2d74d55e14c98429752c827d88b348675229ffb2bd88376b47",
+        "34": "65a3d06c4c15e09f6b6a933699eaab1a22d45f549efe059185820ca565208ae1",
+        "35": "3971eb0b3f66a89d399eef03b50849eb800bce0cf1f2309692f5276b9dfc42e1",
+        "36": "47c2c11066e61f9c1e2f5838035199f21006d61547327e8dd3557a0ae10bba24",
+        "37": "6b22018cb7ab10eb6de5361f588846f98f109136e3568c890ad5dd77e99b7320",
+        "38": "4dce17ca1c483b778a3e208dec2cf61bf09ecc05539a39231b239d979a74dc2b",
+        "39": "82e965ac50ae35038c1d545187940212c4b960d857cfce5fc08f759878ab7819",
+        "40": "8717e6ab9f507a9973e23ca7fd4b7a2f00e84ac912cbe0ea5119cd0394360645",
+        "41": "35469df30c633eea107232748ee682014026570f849630c6eceb57046817e0ff",
+        "42": "b3739a7ea94f8451a84b84db189e900890896caea3e177693667b8c371cd1222",
+        "43": "e52146f1fca8cc2295aece62d2cc0f10697afa33e692fbda594ba87977454108",
+        "44": "252c60d511a4de9e9311823d001af36d377fd06a1792a45ee9b97cab42b310ff",
+        "45": "fd47ec99daf780967fc57cf203e9354d1ad7f57064cc5be2202d5c4b1f9744a4",
+        "46": "f852792f72ce72aa50d7eb8b03ebf0d81fd1987f6acbca288b0b8067f5b6b75c",
+        "47": "4486b5411b9874d5b942f23f2f1d2643a8f6f81b89f89dd76b7fd3e534a3bf4f",
+        "48": "8ef3ec5752fc1eb0c8db56c318979d78e9975218b2d7fc03afc67705a1bbcafa",
+        "49": "861eea22aa4d9158d011e8659b1079643cb7ff5f0d0901f2dec8d2029c118cc7",
+        "50": "ca85d337e7829da1af840bd04abe9b58cdb7958bd4cdfbaaa8891628d5fd286b",
+        "51": "9018dfb479685923306e1b7d7054ce1a8a27bc3b183c9a4fdc1ffda99a0957ca",
+        "52": "26f9de6c9965580be8e36e7cb7f391d2fd73840c49a46d1e789a5555573477d4",
+        "53": "2d10ca600920e3b9809943b26741169111af9663d96f0d4dff8a37099af8c884",
+        "54": "3d14d89cc0db3929e6ed199f4e01b1f31d988ded44a3d9e1aeedc25fc45b593f",
+        "55": "90137e598a03affdc26a7e0ba807f982b7a1b6770a651bd699a9cfdabe85537e",
+        "56": "52c9cb7db54e9eee563228f4fe695ccf6f547567dec31dd655fcefd0e6d9e086",
+        "57": "da7a37c387e02ceeb4fa2076282b15d888906480317bf97656ea77be87e5b7b9",
+        "58": "836ed7dcb8e9a19c213ef2f3f535cc2b0e53f7c3ef2c0ca93d506f9ed7a2032b",
+        "59": "cba82cdaf77db8c54a8c6fd87ff7dfa84b215b8433922fb9a258e76e1ffa9132",
+        "60": "3a18f59b42b2201724ab0d17869f8f2321ff9f9a4cf104d1b21e69e2a0638a2d",
+        "61": "0363616173651980e01a865045d8781dfa846d144541c38fe286245d0d2027f4",
+        "62": "2c7d59418c6189df8d84a2bb1769bd06c3413517534786d423e05a4e415cd806",
+        "63": "b8206e5d169939cc05a859b6f9e98ef4a16527f3d38e91b955afca73e9aef3f0",
+        "64": "8b9f2ce4f9ebfea05714549abfc0e75d17ecc671c89b041e9e81e167421ef3c2",
+        "65": "c527f9d3f99d0240da40acfff66a6f47b657e92e6b0956f3ec2a56cc7bddd877",
+        "66": "e47ea4fd095607c5c50c54b6f19c859f8327228c8714ef28e450f17b82d6cc71",
+        "67": "991c7eeece94271ca2d9827183f96d19a9322143dce3539fc681ec5754e28a8e",
+        "68": "fbb4ea37cd0a7ffe6cbfc3067b56a961aa81f45393e63b70fb11ade07e89c7e7",
+        "69": "b117d4412b55296389932e1120a64e780256d715dfdf0eb9106efd226a4035e6",
+        "70": "3c8688c0827537a8dd7e61c0d6122344bfdb1f1d84d150aaec366e00aac4596d",
+        "71": "8fdcb56345d85a510aec49be228e38e6860f59da1fab673b25e595ce9b1df650",
+        "72": "f48aaae02d3c5f1dc7b9882ddce22f06f84ec1de854e092c448c13983b3d8539",
+        "73": "0678f6234abb76395e0fdb210197e59c0d22903e1dd10ceea1725f980e71fe35",
+        "74": "8226cc1a89d4abc936e17aeee93d5ff06bb674986fc3984256ae97877c256dc7",
+        "75": "de8a2d8b447112a02b11674d48dbfd4bb2caa8b95435564d06cdc4abdf148f83",
+        "76": "d16b3d601ca164e0a52864c8f7dd9931254a356b38f5dbefbc48147b0616f0f6",
+        "77": "03bb23f13c0545b4deaa770ac27d1299bfae0e13d1cd92a0445ec24fc0f9f2a5",
+        "78": "65f449e262ea03b4753307740be9037da10d01efc65bfc05a486da128c0f706f",
+        "79": "a9c24fd734ee17d43e1a1352059a819fd6516d7e9f9bf362188f7e42a9e2620c",
+        "80": "49a0dcbaa68b26d041d95eea76d2822f5bf18187de7e3a29889727aa64fdb6aa",
+        "81": "fa88801fa1bc01931efb4448390670140ee5f6d9b93e20dae0464545703a819f",
+        "82": "a01e867973eb337b5c3fd7af1c0805f319fa9b7f1b5c6fad9d309d259cb35482",
+        "83": "c88640c5cd3ae7d42a750d025205542a768f1ffdeb7bae32767c780797ad0645"
+      }
+    },
+    "selection": {
+      "group_distance_for_null": ">1",
+      "edge_inlier_minimum": 15,
+      "grid": "38x25 interior points, source-to-target direct homography from saved accepted edge",
+      "score": "interleaved intensity and horizontal-gradient NCC",
+      "proxy_dimensions": [
+        400,
+        267
+      ]
+    },
+    "sample_digest": {
+      "adjacent": [
+        {
+          "source": 1,
+          "target": 10,
+          "ncc": 0.9935420355587342,
+          "samples": 635
+        },
+        {
+          "source": 1,
+          "target": 11,
+          "ncc": 0.9935232909188048,
+          "samples": 622
+        },
+        {
+          "source": 21,
+          "target": 22,
+          "ncc": 0.9933651616993343,
+          "samples": 950
+        },
+        {
+          "source": 69,
+          "target": 72,
+          "ncc": 0.9932356451275293,
+          "samples": 433
+        },
+        {
+          "source": 0,
+          "target": 11,
+          "ncc": 0.993176773312623,
+          "samples": 627
+        },
+        {
+          "source": 0,
+          "target": 10,
+          "ncc": 0.9930738677631215,
+          "samples": 638
+        },
+        {
+          "source": 0,
+          "target": 12,
+          "ncc": 0.9928151493526658,
+          "samples": 637
+        },
+        {
+          "source": 69,
+          "target": 71,
+          "ncc": 0.9926715018078621,
+          "samples": 436
+        },
+        {
+          "source": 70,
+          "target": 72,
+          "ncc": 0.992376255481022,
+          "samples": 458
+        },
+        {
+          "source": 69,
+          "target": 73,
+          "ncc": 0.992301330683204,
+          "samples": 447
+        }
+      ],
+      "permutations": [
+        {
+          "index": 617,
+          "source": 3,
+          "target": 70,
+          "source_group": 5,
+          "target_group": 1,
+          "ncc": 0.9873009532152335,
+          "samples": 632
+        },
+        {
+          "index": 870,
+          "source": 0,
+          "target": 69,
+          "source_group": 5,
+          "target_group": 1,
+          "ncc": 0.9856601180490917,
+          "samples": 638
+        },
+        {
+          "index": 237,
+          "source": 0,
+          "target": 33,
+          "source_group": 5,
+          "target_group": 3,
+          "ncc": 0.9849574083537307,
+          "samples": 627
+        },
+        {
+          "index": 62,
+          "source": 1,
+          "target": 33,
+          "source_group": 5,
+          "target_group": 3,
+          "ncc": 0.9844656486098988,
+          "samples": 635
+        },
+        {
+          "index": 101,
+          "source": 3,
+          "target": 33,
+          "source_group": 5,
+          "target_group": 3,
+          "ncc": 0.984160425773058,
+          "samples": 619
+        },
+        {
+          "index": 125,
+          "source": 3,
+          "target": 33,
+          "source_group": 5,
+          "target_group": 3,
+          "ncc": 0.984160425773058,
+          "samples": 619
+        },
+        {
+          "index": 838,
+          "source": 1,
+          "target": 32,
+          "source_group": 5,
+          "target_group": 3,
+          "ncc": 0.9831803044386032,
+          "samples": 636
+        },
+        {
+          "index": 787,
+          "source": 55,
+          "target": 13,
+          "source_group": 2,
+          "target_group": 6,
+          "ncc": 0.980230301805609,
+          "samples": 329
+        },
+        {
+          "index": 481,
+          "source": 5,
+          "target": 67,
+          "source_group": 16,
+          "target_group": 10,
+          "ncc": 0.9766808735963477,
+          "samples": 540
+        },
+        {
+          "index": 142,
+          "source": 5,
+          "target": 67,
+          "source_group": 16,
+          "target_group": 10,
+          "ncc": 0.9762178507638203,
+          "samples": 542
+        }
+      ],
+      "permutation_bottom10": [
+        {
+          "index": 577,
+          "source": 17,
+          "target": 9,
+          "source_group": 23,
+          "target_group": 27,
+          "ncc": 0.708656005564556,
+          "samples": 193
+        },
+        {
+          "index": 915,
+          "source": 17,
+          "target": 81,
+          "source_group": 23,
+          "target_group": 25,
+          "ncc": 0.7209489190336248,
+          "samples": 193
+        },
+        {
+          "index": 250,
+          "source": 21,
+          "target": 6,
+          "source_group": 21,
+          "target_group": 16,
+          "ncc": 0.7329802015770435,
+          "samples": 950
+        },
+        {
+          "index": 254,
+          "source": 19,
+          "target": 7,
+          "source_group": 23,
+          "target_group": 27,
+          "ncc": 0.7377924515081443,
+          "samples": 200
+        },
+        {
+          "index": 693,
+          "source": 55,
+          "target": 7,
+          "source_group": 2,
+          "target_group": 27,
+          "ncc": 0.7389181674073365,
+          "samples": 329
+        },
+        {
+          "index": 641,
+          "source": 17,
+          "target": 80,
+          "source_group": 23,
+          "target_group": 25,
+          "ncc": 0.7416437453956517,
+          "samples": 193
+        },
+        {
+          "index": 549,
+          "source": 21,
+          "target": 4,
+          "source_group": 21,
+          "target_group": 16,
+          "ncc": 0.742245123130949,
+          "samples": 950
+        },
+        {
+          "index": 856,
+          "source": 19,
+          "target": 8,
+          "source_group": 23,
+          "target_group": 27,
+          "ncc": 0.7447409665602414,
+          "samples": 200
+        },
+        {
+          "index": 874,
+          "source": 0,
+          "target": 5,
+          "source_group": 5,
+          "target_group": 16,
+          "ncc": 0.7516689687834309,
+          "samples": 637
+        },
+        {
+          "index": 736,
+          "source": 0,
+          "target": 5,
+          "source_group": 5,
+          "target_group": 16,
+          "ncc": 0.7534497195029717,
+          "samples": 638
+        }
+      ],
+      "adjacent_count": 76,
+      "permutation_count": 1000,
+      "adjacent_top10": [
+        {
+          "source": 1,
+          "target": 10,
+          "ncc": 0.9935420355587342,
+          "samples": 635
+        },
+        {
+          "source": 1,
+          "target": 11,
+          "ncc": 0.9935232909188048,
+          "samples": 622
+        },
+        {
+          "source": 21,
+          "target": 22,
+          "ncc": 0.9933651616993343,
+          "samples": 950
+        },
+        {
+          "source": 69,
+          "target": 72,
+          "ncc": 0.9932356451275293,
+          "samples": 433
+        },
+        {
+          "source": 0,
+          "target": 11,
+          "ncc": 0.993176773312623,
+          "samples": 627
+        },
+        {
+          "source": 0,
+          "target": 10,
+          "ncc": 0.9930738677631215,
+          "samples": 638
+        },
+        {
+          "source": 0,
+          "target": 12,
+          "ncc": 0.9928151493526658,
+          "samples": 637
+        },
+        {
+          "source": 69,
+          "target": 71,
+          "ncc": 0.9926715018078621,
+          "samples": 436
+        },
+        {
+          "source": 70,
+          "target": 72,
+          "ncc": 0.992376255481022,
+          "samples": 458
+        },
+        {
+          "source": 69,
+          "target": 73,
+          "ncc": 0.992301330683204,
+          "samples": 447
+        }
+      ],
+      "permutation_top10": [
+        {
+          "index": 617,
+          "source": 3,
+          "target": 70,
+          "source_group": 5,
+          "target_group": 1,
+          "ncc": 0.9873009532152335,
+          "samples": 632
+        },
+        {
+          "index": 870,
+          "source": 0,
+          "target": 69,
+          "source_group": 5,
+          "target_group": 1,
+          "ncc": 0.9856601180490917,
+          "samples": 638
+        },
+        {
+          "index": 237,
+          "source": 0,
+          "target": 33,
+          "source_group": 5,
+          "target_group": 3,
+          "ncc": 0.9849574083537307,
+          "samples": 627
+        },
+        {
+          "index": 62,
+          "source": 1,
+          "target": 33,
+          "source_group": 5,
+          "target_group": 3,
+          "ncc": 0.9844656486098988,
+          "samples": 635
+        },
+        {
+          "index": 101,
+          "source": 3,
+          "target": 33,
+          "source_group": 5,
+          "target_group": 3,
+          "ncc": 0.984160425773058,
+          "samples": 619
+        },
+        {
+          "index": 125,
+          "source": 3,
+          "target": 33,
+          "source_group": 5,
+          "target_group": 3,
+          "ncc": 0.984160425773058,
+          "samples": 619
+        },
+        {
+          "index": 838,
+          "source": 1,
+          "target": 32,
+          "source_group": 5,
+          "target_group": 3,
+          "ncc": 0.9831803044386032,
+          "samples": 636
+        },
+        {
+          "index": 787,
+          "source": 55,
+          "target": 13,
+          "source_group": 2,
+          "target_group": 6,
+          "ncc": 0.980230301805609,
+          "samples": 329
+        },
+        {
+          "index": 481,
+          "source": 5,
+          "target": 67,
+          "source_group": 16,
+          "target_group": 10,
+          "ncc": 0.9766808735963477,
+          "samples": 540
+        },
+        {
+          "index": 142,
+          "source": 5,
+          "target": 67,
+          "source_group": 16,
+          "target_group": 10,
+          "ncc": 0.9762178507638203,
+          "samples": 542
+        }
+      ]
+    }
+  },
+  "script": {
+    "path": "/Users/dp/Desktop/raw-editor/.worktrees/task-7/scripts/stack-lab/permutation.py",
+    "sha256": "4cd6d6e12ba86a4ff723c5490a4cba1e37b456028f6b43eb7b238769ef0b3ae4"
+  },
+  "unit_tests": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-7/unit-tests-direct.log",
+    "sha256": "471ef95eb823da65dc968f6d972898859d00043a59309dc068800b527a985f8d",
+    "passed": 3,
+    "failed": 0
+  },
+  "determinism": {
+    "r3_r4_byte_identical": true,
+    "r3_path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-7/langyuan-permutation-r3.json",
+    "r4_path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-7/langyuan-permutation-r4.json"
+  },
+  "conclusion": {
+    "null_p99": 0.9762178507638203,
+    "real_cross_group_edges": 76,
+    "real_above_null_p99": 39,
+    "decision": "Do not replace fixed production gates or promote/reject edges from this proxy distribution. Only 39/76 real edges exceed the null P99; the saved Langyuan 0-2 native edge has 64 inliers and 1.260px error but proxy NCC 0.746, showing proxy score mismatch. Use this as diagnostic evidence and continue with task 8/provider comparison or native patch-level null scoring.",
+    "production_files_changed": false,
+    "stack_report_changed": false,
+    "thresholds_changed": false
+  }
+}
