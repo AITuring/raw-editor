@@ -1,6 +1,6 @@
 # 书画任务卡与诊断卡
 
-当前任务及勾选只在 [tasks.md](../../.kiro/specs/layered-camera-group-focus-stitching/tasks.md) 维护；本目录记录执行过程、证据和复看材料，不另排一份开发任务表。已有记录：[任务1](1-resource-freeze.md)、[任务2](2-run-matrix.md)、[任务3模板验收](3-templates.md)、[任务4两槽演练](4-two-slots.md)、[任务6兰亭纸面接缝](6-paper-seams.md)、[任务7置换检验](7-permutation.md)、[任务8 provider审计](8-provider-audit.md)、[任务9来源锁定设计](9-source-lock-design.md)；任务5按各`S2-*`诊断卡记录。用户待看事项统一登记到 [复看队列](review-queue.md)。
+当前任务及勾选只在 [tasks.md](../../.kiro/specs/layered-camera-group-focus-stitching/tasks.md) 维护；本目录记录执行过程、证据和复看材料，不另排一份开发任务表。已有记录：[任务1](1-resource-freeze.md)、[任务2](2-run-matrix.md)、[任务3模板验收](3-templates.md)、[任务4两槽演练](4-two-slots.md)、[任务6兰亭纸面接缝](6-paper-seams.md)、[任务7置换检验](7-permutation.md)、[任务8 provider审计](8-provider-audit.md)、[任务9来源锁定设计](9-source-lock-design.md)、[任务10接缝诊断](10-seam-diagnostic-audit.md)；任务5按各`S2-*`诊断卡记录。用户待看事项统一登记到 [复看队列](review-queue.md)。
 
 ## 使用规则
 

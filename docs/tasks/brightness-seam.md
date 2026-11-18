@@ -6,6 +6,11 @@
 
 <a id="brightness"></a>
 
+
+## 2026-11-18 回归核对（任务10）
+
+现有亮度/接缝诊断回归全部完成：`brightness-map`、`adaptive-brightness`、`seam-candidates`、`seam-texture`、`native-seam-texture`、`native-seam-profile`、`native-seam-path` 均通过。该批只验证合成/局部诊断和 UI 状态，不新增真实图片语义证据；BR.5、BR.6、BR.7 继续未勾选，自动修复继续关闭。详细记录见[任务10诊断卡](../artwork-lanes/10-seam-diagnostic-audit.md)。
+
 ## 任务
 
 专项文档：[分区亮度与接缝诊断](../adaptive-brightness.md)。它维护处理链路、参数语义、实图试验和能力限制；当前待办统一在本文件。
