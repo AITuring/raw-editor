@@ -1,0 +1,244 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_station15_17_shared_jacobian_ab_v1",
+  "production_impact": "test_only_shared_station_pose_scale_no_production_change",
+  "dataset": "mayuan-2",
+  "scale": 0.25,
+  "binary": "task-16-station15-17-jacobian-r1",
+  "variable": {
+    "env": "RAW_EDITOR_TEST_STATION_JACOBIAN_SCALE=15,16,17:1.1767578125",
+    "stations": [
+      15,
+      16,
+      17
+    ],
+    "factor": 1.1767578125,
+    "center_preserving": true
+  },
+  "control": {
+    "label": "mayuan-2-mayuan-2-station15-17-control-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-control-r1",
+    "binary": "task-16-station15-17-jacobian-r1",
+    "binary_sha256": "c809bbfed9f89ee1109d0e48caacad5a81dd9f5aadd9b7f8500ed0c2ba0d67a8",
+    "inputs_sha256": "4e39ee193f336801a7918307307f8c9ba7d6c9490fb105678c3b4a112663294f",
+    "execution": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-control-r1/execution.json",
+    "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-control-r1/analysis.json",
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-control-r1/run/mayuan-2-s0p25-task-16-mayuan-2-station15-17-control-r1-stack-reports/stack-report-42c31426-90ec-4a80-8b95-7cfa16d8dc3c.json",
+    "output": {
+      "written": false,
+      "format": "",
+      "path": "",
+      "width": 0,
+      "height": 0,
+      "bit_depth": 16,
+      "alpha_preserved": false,
+      "icc": "sRGB",
+      "tiff_extra_samples": null,
+      "artifact_validation": "not_run",
+      "artifact_validation_error": null,
+      "result_id": "",
+      "preview": {
+        "path": "",
+        "max_roi_delta_e": 0.0
+      }
+    },
+    "output_sha256": null,
+    "exit_code": 1,
+    "status": "rejected",
+    "quality_gate": {
+      "verdict": "not_run",
+      "roi_count": 0,
+      "criteria": {},
+      "non_pass": [],
+      "unresolved_pixels": null,
+      "detail_repairs": 0
+    },
+    "closure": "converged",
+    "density": {
+      "status": "rejected",
+      "factor": 1.17578125,
+      "pixel_count_multiplier": 1.3824615478515625,
+      "canvas_pixels": 0,
+      "output_plane_lower_bound_bytes": 0,
+      "target_minimum_scale": 1.0,
+      "probe_step_px": 32,
+      "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+      "source_count": 47,
+      "sample_count": 124543,
+      "invalid_probe_count": 0,
+      "boundary_probe_count": 3281,
+      "worst_station_index": 17,
+      "worst_source_id": 33,
+      "worst_station_point": [
+        2049.0,
+        33.0
+      ],
+      "direct_pair_p95_output_px": 3.0407528350068644,
+      "residual_median_output_px": 0.5218132808901972,
+      "max_corner_correction_output_px": 5.4622718716806125,
+      "minimum_scale": 0.850826957635308,
+      "p01_scale": 0.8695606863016855,
+      "median_scale": 1.0555643122097254,
+      "bypass_reason": "output_pixel_closure_limit_exceeded"
+    },
+    "checks": {
+      "inputs_unchanged": true,
+      "reference_unchanged": true,
+      "binary_unchanged": true,
+      "memory_gate_pass": true,
+      "runner_exit_zero": false,
+      "native_child_exit_zero": false,
+      "runner_summary_present": true,
+      "runner_failures_empty": false,
+      "quality_gate_pass": false,
+      "output_contract": false,
+      "report_source_digests": true
+    },
+    "peak_rss_bytes": 11585290240,
+    "wall_seconds": 9358.08726978302,
+    "memory_gate_pass": true,
+    "native_failures": [
+      "harness failed (exit 101); see /Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-control-r1/run/mayuan-2-s0p25-task-16-mayuan-2-station15-17-control-r1.log",
+      "no focus-stack result line in the log",
+      "acceptance metrics were not written",
+      "full-resolution TIFF is missing or empty",
+      "the Stack_Report has no verified TIFF export at the requested path",
+      "verified TIFF dimensions do not match the rendered result",
+      "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])",
+      "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+    ]
+  },
+  "experiment": {
+    "label": "mayuan-2-mayuan-2-station15-17-experiment-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-experiment-r1",
+    "binary": "task-16-station15-17-jacobian-r1",
+    "binary_sha256": "c809bbfed9f89ee1109d0e48caacad5a81dd9f5aadd9b7f8500ed0c2ba0d67a8",
+    "inputs_sha256": "4e39ee193f336801a7918307307f8c9ba7d6c9490fb105678c3b4a112663294f",
+    "execution": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-experiment-r1/execution.json",
+    "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-experiment-r1/analysis.json",
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-experiment-r1/run/mayuan-2-s0p25-task-16-mayuan-2-station15-17-experiment-r1-stack-reports/stack-report-eaf7e293-9b53-4245-bb43-18e44acc4295.json",
+    "output": {
+      "alpha_preserved": true,
+      "artifact_validation": "pass",
+      "artifact_validation_error": null,
+      "bit_depth": 16,
+      "format": "TIFF",
+      "height": 3086,
+      "icc": "sRGB",
+      "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-experiment-r1/run/mayuan-2-s0p25-task-16-mayuan-2-station15-17-experiment-r1.tiff",
+      "preview": {
+        "path": "",
+        "max_roi_delta_e": 0.0
+      },
+      "result_id": "native-fixture-eaf7e293-9b53-4245-bb43-18e44acc4295",
+      "tiff_extra_samples": [
+        2
+      ],
+      "width": 3695,
+      "written": true
+    },
+    "output_sha256": "6dd5b883ea158d26a0243f04cb983bbbb4d767442895e981c7f9761668418cc6",
+    "exit_code": 1,
+    "status": "rejected",
+    "quality_gate": {
+      "verdict": "pass",
+      "roi_count": 8,
+      "criteria": {
+        "local_scale_median": "not_applicable",
+        "local_scale_pixel_ratio": "pass",
+        "effective_pixel_count": "pass",
+        "mtf50_normalized": "not_applicable",
+        "gradient_energy_normalized": "pass",
+        "noise_sigma_ratio": "not_applicable",
+        "roi_delta_e00": "pass",
+        "boundary_stroke_alignment": "pass",
+        "owner_sharpness_coverage": "pass"
+      },
+      "non_pass": [
+        "local_scale_median:not_applicable",
+        "mtf50_normalized:not_applicable",
+        "noise_sigma_ratio:not_applicable"
+      ],
+      "unresolved_pixels": null,
+      "detail_repairs": 0
+    },
+    "closure": "converged",
+    "density": {
+      "status": "applied",
+      "factor": 1.1103515625,
+      "pixel_count_multiplier": 1.2328805923461914,
+      "canvas_pixels": 11866296,
+      "output_plane_lower_bound_bytes": 213593328,
+      "target_minimum_scale": 1.0,
+      "probe_step_px": 32,
+      "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+      "source_count": 47,
+      "sample_count": 124543,
+      "invalid_probe_count": 0,
+      "boundary_probe_count": 3281,
+      "worst_station_index": 11,
+      "worst_source_id": 32,
+      "worst_station_point": [
+        1889.0,
+        385.0
+      ],
+      "direct_pair_p95_output_px": 2.892090095528086,
+      "residual_median_output_px": 0.4956830045495499,
+      "max_corner_correction_output_px": 5.1580882175017,
+      "minimum_scale": 0.9007865112418378,
+      "p01_scale": 0.9202743577337653,
+      "median_scale": 1.0603625992671837,
+      "bypass_reason": null
+    },
+    "checks": {
+      "inputs_unchanged": true,
+      "reference_unchanged": true,
+      "binary_unchanged": true,
+      "memory_gate_pass": true,
+      "runner_exit_zero": false,
+      "native_child_exit_zero": false,
+      "runner_summary_present": true,
+      "runner_failures_empty": false,
+      "quality_gate_pass": true,
+      "output_contract": true,
+      "report_source_digests": true
+    },
+    "peak_rss_bytes": 12517195776,
+    "wall_seconds": 1788.4868071079254,
+    "memory_gate_pass": true,
+    "native_failures": [
+      "layered native acceptance failed: native quality criterion failed: local_scale_median"
+    ]
+  },
+  "comparison": {
+    "same_binary": true,
+    "same_inputs": true,
+    "density_factor": [
+      1.17578125,
+      1.1103515625
+    ],
+    "direct_pair_p95_output_px": [
+      3.0407528350068644,
+      2.892090095528086
+    ],
+    "density_status": [
+      "rejected",
+      "applied"
+    ],
+    "qg_verdict": [
+      "not_run",
+      "pass"
+    ],
+    "experiment_output_contract": true,
+    "experiment_report_source_digests": true,
+    "experiment_native_acceptance": false,
+    "experiment_native_failure": "local_scale_median",
+    "memory_gate": [
+      true,
+      true
+    ]
+  },
+  "decision": "reject_promotion: shared station15_17 correction makes output density and QG pass, but native acceptance still rejects local_scale_median; no production pose/density/threshold change",
+  "next_step": "do not widen station set or rescan factors; keep task16 at diagnosis unless a separate local_scale native hypothesis is written"
+}

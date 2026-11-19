@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_station15_17_shared_jacobian_bounded_brief_v1",
+  "production_impact": "test_only_shared_station_pose_scale_no_production_pose_or_density_change",
+  "evidence": {
+    "probe_audit": "docs/benchmarks/task-16-density-probe-audit.json",
+    "low_scale_cluster": [
+      15,
+      16,
+      17
+    ],
+    "minimum_scales": {
+      "station17": 0.8504955088348075,
+      "station16": 0.8600201821267027,
+      "station15": 0.8829276427406587
+    },
+    "next_worst_after_cluster": {
+      "station": 11,
+      "source_id": 32,
+      "minimum_scale": 0.900786511241952
+    }
+  },
+  "hypothesis": {
+    "name": "contiguous_station15_17_shared_isotropic_jacobian_underestimate",
+    "station_indices": [
+      15,
+      16,
+      17
+    ],
+    "shared_factor": 1.1767578125,
+    "center_preserving": true,
+    "test_env": "RAW_EDITOR_TEST_STATION_JACOBIAN_SCALE=15,16,17:1.1767578125"
+  },
+  "predicted_feasibility": {
+    "base_direct_pair_p95_px": 2.6046616163770975,
+    "predicted_next_factor": 1.1103515625,
+    "predicted_next_direct_pair_p95_px": 2.892090095528086,
+    "direct_pair_limit_px": 3.0,
+    "theoretical_gate_margin_px": 0.1079099044719138
+  },
+  "controls": {
+    "same_binary": true,
+    "same_inputs": true,
+    "same_reference": true,
+    "all_existing_qg_and_source_contracts_remain": true
+  },
+  "decision": "run_control_and_experiment: unlike station17-only, the shared station15_17 cluster has a predicted direct-pair margin under the unchanged 3px gate; promotion remains forbidden unless geometry, closure, density, owner, source contract and QG all pass",
+  "next_step": "freeze test binary with hook, run Mayuan2 scale=0.25 control and experiment under exclusive slot"
+}

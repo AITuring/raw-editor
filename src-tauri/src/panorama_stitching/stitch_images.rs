@@ -174,11 +174,68 @@ fn apply_test_geometry_sensitivity(
     }
 }
 
+/// Test-only shared station Jacobian correction. The syntax is
+/// `station,station,...:factor`; each listed station is scaled around its
+/// tile centre while preserving the centre world position.
+#[cfg(test)]
+fn apply_test_station_jacobian_scale(
+    tile_infos: &[ImageInfo],
+    homographies: &mut HashMap<usize, Matrix3<f64>>,
+) {
+    let Some(spec) = std::env::var("RAW_EDITOR_TEST_STATION_JACOBIAN_SCALE").ok() else {
+        return;
+    };
+    let Some((stations, factor_text)) = spec.split_once(':') else {
+        return;
+    };
+    let Ok(factor) = factor_text.parse::<f64>() else {
+        return;
+    };
+    if !(factor.is_finite() && factor > 0.0 && factor != 1.0) {
+        return;
+    }
+    for station_text in stations.split(',') {
+        let Ok(station) = station_text.parse::<usize>() else {
+            continue;
+        };
+        let Some(info) = tile_infos.get(station) else {
+            continue;
+        };
+        let center_x = f64::from(info.width) * 0.5;
+        let center_y = f64::from(info.height) * 0.5;
+        let around_center = Matrix3::new(
+            factor,
+            0.0,
+            center_x * (1.0 - factor),
+            0.0,
+            factor,
+            center_y * (1.0 - factor),
+            0.0,
+            0.0,
+            1.0,
+        );
+        if let Some(pose) = homographies.get_mut(&info.id) {
+            *pose *= around_center;
+            println!(
+                "  - TEST_STATION_JACOBIAN_SCALE station={} tile_id={} factor={factor}",
+                station, info.id
+            );
+        }
+    }
+}
+
 #[cfg(not(test))]
 fn apply_test_geometry_sensitivity(
     _tile_infos: &[ImageInfo],
     _tile_group_indices: &HashMap<usize, usize>,
     _group_slices: &[&[&ImageInfo]],
+    _homographies: &mut HashMap<usize, Matrix3<f64>>,
+) {
+}
+
+#[cfg(not(test))]
+fn apply_test_station_jacobian_scale(
+    _tile_infos: &[ImageInfo],
     _homographies: &mut HashMap<usize, Matrix3<f64>>,
 ) {
 }
@@ -3421,6 +3478,8 @@ fn stitch_images_attempt<R: Runtime>(
                     // sampling and direct correspondence units remain unchanged.
                     // A nonidentity world residual needs a coordinate adapter;
                     // until that is available, explicitly bypass this path.
+                    #[cfg(test)]
+                    apply_test_station_jacobian_scale(&tile_infos, &mut tile_homographies);
                     #[cfg(test)]
                     if std::env::var("RAW_EDITOR_TEST_MODE").as_deref()
                         == Ok("density_diagnostics")

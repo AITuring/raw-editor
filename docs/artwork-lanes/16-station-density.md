@@ -35,6 +35,24 @@ source33 与 source34 在 station17 同时出现约 `0.85–0.89` 的 world-per-
 
 机器 brief：[task-16-station17-brief.json](../benchmarks/task-16-station17-brief.json)。决定：**不启动 station17-only 的控制组/实验组**；若要继续，必须另写包含 station16/15 的多站点假设，不能把它混进当前单变量 brief。
 
+## station 15–17 shared Jacobian bounded brief
+
+probe 的低尺度组连续落在 station15/16/17：minimum 分别为 `0.8829276`、`0.8600202`、`0.8504955`。因此下一实验定义为一个共享变量：对这三个 station 的 `tile_to_world` 在各自中心保持位置、统一乘 isotropic factor `1.1767578125`；不改变 source sampling、relation 阈值、density 公式或 3px 门。环境变量为 `RAW_EDITOR_TEST_STATION_JACOBIAN_SCALE=15,16,17:1.1767578125`。
+
+若该三站簇是共同的 Jacobian 低估，下一最坏组预计转到 station11/source32，量化 factor `1.1103516`，direct P95 预计 `2.8920901px`，理论上留出 `0.10791px` 的 3px 余量。因此这次**值得**做同 binary、同输入的 control/experiment；最终仍必须通过 closure、density、owner、source contract 和完整 QG，不能由理论预测授予通过。
+
+机器 brief：[task-16-station15-17-brief.json](../benchmarks/task-16-station15-17-brief.json)。
+
+## station 15–17 shared Jacobian A/B 结果
+
+使用同一 `task-16-station15-17-jacobian-r1` binary、同一 47 张输入和同一 exclusive 合同完成 control/experiment。实验 marker 确认 station15/16/17 均施加 factor `1.1767578125`。
+
+- control：density factor `1.17578125`，direct P95 `3.0407528px`，output-density rejected，QG 未运行。
+- experiment：density factor `1.1103515625`，最坏转为 station11/source32，direct P95 `2.8920901px`；output-density applied、QG pass、TIFF/来源合同/内存门通过。
+- 但 experiment 的 native acceptance 仍因 `local_scale_median` 拒绝（该 criterion 在 QG 中仍是 diagnostic/not_applicable），因此没有达到 D2/D3。实验峰值 RSS `12,517,195,776B`，实验输出 SHA `6dd5b883…`。
+
+机器摘要：[task-16-station15-17-jacobian-ab.json](../benchmarks/task-16-station15-17-jacobian-ab.json)。结论：shared Jacobian 修正只证明可以越过 output-density/QG 表面门，不能推广到生产；不扩大 station 集合、不继续扫 factor，回到 local-scale native 根因诊断。
+
 ## 下一步 bounded brief
 
-若继续运行，只能固定一个 station/source density 假设，先在同一 scale=0.25 范围保留原 density 证据，比较基础 closure、输出格 closure、最坏探针、relation/support、来源合同和 memory gate。当前 probe 已足以锁定最坏组；下一步应针对 station 17 的单一 source/Jacobian 假设写 brief，再决定是否值得 A/B。控制组与实验组必须使用同一冻结 binary 和输入摘要；任何实验仍需经过原有 output-pixel closure 门。0.25 结果不能外推原生 D2/D3。
+若继续运行，控制组和实验组必须使用同一冻结 binary 与输入摘要；任何实验仍需经过原有 output-pixel closure 门。0.25 结果不能外推原生 D2/D3。
