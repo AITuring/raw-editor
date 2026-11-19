@@ -1,0 +1,296 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_native_scale1_boundary_repair_owner_export_ab_v1",
+  "production_impact": "test_only_strict_boundary_repair_and_owner_coordinate_export_no_production_change",
+  "dataset": "mayuan-2",
+  "scale": 1.0,
+  "binary": "task-16-native-owner-export-boundary-r1",
+  "binary_sha256": "ccb4f615f945faca0ffd60c243e19bc4c66bdb971a030f3ff6392451df2ccaca",
+  "commit": "ded79864c12a5b7001e7b0e8558d4c94b5a77e25",
+  "inputs_sha256": "4e39ee193f336801a7918307307f8c9ba7d6c9490fb105678c3b4a112663294f",
+  "manifest_sha256": "449224e8c2726a5c2732375641dd40c190f6e87f593cff2b7797d0b66add482f",
+  "runner_sha256": "443ed48a26ddef9f26f827ea81f27798c2cec50dea55d8ef55310f8ecb780317",
+  "control_reference": "docs/benchmarks/task-16-native-scale1-control.json",
+  "experiment": {
+    "label": "mayuan-2-s1-task-16-mayuan-2-native-boundary-repair-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-boundary-repair-r1",
+    "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-boundary-repair-r1/analysis.json",
+    "execution": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-boundary-repair-r1/execution.json",
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-boundary-repair-r1/run/mayuan-2-s1-task-16-mayuan-2-native-boundary-repair-r1-stack-reports/stack-report-65aed58c-8bd0-486e-94df-27c0856dfab5.json",
+    "report_sha256": "92296b6a8edae06efd3b1626ab0edc3233c610aa79737b94082cd1c999349d69",
+    "env": {
+      "RAW_EDITOR_FOCUS_BOUNDARY_REPAIR": "1",
+      "RAW_EDITOR_FOCUS_OWNER_UNRESOLVED_DIR": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-boundary-repair-r1/owner-unresolved"
+    }
+  },
+  "status": "rejected",
+  "exit": {
+    "runner_exit_code": 1,
+    "native_child_exit_code": 101,
+    "runner_verdict": "failed",
+    "runner_failures": [
+      "layered native acceptance failed: native output did not pass the complete quality gate",
+      "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+    ]
+  },
+  "checks": {
+    "inputs_unchanged": true,
+    "reference_unchanged": true,
+    "binary_unchanged": true,
+    "memory_gate_pass": true,
+    "runner_exit_zero": false,
+    "native_child_exit_zero": false,
+    "runner_summary_present": true,
+    "runner_failures_empty": false,
+    "quality_gate_pass": false,
+    "output_contract": true,
+    "report_source_digests": true
+  },
+  "quality_gate": {
+    "verdict": "insufficient_evidence",
+    "roi_count": 8,
+    "criteria": {
+      "local_scale_median": {
+        "verdict": "pass",
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {}
+      },
+      "local_scale_pixel_ratio": {
+        "verdict": "pass",
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {}
+      },
+      "effective_pixel_count": {
+        "verdict": "insufficient_evidence",
+        "measurable_count": 0,
+        "unmeasurable_count": 1,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "technical_unmeasurable_count": 1,
+        "unmeasurable_reasons": {
+          "quality_gate_insufficient_evidence": 1
+        },
+        "failed": [],
+        "rejected_content_reasons": {}
+      },
+      "mtf50_normalized": {
+        "verdict": "not_applicable",
+        "measurable_count": 0,
+        "unmeasurable_count": 0,
+        "candidate_count": 512,
+        "eligible_count": 0,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {
+          "slanted_edge_angle_out_of_range": 194,
+          "slanted_edge_contrast_insufficient": 20,
+          "slanted_edge_line_fit_residual_exceeded": 7,
+          "slanted_edge_too_short": 291
+        }
+      },
+      "gradient_energy_normalized": {
+        "verdict": "pass",
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {}
+      },
+      "noise_sigma_ratio": {
+        "verdict": "pass",
+        "measurable_count": 24,
+        "unmeasurable_count": 0,
+        "candidate_count": 26,
+        "eligible_count": 24,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {
+          "roi_not_flat": 2
+        }
+      },
+      "roi_delta_e00": {
+        "verdict": "pass",
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {}
+      },
+      "boundary_stroke_alignment": {
+        "verdict": "not_applicable",
+        "measurable_count": 2,
+        "unmeasurable_count": 0,
+        "candidate_count": 1387,
+        "eligible_count": 2,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {
+          "boundary_low_contrast": 1385
+        }
+      },
+      "owner_sharpness_coverage": {
+        "verdict": "insufficient_evidence",
+        "measurable_count": 1,
+        "unmeasurable_count": 163,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "technical_unmeasurable_count": 163,
+        "unmeasurable_reasons": {
+          "owner_reverse_lookup_unresolved": 163
+        },
+        "failed": [],
+        "rejected_content_reasons": {}
+      }
+    },
+    "non_pass": [
+      "effective_pixel_count:insufficient_evidence",
+      "mtf50_normalized:not_applicable",
+      "boundary_stroke_alignment:not_applicable",
+      "owner_sharpness_coverage:insufficient_evidence"
+    ],
+    "detail_repairs": 0
+  },
+  "boundary_repair": {
+    "baseline_world": {
+      "x": 699.0,
+      "y": 3621.5
+    },
+    "baseline_error_px": 3.0,
+    "repaired_error_px": 0.0,
+    "strict_improvement": true,
+    "log_markers": [
+      "Boundary repair baseline owners=10/4 world=(699.0,3621.5) offsets=1.0/-2.0 pixels=(1657, 3621)/(1660, 3629) error=3.000",
+      "Boundary source resample: owners=10/4 world=(699.0,3621.5) error 3.000->0.000 pixels=417"
+    ],
+    "qg_verdict": "not_applicable",
+    "decision": "local metric improved, but native gate still rejects because boundary became not_applicable and other evidence gates remain"
+  },
+  "owner_unresolved_export": {
+    "record_count": 163,
+    "reason_counts": {
+      "raw_owner_unresolved": 163
+    },
+    "station_counts": {
+      "13": 124,
+      "14": 39
+    },
+    "bbox_by_station": {
+      "13": {
+        "count": 124,
+        "local_x": [
+          2188.644613339243,
+          3496.359995729433
+        ],
+        "local_y": [
+          5252.8101370971235,
+          5471.695120473606
+        ],
+        "mask": {
+          "height": 5519,
+          "width": 8292
+        }
+      },
+      "14": {
+        "count": 39,
+        "local_x": [
+          2135.68785711983,
+          6683.988470820527
+        ],
+        "local_y": [
+          5234.350113661076,
+          5448.852685444309
+        ],
+        "mask": {
+          "height": 5514,
+          "width": 8401
+        }
+      }
+    },
+    "files": [
+      "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-boundary-repair-r1/owner-unresolved/station-013.json",
+      "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-boundary-repair-r1/owner-unresolved/station-014.json"
+    ]
+  },
+  "density": {
+    "status": "bypassed",
+    "factor": 1.0,
+    "pixel_count_multiplier": 1.0,
+    "canvas_pixels": 153231600,
+    "output_plane_lower_bound_bytes": 2758168800,
+    "target_minimum_scale": 1.0,
+    "probe_step_px": 32,
+    "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+    "source_count": 42,
+    "sample_count": 0,
+    "invalid_probe_count": 394,
+    "boundary_probe_count": 37446,
+    "worst_station_index": null,
+    "worst_source_id": null,
+    "worst_station_point": null,
+    "direct_pair_p95_output_px": null,
+    "residual_median_output_px": null,
+    "max_corner_correction_output_px": null,
+    "minimum_scale": null,
+    "p01_scale": null,
+    "median_scale": null,
+    "bypass_reason": "nonidentity_world_residual"
+  },
+  "closure": {
+    "status": "converged",
+    "native_joint_before_prune": {
+      "relation_count": 111,
+      "matrix_direct_pair_p95_px": 155.82331418433606,
+      "accepted": true
+    }
+  },
+  "output": {
+    "alpha_preserved": true,
+    "artifact_validation": "pass",
+    "artifact_validation_error": null,
+    "bit_depth": 16,
+    "format": "TIFF",
+    "height": 11019,
+    "icc": "sRGB",
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-boundary-repair-r1/run/mayuan-2-s1-task-16-mayuan-2-native-boundary-repair-r1.tiff",
+    "preview": {
+      "path": "",
+      "max_roi_delta_e": 0.0
+    },
+    "result_id": "native-fixture-65aed58c-8bd0-486e-94df-27c0856dfab5",
+    "tiff_extra_samples": [
+      2
+    ],
+    "width": 13299,
+    "written": true
+  },
+  "resources": {
+    "peak_rss_bytes": 13733298176,
+    "memory_threshold_bytes": 25769803776,
+    "memory_gate_pass": true,
+    "wall_seconds": 9881.34130692482
+  },
+  "decision": "boundary_strict_repair_reduced the measured seam error from 3px to 0px but did not produce native acceptance; owner unresolved remained 163 and density remained bypassed. Do not repeat boundary repair or start Jacobian experiment.",
+  "next_step": "test-only configurable 5x5 owner stencil A/B is justified by the unresolved bottom-station cluster; if unresolved does not drop to zero without new failures, stop and retain owner/density blockers."
+}

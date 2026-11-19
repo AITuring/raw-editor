@@ -81,3 +81,11 @@ probe 的低尺度组连续落在 station15/16/17：minimum 分别为 `0.8829276
 - report 保留 `493` 条 degradation：`station_relation_scale_out_of_range=35`、`intra_station_rejected_from_group=79`、`fusion_single_frame_degraded=33`，并有 5 个 topology ambiguous station。该结果不支持直接运行 station15–17 Jacobian experiment，也不推广到生产。
 
 机器摘要：[task-16-native-scale1-control.json](../benchmarks/task-16-native-scale1-control.json)；完整 analysis、Stack_Report 和 TIFF 位于 run directory。bounded 假设与实验合同见 [task-16-native-root-cause-brief.json](../benchmarks/task-16-native-root-cause-brief.json)。当前只运行一次严格 boundary repair A/B 并导出 unresolved 坐标；density bypass 的 residual-aware diagnostic brief 见 [task-16-residual-aware-density-brief.json](../benchmarks/task-16-residual-aware-density-brief.json)。density 仍单独保留，除非出现独立、可证伪的假设，否则不再扫描 Jacobian factor。
+
+## strict boundary repair A/B 与 unresolved 坐标结果
+
+使用新冻结的 test-only binary、同一 47 张输入和 scale=1 完成一次 A/B。`RAW_EDITOR_FOCUS_BOUNDARY_REPAIR=1` 将唯一可测 seam 的误差从 `3.000px` 严格降到 `0.000px`，日志记录了同一 owner pair 和重采样像素；但完整 native gate 仍为 `insufficient_evidence/rejected`，boundary criterion 变成 `not_applicable`，owner unresolved 仍为 `163`，density 仍因 `nonidentity_world_residual` bypass。因此不重复 boundary repair，也不启动 Jacobian factor 实验。
+
+test-only `RAW_EDITOR_FOCUS_OWNER_UNRESOLVED_DIR` 导出的 163 点全部是 `raw_owner_unresolved`，集中在 station13（124 点，local y=`5252.81–5471.70`）和 station14（39 点，local y=`5234.35–5448.85`）的下部区域；其余 transform/out-of-bounds/station/evidence 计数均为零。这个空间聚类支持一次可证伪的 5×5 owner-stencil A/B，但不能预先假定它会通过 owner gate。
+
+机器摘要：[task-16-native-boundary-repair-owner-export-ab.json](../benchmarks/task-16-native-boundary-repair-owner-export-ab.json)；原始坐标文件在该 run directory 的 `owner-unresolved/`。下一步只做一次可配置 5×5 stencil test-only A/B；若 unresolved 不降为零或引入新失败，则停止 owner fallback，保留 density residual-aware brief。
