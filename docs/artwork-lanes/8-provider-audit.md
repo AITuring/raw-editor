@@ -28,4 +28,4 @@
 - 0→2：SIFT `61` / P95 `1.892px`，AKAZE `5` / `1.370px`，ECC `0.144`；Rust 为 `64` / `1.260px`。
 - 1→2：SIFT `1364` / P95 `1.626px`，AKAZE `36` / `1.100px`，ECC `0.616`；Rust 为 `583` / `0.998px`。
 
-这些是 provider candidate metrics，不是 Stack_Report、QG 或 D2/D3 结果；候选没有通过 Rust sidecar 边界重新提交，也没有写入 pose、阈值或生产默认。ONNX Runtime 运行时已安装，但 LightGlue/DISK/ALIKED 权重和 sidecar 仍缺失；RoMa 仍不可用。候选脚本用同一参数重放后，三组 SIFT/AKAZE/ECC 指标逐字段一致。因此任务8仍保持未勾选，下一步需要固定 learned-provider 权重、许可证和 sidecar schema 后，才能把完整 PF.10 对照接入 Rust 几何门。
+这些是 provider candidate metrics，不是 Stack_Report、QG 或 D2/D3 结果；候选没有通过 Rust sidecar 边界重新提交，也没有写入 pose、阈值或生产默认。ONNX Runtime 运行时已安装，但 LightGlue/DISK/ALIKED 权重和 sidecar 仍缺失；固定索引没有 `lightglue` PyPI distribution，`kornia 0.9.2` 也不满足本项目的 ONNX sidecar 合同；RoMa 仍不可用。候选脚本用同一参数重放后，三组 SIFT/AKAZE/ECC 指标逐字段一致。因此任务8仍保持未勾选，下一步需要固定 learned-provider 权重、许可证和 sidecar schema 后，才能把完整 PF.10 对照接入 Rust 几何门。
