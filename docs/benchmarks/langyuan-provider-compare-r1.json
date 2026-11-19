@@ -1,0 +1,240 @@
+{
+  "schema": 1,
+  "method": "langyuan_provider_candidate_compare_v1",
+  "production_impact": "test_only_candidate_metrics_no_pose_write_no_stack_report_or_qg_change",
+  "planes": "output/acceptance/langyuan-v44-joint-field/candidate-repeat/langyuan-10/planes",
+  "joint": "output/acceptance/langyuan-v44-joint-field/candidate-repeat/langyuan-10/planes/joint-production-input.json",
+  "long_side": 2048,
+  "opencv_version": "4.12.0",
+  "numpy_version": "2.2.6",
+  "providers": [
+    "sift",
+    "akaze",
+    "ecc"
+  ],
+  "records": [
+    {
+      "left": 0,
+      "right": 1,
+      "sift": {
+        "status": "ok",
+        "keypoints": [
+          12000,
+          12000
+        ],
+        "matches": 769,
+        "inliers": 707,
+        "median_reprojection_px": 0.6334130453752745,
+        "p95_reprojection_px": 1.5118519751538415,
+        "hull_support": 0.3051021198226006,
+        "homography": [
+          1.1172372889006146,
+          0.021536466651728207,
+          -66.30022155017484,
+          -0.009079087804780556,
+          1.1131487261085262,
+          -860.4044944111134,
+          -9.018535392404699e-06,
+          1.5699812293341467e-05,
+          1.0
+        ]
+      },
+      "akaze": {
+        "status": "ok",
+        "keypoints": [
+          189,
+          99
+        ],
+        "matches": 29,
+        "inliers": 12,
+        "median_reprojection_px": 0.4710897921096888,
+        "p95_reprojection_px": 1.2786542638459406,
+        "hull_support": 0.00040730075751512125,
+        "homography": [
+          -5.592163883722986,
+          -0.8417769565152117,
+          5427.863671164269,
+          -0.6031628455466974,
+          -2.778763701893998,
+          3125.0798790824597,
+          -0.0018755653680832473,
+          -0.0005227900111578421,
+          1.0
+        ]
+      },
+      "ecc": {
+        "status": "ok",
+        "correlation": 0.6371838624316956,
+        "refinement": [
+          0.9520483613014221,
+          -0.0704018846154213,
+          -5.533478736877441,
+          -0.2033049464225769,
+          0.798706591129303,
+          252.58767700195312,
+          -2.8675267458311282e-05,
+          -4.57372771052178e-05,
+          1.0
+        ]
+      },
+      "rust_saved_record": {
+        "left": 0,
+        "right": 1,
+        "inliers": 143,
+        "error": 1.1162734323920767,
+        "diagnostic": {
+          "hull_support": 0.3379283762609993
+        }
+      }
+    },
+    {
+      "left": 0,
+      "right": 2,
+      "sift": {
+        "status": "ok",
+        "keypoints": [
+          12000,
+          12000
+        ],
+        "matches": 134,
+        "inliers": 61,
+        "median_reprojection_px": 0.6093775046549722,
+        "p95_reprojection_px": 1.8919105245982561,
+        "hull_support": 0.015830373666596172,
+        "homography": [
+          1.258582528260282,
+          0.09000555857409284,
+          -247.1729137873232,
+          -0.04691238298413724,
+          1.2371042986688459,
+          -1545.1441005393099,
+          -1.0376857688460068e-05,
+          3.306238295940906e-05,
+          0.9999999999999999
+        ]
+      },
+      "akaze": {
+        "status": "ok",
+        "keypoints": [
+          189,
+          194
+        ],
+        "matches": 18,
+        "inliers": 5,
+        "median_reprojection_px": 0.00017298903628820377,
+        "p95_reprojection_px": 1.37043233145562,
+        "hull_support": 0.3804705155206902,
+        "homography": [
+          0.046833745102961455,
+          -0.20546329850674996,
+          15.437083989762229,
+          -0.3244294072968541,
+          -0.25198852626968793,
+          131.34778806852384,
+          0.000792810095006471,
+          -0.005149597494275737,
+          1.0
+        ]
+      },
+      "ecc": {
+        "status": "ok",
+        "correlation": 0.14388789610179417,
+        "refinement": [
+          5.174022674560547,
+          -11.386009216308594,
+          -1370.1533203125,
+          -6.632754325866699,
+          27.3740291595459,
+          2940.42138671875,
+          0.002849467797204852,
+          -0.011647524312138557,
+          1.0
+        ]
+      },
+      "rust_saved_record": {
+        "left": 0,
+        "right": 2,
+        "inliers": 64,
+        "error": 1.2600017949752624,
+        "diagnostic": {
+          "hull_support": 0.3612926093269467
+        }
+      }
+    },
+    {
+      "left": 1,
+      "right": 2,
+      "sift": {
+        "status": "ok",
+        "keypoints": [
+          12000,
+          12000
+        ],
+        "matches": 1492,
+        "inliers": 1364,
+        "median_reprojection_px": 0.6739329452485213,
+        "p95_reprojection_px": 1.6257761032815117,
+        "hull_support": 0.426382091922182,
+        "homography": [
+          1.1064704868215018,
+          0.04065926468025532,
+          -105.62799001975468,
+          -0.035460288623817726,
+          1.1004394441934322,
+          -574.6826517870243,
+          -1.2468712434415132e-06,
+          1.0099727809781133e-05,
+          1.0
+        ]
+      },
+      "akaze": {
+        "status": "ok",
+        "keypoints": [
+          99,
+          194
+        ],
+        "matches": 43,
+        "inliers": 36,
+        "median_reprojection_px": 0.35718055185055664,
+        "p95_reprojection_px": 1.0996778214076184,
+        "hull_support": 0.0820912857521365,
+        "homography": [
+          1.0986908068274397,
+          0.04364942587182511,
+          -103.8773485995724,
+          -0.03489490774269587,
+          1.097295838640042,
+          -574.2659809724009,
+          -4.255388783003382e-06,
+          1.071190862971395e-05,
+          1.0
+        ]
+      },
+      "ecc": {
+        "status": "ok",
+        "correlation": 0.6161653394394435,
+        "refinement": [
+          1.0995270013809204,
+          -0.029835011810064316,
+          -27.60930633544922,
+          -0.006760422606021166,
+          0.8643120527267456,
+          65.95040130615234,
+          4.9706864956533536e-05,
+          -2.2006228391546756e-05,
+          1.0
+        ]
+      },
+      "rust_saved_record": {
+        "left": 1,
+        "right": 2,
+        "inliers": 583,
+        "error": 0.9978976582927924,
+        "diagnostic": {
+          "hull_support": 0.3476649909956816
+        }
+      }
+    }
+  ],
+  "decision": "candidate_only; Rust geometry validation remains authoritative and was not rerun through a provider sidecar"
+}

@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "task": 8,
+  "status": "opencv_candidate_comparison_complete_learned_weights_blocked",
+  "production_impact": "test_only_candidate_metrics_no_provider_selected_no_stack_report_or_qg_change",
+  "environment": {
+    "venv": "/private/tmp/raw-editor-provider-audit-venv",
+    "python": "3.13.3",
+    "python_executable_sha256": "f6ec6ad29d65dcb9609fb93f9e9a114d8f654b020cbe8d925f7f01d3bc2ce44b",
+    "opencv_version": "4.12.0",
+    "numpy_version": "2.2.6",
+    "onnxruntime_version": "1.20.1",
+    "opencv_build_info_sha256": "3cf3c408d45443ef638b1dd47b9400b2bac11ce3b9dbceff929adf44df570969"
+  },
+  "wheels": {
+    "numpy-2.2.6-cp313-cp313-macosx_14_0_arm64.whl": "f1372f041402e37e5e633e586f62aa53de2eac8d98cbfb822806ce4bbefcb74d",
+    "opencv_python_headless-4.12.0.88-cp37-abi3-macosx_13_0_arm64.whl": "1e58d664809b3350c1123484dd441e1667cd7bed3086db1b9ea1b6f6cb20b50e",
+    "onnxruntime-1.20.1-cp313-cp313-macosx_13_0_universal2.whl": "cc01437a32d0042b606f462245c8bbae269e5442797f6213e36ce61d5abdd8cc"
+  },
+  "capabilities": {
+    "sift": true,
+    "akaze": true,
+    "ecc": true,
+    "onnxruntime_runtime": true,
+    "lightglue_disk_aliked_weights": false,
+    "roma": false
+  },
+  "candidate_comparison": {
+    "artifact": "/Users/dp/Desktop/raw-editor/docs/benchmarks/langyuan-provider-compare-r1.json",
+    "planes": "/Users/dp/Desktop/raw-editor/output/acceptance/langyuan-v44-joint-field/candidate-repeat/langyuan-10/planes",
+    "pairs": [
+      [
+        0,
+        1
+      ],
+      [
+        0,
+        2
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    "providers": [
+      "sift",
+      "akaze",
+      "ecc"
+    ],
+    "fixed_threads": 1,
+    "rust_geometry_gate_rerun": false
+  },
+  "decision": {
+    "sift_akaze_ecc_candidate_metrics": true,
+    "learned_provider_comparison": false,
+    "production_default_changed": false,
+    "qg_acceptance_claim": false,
+    "next_action": "provide pinned LightGlue/DISK or ALIKED ONNX sidecar/weights with SHA and license, then add a provider boundary runner and rerun the same three pairs through Rust geometry validation"
+  }
+}
