@@ -422,3 +422,41 @@ fn native_owner_geometry_keeps_supported_black_owner_without_rgb_fallback() {
     );
     assert_eq!(old_nearest_sample(&sources, point).unwrap().0, 1);
 }
+
+#[test]
+fn owner_stencil_radius_contract_keeps_default_3x3_and_caps_radius_two_at_25() {
+    assert_eq!(owner_stencil_radius_from(None), 1);
+    assert_eq!(owner_stencil_radius_from(Some("1")), 1);
+    assert_eq!(owner_stencil_radius_from(Some("2")), 2);
+    assert_eq!(owner_stencil_radius_from(Some("3")), 1);
+    assert_eq!(owner_stencil_radius_from(Some("invalid")), 1);
+    assert_eq!(OWNER_STENCIL_CAPACITY, 25);
+    assert_eq!((DEFAULT_OWNER_STENCIL_RADIUS * 2 + 1).pow(2), 9);
+    assert_eq!((2_i32 * 2 + 1).pow(2), OWNER_STENCIL_CAPACITY as i32);
+}
+
+#[test]
+fn owner_stencil_radius_two_can_reach_only_the_expanded_fifth_ring() {
+    let mut sources = sources(&[(8, 8, 1), (9, 8, 2), (10, 8, 3)], 3);
+    for original in &mut sources.originals[..2] {
+        original.as_mut().unwrap().refinement.translation = (40, 0);
+    }
+    let point = Point2::new(8.0, 8.0);
+    let resolve_with = |radius| {
+        resolve_native_owner_geometry_with_radius(
+            point,
+            &sources.ownership,
+            sources.origin,
+            radius,
+            |index| {
+                let original = sources.originals[index].as_ref().unwrap();
+                (&original.refinement, original.image.dimensions())
+            },
+        )
+    };
+    assert!(resolve_with(1).is_none());
+    let selected = resolve_with(2).expect("radius two should include x+2");
+    assert_eq!(selected.local_owner, 3);
+    assert_eq!(selected.evidence_pixel, (10, 8));
+    assert!(selected.used_fallback);
+}

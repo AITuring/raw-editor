@@ -25,6 +25,35 @@ struct Candidate {
     order: u8,
 }
 
+const DEFAULT_OWNER_STENCIL_RADIUS: i32 = 1;
+#[cfg(test)]
+const OWNER_STENCIL_CAPACITY: usize = 25;
+#[cfg(not(test))]
+const OWNER_STENCIL_CAPACITY: usize = 9;
+
+#[cfg(test)]
+fn owner_stencil_radius_from(value: Option<&str>) -> i32 {
+    match value.and_then(|value| value.parse::<i32>().ok()) {
+        Some(2) => 2,
+        _ => DEFAULT_OWNER_STENCIL_RADIUS,
+    }
+}
+
+fn configured_owner_stencil_radius() -> i32 {
+    #[cfg(test)]
+    {
+        owner_stencil_radius_from(
+            std::env::var("RAW_EDITOR_FOCUS_OWNER_STENCIL_RADIUS")
+                .ok()
+                .as_deref(),
+        )
+    }
+    #[cfg(not(test))]
+    {
+        DEFAULT_OWNER_STENCIL_RADIUS
+    }
+}
+
 /// Resolve the nearest geometrically supported distinct owner, preserving the
 /// original nearest-owner selection whenever it can sample the point.
 ///
@@ -37,6 +66,22 @@ pub(crate) fn resolve_native_owner_geometry<'a>(
     point: Point2<f64>,
     ownership: &OwnershipMap,
     origin: (f64, f64),
+    source: impl FnMut(usize) -> (&'a FocusSourceRefinement, (u32, u32)),
+) -> Option<NativeOwnerGeometry> {
+    resolve_native_owner_geometry_with_radius(
+        point,
+        ownership,
+        origin,
+        configured_owner_stencil_radius(),
+        source,
+    )
+}
+
+fn resolve_native_owner_geometry_with_radius<'a>(
+    point: Point2<f64>,
+    ownership: &OwnershipMap,
+    origin: (f64, f64),
+    radius: i32,
     mut source: impl FnMut(usize) -> (&'a FocusSourceRefinement, (u32, u32)),
 ) -> Option<NativeOwnerGeometry> {
     if !point.x.is_finite() || !point.y.is_finite() {
@@ -49,10 +94,11 @@ pub(crate) fn resolve_native_owner_geometry<'a>(
         pixel: (0, 0),
         distance: f64::INFINITY,
         order: 0,
-    }; 9];
+    }; OWNER_STENCIL_CAPACITY];
     let mut count = 0;
-    for dy in -1..=1 {
-        for dx in -1..=1 {
+    let side = radius * 2 + 1;
+    for dy in -radius..=radius {
+        for dx in -radius..=radius {
             let x = rounded.0 + f64::from(dx);
             let y = rounded.1 + f64::from(dy);
             if x < 0.0 || y < 0.0 || x >= f64::from(width) || y >= f64::from(height) {
@@ -68,13 +114,14 @@ pub(crate) fn resolve_native_owner_geometry<'a>(
                 owner,
                 pixel: (x as u32, y as u32),
                 distance: (x - point.x).powi(2) + (y - point.y).powi(2),
-                order: ((dy + 1) * 3 + dx + 1) as u8,
+                order: ((dy + radius) * side + dx + radius) as u8,
             };
             if let Some(existing) = candidates[..count].iter_mut().find(|c| c.owner == owner) {
                 if candidate.distance < existing.distance {
                     *existing = candidate;
                 }
             } else {
+                debug_assert!(count < OWNER_STENCIL_CAPACITY);
                 candidates[count] = candidate;
                 count += 1;
             }
