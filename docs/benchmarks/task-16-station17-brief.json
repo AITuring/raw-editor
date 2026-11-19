@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_station17_single_jacobian_bounded_brief_v1",
+  "production_impact": "test_only_read_only_feasibility_no_pose_write_no_density_override",
+  "evidence": {
+    "dataset": "mayuan-2",
+    "probe_audit": "docs/benchmarks/task-16-density-probe-audit.json",
+    "station": 17,
+    "sources": [
+      33,
+      34
+    ],
+    "source33": {
+      "minimum_scale": 0.8504955088348075,
+      "p01_scale": 0.8551131970336885,
+      "median_scale": 0.8892349191866034,
+      "minimum_point": [
+        2049.0,
+        33.0
+      ],
+      "source_per_station_at_min": [
+        [
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0
+        ]
+      ]
+    },
+    "source34": {
+      "minimum_scale": 0.8523743956492479,
+      "p01_scale": 0.8556527569846847,
+      "median_scale": 0.8895205047521272,
+      "minimum_point": [
+        2017.0,
+        33.0
+      ],
+      "source_per_station_at_min": [
+        [
+          0.9943762537602652,
+          0.005179074750003565
+        ],
+        [
+          -0.004254775207179762,
+          1.0066019013444034
+        ]
+      ]
+    },
+    "interpretation": "common low station-to-world scale across two sources; not a source33-only sampling matrix anomaly"
+  },
+  "hypothesis": {
+    "name": "station17_tile_to_world_isotropic_scale_underestimate",
+    "single_variable": "test-only station17 pose/Jacobian scale correction around its station center",
+    "required_factor_to_raise_station17_min_to_one": 1.1767578125,
+    "no_production_action": true
+  },
+  "feasibility": {
+    "base_closure_direct_pair_p95_px": 2.6046616163770975,
+    "base_density_factor": 1.1767578125,
+    "base_output_direct_pair_p95_px": 3.0650559059906275,
+    "next_worst_after_station17_min_scale": 0.8600201821267027,
+    "next_factor_quantized": 1.1630859375,
+    "predicted_direct_pair_p95_after_station17_only_px": 3.0294452979542217,
+    "direct_pair_limit_px": 3.0,
+    "single_station17_correction_can_pass_gate": false
+  },
+  "decision": "do_not_run_full_control_experiment_for_station17_only: the next station remains over the existing 3px closure gate; a meaningful pass hypothesis would require a joint station16/15 correction and is outside this single-variable brief",
+  "next_step": "if continuing task16, write a new multi-station brief with independent evidence; otherwise keep production unchanged and task16 unchecked"
+}
