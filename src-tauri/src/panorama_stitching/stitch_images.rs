@@ -3421,6 +3421,21 @@ fn stitch_images_attempt<R: Runtime>(
                     // sampling and direct correspondence units remain unchanged.
                     // A nonidentity world residual needs a coordinate adapter;
                     // until that is available, explicitly bypass this path.
+                    #[cfg(test)]
+                    if std::env::var("RAW_EDITOR_TEST_MODE").as_deref()
+                        == Ok("density_diagnostics")
+                    {
+                        if let Some(directory) =
+                            std::env::var_os("RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR")
+                        {
+                            super::output_density::write_density_diagnostics(
+                                &station_density_samples,
+                                &tile_homographies,
+                                &tile_infos.iter().map(|tile| tile.id).collect::<Vec<_>>(),
+                                &Path::new(&directory).join("density"),
+                            )?;
+                        }
+                    }
                     if compositor_choice == StackCompositorChoice::LayeredVirtualTile {
                         let mut density = super::output_density::plan_output_density(
                             &tile_infos.iter().map(|tile| tile.id).collect::<Vec<_>>(),

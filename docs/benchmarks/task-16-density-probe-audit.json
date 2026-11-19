@@ -1,0 +1,279 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_station_density_probe_audit_v1",
+  "production_impact": "test_only_read_only_probe_export_no_pose_write_no_density_override",
+  "density_dir": "output/acceptance/task-16/mayuan-2-mayuan-2-density-diagnostics-r3/diagnostics/density",
+  "stations": 18,
+  "station_source_groups": 47,
+  "probe_count": 124543,
+  "worst_groups": [
+    {
+      "station": 17,
+      "source_id": 33,
+      "probe_count": 2652,
+      "minimum_scale": 0.8504955088348075,
+      "p01_scale": 0.8551131970336885,
+      "median_scale": 0.8892349191866034,
+      "minimum_point": [
+        2049.0,
+        33.0
+      ]
+    },
+    {
+      "station": 17,
+      "source_id": 34,
+      "probe_count": 2630,
+      "minimum_scale": 0.8523743956492479,
+      "p01_scale": 0.8556527569846847,
+      "median_scale": 0.8895205047521273,
+      "minimum_point": [
+        2017.0,
+        33.0
+      ]
+    },
+    {
+      "station": 16,
+      "source_id": 46,
+      "probe_count": 2661,
+      "minimum_scale": 0.8600201821267012,
+      "p01_scale": 0.8656786055298872,
+      "median_scale": 0.875184043692999,
+      "minimum_point": [
+        353.0,
+        33.0
+      ]
+    },
+    {
+      "station": 16,
+      "source_id": 45,
+      "probe_count": 2662,
+      "minimum_scale": 0.8650793533667334,
+      "p01_scale": 0.8670210227457307,
+      "median_scale": 0.8754490660105883,
+      "minimum_point": [
+        65.0,
+        737.0
+      ]
+    },
+    {
+      "station": 16,
+      "source_id": 44,
+      "probe_count": 2665,
+      "minimum_scale": 0.8719576637976809,
+      "p01_scale": 0.8723229225687262,
+      "median_scale": 0.8755386503098169,
+      "minimum_point": [
+        2017.0,
+        65.0
+      ]
+    },
+    {
+      "station": 15,
+      "source_id": 36,
+      "probe_count": 2651,
+      "minimum_scale": 0.8829276427406612,
+      "p01_scale": 0.8852445454366442,
+      "median_scale": 0.9017675144688503,
+      "minimum_point": [
+        2017.0,
+        193.0
+      ]
+    },
+    {
+      "station": 15,
+      "source_id": 35,
+      "probe_count": 2672,
+      "minimum_scale": 0.8902351179466372,
+      "p01_scale": 0.8914536423542155,
+      "median_scale": 0.902637557883142,
+      "minimum_point": [
+        2049.0,
+        97.0
+      ]
+    },
+    {
+      "station": 11,
+      "source_id": 32,
+      "probe_count": 2646,
+      "minimum_scale": 0.9007865112418382,
+      "p01_scale": 0.9082829969698373,
+      "median_scale": 0.9391403109480485,
+      "minimum_point": [
+        1889.0,
+        385.0
+      ]
+    },
+    {
+      "station": 11,
+      "source_id": 31,
+      "probe_count": 2650,
+      "minimum_scale": 0.904611066106466,
+      "p01_scale": 0.9088568967214127,
+      "median_scale": 0.9396069410425508,
+      "minimum_point": [
+        1985.0,
+        65.0
+      ]
+    },
+    {
+      "station": 9,
+      "source_id": 43,
+      "probe_count": 2648,
+      "minimum_scale": 0.904825011801427,
+      "p01_scale": 0.9153729318698149,
+      "median_scale": 0.9222071604515806,
+      "minimum_point": [
+        97.0,
+        33.0
+      ]
+    },
+    {
+      "station": 11,
+      "source_id": 30,
+      "probe_count": 2657,
+      "minimum_scale": 0.9136761492228493,
+      "p01_scale": 0.916439029996664,
+      "median_scale": 0.9400818501256525,
+      "minimum_point": [
+        2049.0,
+        97.0
+      ]
+    },
+    {
+      "station": 9,
+      "source_id": 42,
+      "probe_count": 2653,
+      "minimum_scale": 0.920850242900018,
+      "p01_scale": 0.9209804510564573,
+      "median_scale": 0.9221011603426854,
+      "minimum_point": [
+        129.0,
+        33.0
+      ]
+    },
+    {
+      "station": 7,
+      "source_id": 38,
+      "probe_count": 2646,
+      "minimum_scale": 0.9363653711667788,
+      "p01_scale": 0.9429961498788001,
+      "median_scale": 0.9575046951108782,
+      "minimum_point": [
+        1985.0,
+        65.0
+      ]
+    },
+    {
+      "station": 7,
+      "source_id": 37,
+      "probe_count": 2649,
+      "minimum_scale": 0.9573758102295756,
+      "p01_scale": 0.957693914013157,
+      "median_scale": 0.9598081314239777,
+      "minimum_point": [
+        65.0,
+        97.0
+      ]
+    },
+    {
+      "station": 0,
+      "source_id": 40,
+      "probe_count": 2647,
+      "minimum_scale": 0.9709537702848485,
+      "p01_scale": 0.9811486524697799,
+      "median_scale": 0.998042567466261,
+      "minimum_point": [
+        257.0,
+        1313.0
+      ]
+    },
+    {
+      "station": 0,
+      "source_id": 41,
+      "probe_count": 2621,
+      "minimum_scale": 0.972892654262913,
+      "p01_scale": 0.983204672862047,
+      "median_scale": 0.9967664861701063,
+      "minimum_point": [
+        129.0,
+        1281.0
+      ]
+    },
+    {
+      "station": 6,
+      "source_id": 29,
+      "probe_count": 2651,
+      "minimum_scale": 0.9758947633552817,
+      "p01_scale": 0.9844634963166373,
+      "median_scale": 1.0145144901037795,
+      "minimum_point": [
+        2049.0,
+        129.0
+      ]
+    },
+    {
+      "station": 5,
+      "source_id": 28,
+      "probe_count": 2674,
+      "minimum_scale": 0.9823522148203748,
+      "p01_scale": 0.9892832439430217,
+      "median_scale": 1.0150294710094523,
+      "minimum_point": [
+        2049.0,
+        65.0
+      ]
+    },
+    {
+      "station": 6,
+      "source_id": 25,
+      "probe_count": 2649,
+      "minimum_scale": 0.9883476096645462,
+      "p01_scale": 0.9915305762564219,
+      "median_scale": 1.0144937454346528,
+      "minimum_point": [
+        2049.0,
+        65.0
+      ]
+    },
+    {
+      "station": 6,
+      "source_id": 26,
+      "probe_count": 2659,
+      "minimum_scale": 0.9891058526745814,
+      "p01_scale": 0.9939168461883817,
+      "median_scale": 1.015413542127071,
+      "minimum_point": [
+        2017.0,
+        65.0
+      ]
+    }
+  ],
+  "decision": "station/source Jacobian evidence agrees with the rejected output-density report; no factor override is justified",
+  "run": {
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-density-diagnostics-r3",
+    "execution": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-density-diagnostics-r3/execution.json",
+    "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-density-diagnostics-r3/analysis.json",
+    "binary": "task-16-density-diagnostics-r3",
+    "binary_sha256": "a078ce4b3e7e5a5ce87034a792ace59ad16ba8ba4622a99ba308f68086020492",
+    "inputs_sha256": "4e39ee193f336801a7918307307f8c9ba7d6c9490fb105678c3b4a112663294f",
+    "exit_code": 1,
+    "status": "rejected",
+    "qg_verdict": "not_run",
+    "closure": "converged",
+    "peak_rss_bytes": 11102814208,
+    "wall_seconds": 640.8294548988342,
+    "memory_gate_pass": true
+  },
+  "reported_output_density": {
+    "factor": 1.1767578125,
+    "direct_pair_p95_output_px": 3.0650559059906275,
+    "minimum_scale": 0.8504955088348083,
+    "worst_station_index": 17,
+    "worst_source_id": 33,
+    "worst_station_point": [
+      2049.0,
+      33.0
+    ]
+  }
+}

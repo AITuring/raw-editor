@@ -1,6 +1,6 @@
 # 任务16：马远2 / 睡觉输出密度与闭环诊断
 
-- 更新：2026-11-19；状态：**unit-contract 审计完成，单变量重跑尚未开始**。
+- 更新：2026-11-19；状态：**unit-contract 与 station/source probe 审计完成，单变量 factor A/B 尚未开始**。
 - 范围：马远2 47 张、睡觉 45 张，沿用 `base-2026-11-12`、scale=0.25 的任务5诊断；不改 pose、density 公式、3px 门限、输入 manifest 或历史基线。
 - 依赖：任务5.1、5.2；与任务13/14/15冲突。任务15未触发，因为两套运行均正常结束且峰值约12–13GiB，低于24GiB内存门。
 
@@ -19,6 +19,14 @@
 
 这只是公式审计，不是成片或原生验收；不能通过截断 factor、跳过 density、放宽 3px 或绕过 closure 来制造通过。
 
+## 马远2 station/source probe 导出（r3）
+
+在同一 scale=0.25、`task-16-density-diagnostics-r3` test binary 下，导出了 18 个 station、47 个 station/source 组、124,543 个 native density probes，并同时保存 station→world pose。运行仍因原有 output-pixel closure 拒绝，QG 未运行；内存门通过，峰值 RSS `11,102,814,208B`。
+
+probe 复算与报告一致：最坏组为 station `17` / source `33`，point `[2049,33]`，minimum world-per-source scale `0.8504955088`，p01 `0.8551132`，median `0.8892349`。下一个组 station `17` / source `34` 的 minimum 为 `0.8523744`。这证明当前 factor 来自真实 station→world 与 source→station Jacobian 采样，不能用记录格式或闭环单位错误解释。
+
+机器摘要：[task-16-density-probe-audit.json](../benchmarks/task-16-density-probe-audit.json)；原始 test-only probe 目录位于 `/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-density-diagnostics-r3/diagnostics/density`。
+
 ## 下一步 bounded brief
 
-若继续运行，只能固定一个 station/source density 假设，先在同一 scale=0.25 范围保留原 density 证据，比较基础 closure、输出格 closure、最坏探针、relation/support、来源合同和 memory gate。控制组与实验组必须使用同一冻结 binary 和输入摘要；任何实验仍需经过原有 output-pixel closure 门。0.25 结果不能外推原生 D2/D3。
+若继续运行，只能固定一个 station/source density 假设，先在同一 scale=0.25 范围保留原 density 证据，比较基础 closure、输出格 closure、最坏探针、relation/support、来源合同和 memory gate。当前 probe 已足以锁定最坏组；下一步应针对 station 17 的单一 source/Jacobian 假设写 brief，再决定是否值得 A/B。控制组与实验组必须使用同一冻结 binary 和输入摘要；任何实验仍需经过原有 output-pixel closure 门。0.25 结果不能外推原生 D2/D3。

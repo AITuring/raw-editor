@@ -28,6 +28,74 @@ pub(super) struct StationDensitySamples {
     boundary_probes: usize,
 }
 
+/// Test-only export of the native density evidence used by the output-lattice
+/// planner. It is intentionally opt-in and never changes the production path.
+#[cfg(test)]
+pub(super) fn write_density_diagnostics(
+    samples: &[StationDensitySamples],
+    station_poses: &HashMap<usize, Matrix3<f64>>,
+    station_ids: &[usize],
+    directory: &Path,
+) -> Result<(), String> {
+    std::fs::create_dir_all(directory).map_err(|error| error.to_string())?;
+    let summary = samples
+        .iter()
+        .enumerate()
+        .map(|(station, evidence)| {
+            let tile_id = station_ids.get(station).copied();
+            serde_json::json!({
+                "station": station,
+                "tile_id": tile_id,
+                "station_to_world": tile_id.and_then(|id| station_poses.get(&id)).map(|pose| pose.as_slice().to_vec()),
+                "source_count": evidence.source_count,
+                "sample_count": evidence.samples.len(),
+                "unresolved_sources": evidence.unresolved_sources,
+                "invalid_probes": evidence.invalid_probes,
+                "boundary_probes": evidence.boundary_probes,
+            })
+        })
+        .collect::<Vec<_>>();
+    std::fs::write(
+        directory.join("summary.json"),
+        serde_json::to_vec_pretty(&summary).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    for (station, evidence) in samples.iter().enumerate() {
+        let tile_id = station_ids.get(station).copied();
+        let probes = evidence
+            .samples
+            .iter()
+            .map(|sample| {
+                serde_json::json!({
+                    "source_id": sample.source_id,
+                    "point": [sample.point.x, sample.point.y],
+                    "source_per_station": [
+                        [sample.source_per_station[(0, 0)], sample.source_per_station[(0, 1)]],
+                        [sample.source_per_station[(1, 0)], sample.source_per_station[(1, 1)]],
+                    ],
+                })
+            })
+            .collect::<Vec<_>>();
+        std::fs::write(
+            directory.join(format!("station-{station:03}.json")),
+            serde_json::to_vec(&serde_json::json!({
+                "station": station,
+                "tile_id": tile_id,
+                "station_to_world": tile_id.and_then(|id| station_poses.get(&id)).map(|pose| pose.as_slice().to_vec()),
+                "source_count": evidence.source_count,
+                "sample_count": evidence.samples.len(),
+                "unresolved_sources": evidence.unresolved_sources,
+                "invalid_probes": evidence.invalid_probes,
+                "boundary_probes": evidence.boundary_probes,
+                "probes": probes,
+            }))
+            .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
 fn differential(
     map: impl Fn(Point2<f64>) -> Option<Point2<f64>>,
     point: Point2<f64>,
