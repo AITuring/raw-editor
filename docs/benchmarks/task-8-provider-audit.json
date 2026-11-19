@@ -3,6 +3,7 @@
   "task": 8,
   "updated": "2026-11-18",
   "status": "blocked_optional_dependencies_no_production_change",
+  "scope_note": "This record is the initial system-Python capability baseline. The 2026-11-19 isolated provider bundle and OpenCV candidate rerun are recorded in task-8-provider-bundle-r1.json and langyuan-provider-compare-r1.json.",
   "audit": {
     "schema": 1,
     "task": 8,
