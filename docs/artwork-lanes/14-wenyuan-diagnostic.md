@@ -76,7 +76,7 @@ native 仍拒绝，唯一 runner failure 为 tone boundary：最大 ΔE00 `8.778
 
 ## scale1 tone mode audit
 
-只读对比显示：0.25 使用 `supported_spatial_affine`，4 个 tile 被 clamp，source-fidelity strength 最小值 `1.0`；scale=1 切换为 `station_affine`，32 个 tile 被 clamp，source-fidelity strength 最小值降至 `0.111686`。对应 boundary ΔE00 从 `4.6045643/13` 变为 `8.7789013/142`。这说明 scale1 的 tone 模式/原生 source retention 是下一项实验入口；不放宽 1.5 阈值，也不直接启用生产 fallback。
+只读对比显示：0.25 使用 `supported_spatial_affine`，4 个 tile 被 clamp，source-fidelity strength 最小值 `1.0`；scale=1 切换为 `station_affine`，32 个 tile 被 clamp，source-fidelity strength 最小值降至 `0.111686`。对应 boundary ΔE00 从 `4.6045643/13` 变为 `8.7789013/142`。后续通过源码和现有 report 锁定为 local fit 的 40M allocation guard；不放宽 1.5 阈值，也不直接启用生产 fallback。
 
 机器结果：[wenyuan-tone-mode-audit.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-tone-mode-audit.json)。
 
@@ -84,10 +84,10 @@ native 仍拒绝，唯一 runner failure 为 tone boundary：最大 ΔE00 `8.778
 
 为验证 scale=1 的 `all_have_native_sources` 是否只是把 tone 路径切到 `station_affine`，短暂加入了仅在 Rust library test binary 编译的开关 `RAW_EDITOR_TEST_FORCE_TONE_SOURCE_FIDELITY=1`。它通过编译检查并完成 bounded/full 实验；实验结束后已移除，生产默认和入口合同没有改变。
 
-本次没有把编译通过当作质量改善证据，也没有放宽 tone threshold 或启用 fallback。完整 A/B 证明强制布尔值没有改变完整路径，因此不保留这个无效开关。
+本次没有把编译通过当作质量改善证据，也没有放宽 tone threshold 或启用 fallback。完整 A/B 证明 baseline 本身已经是 `source_fidelity=true`，强制开关只是 `true→true` 的冗余对照，因此不保留这个无效开关。
 
-bounded 结果已落到 [wenyuan-tone-source-fidelity-r1.json](../benchmarks/wenyuan-tone-source-fidelity-r1.json)：0.25 与 scale=1 的 Wenyuan-10 都没有 excluded source，实际仍走 `supported_spatial_affine`，没有触发强制开关的分支；scale=1 子集完整通过 native acceptance，ΔE00 最大 `0.177211`、0 个 tone 违规、density `applied`，内存峰值 `11837079552` bytes。0.25 子集仍因 `local_scale_median:not_applicable` 被拒绝。这个结果只能证明 bounded 合同和 hook 不破坏短跑，不能证明它改善了完整 126 输入 scale=1 的 mode shift；完整 A/B 仍待独占运行。
+bounded 结果已落到 [wenyuan-tone-source-fidelity-r1.json](../benchmarks/wenyuan-tone-source-fidelity-r1.json)：0.25 与 scale=1 的 Wenyuan-10 都没有 excluded source，实际仍走 `supported_spatial_affine`；scale=1 子集完整通过 native acceptance，ΔE00 最大 `0.177211`、0 个 tone 违规、density `applied`，内存峰值 `11837079552` bytes。0.25 子集仍因 `local_scale_median:not_applicable` 被拒绝。这个结果只能证明 bounded 合同和 hook 不破坏短跑，不能单独解释完整 126 输入 scale=1 的 mode shift；完整 A/B 结论见下段。
 
 完整 A/B 已完成：强制开关运行 126 输入 scale=1 独占 `17154.48s`，内存峰值 `16153575424` bytes，QG 和内存门通过，但 native 仍因 tone boundary 最大 ΔE00 `8.778901`、142 个违规而拒绝；`correction_model=station_affine`、32 个 tile clamp、最小 source-fidelity strength `0.111686`，density 仍为 `bypassed/nonidentity_world_residual`。输出 SHA 与无开关基线完全相同（`f253dddc…`），说明 baseline 本身已经进入 source-fidelity 分支，这个强制布尔值只是 `true→true` 的冗余对照；mode shift 的决定性原因是 local fit 的 40M allocation guard，不启用生产 fallback，也不放宽 tone threshold。
 
-机器结果：[wenyuan-tone-source-fidelity-r1.json](../benchmarks/wenyuan-tone-source-fidelity-r1.json)。下一步回到诊断：local fit 的 40M allocation guard 已由现有报告和公式锁定；已加入 test-only `tone-local-fit.json` sink 记录 guard reason/grid/product，默认上限和生产路径不变，不再重复同一 full A/B。
+机器结果：[wenyuan-tone-source-fidelity-r1.json](../benchmarks/wenyuan-tone-source-fidelity-r1.json)。下一步回到诊断：local fit 的 40M allocation guard 已由现有 report 和公式锁定；已加入 test-only `tone-local-fit.json` sink，未来启用 tone diagnostics 时记录 guard reason/grid/product。本次没有为生成该 sink 再跑 full run；默认上限和生产路径不变，不再重复同一 full A/B。公式审计见 [wenyuan-local-tone-guard-audit.json](../benchmarks/wenyuan-local-tone-guard-audit.json)。
