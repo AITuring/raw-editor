@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_native_scale1_feasibility_brief_v1",
+  "production_impact": "test_only_native_control_no_production_change",
+  "dataset": "mayuan-2",
+  "input_count": 47,
+  "scale": 1.0,
+  "binary": "task-16-station15-17-jacobian-r1",
+  "binary_sha256": "c809bbfed9f89ee1109d0e48caacad5a81dd9f5aadd9b7f8500ed0c2ba0d67a8",
+  "inputs_sha256": "4e39ee193f336801a7918307307f8c9ba7d6c9490fb105678c3b4a112663294f",
+  "contract_reason": "scale=0.25 marks local_scale_median diagnostic/not_applicable; native acceptance requires scale=1",
+  "control": {
+    "env": {},
+    "slot": "exclusive",
+    "estimate_gib": 24,
+    "checks": [
+      "local_scale_median",
+      "local_scale_pixel_ratio",
+      "boundary",
+      "owner",
+      "density",
+      "closure",
+      "source_contract",
+      "memory_gate"
+    ],
+    "no_experiment_until_control_native_acceptance": true
+  },
+  "decision": "run one scale=1 native control to establish the real local-scale contract; do not apply Jacobian hook until control is measured",
+  "resource_note": "0.25 control/experiment passed memory at ~11–13GiB; scale=1 can differ materially, so exclusive slot and 24GiB gate are retained"
+}

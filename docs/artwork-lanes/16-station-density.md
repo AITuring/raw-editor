@@ -61,6 +61,12 @@ probe 的低尺度组连续落在 station15/16/17：minimum 分别为 `0.8829276
 
 后续两档已完成并收口：`1.015625` 实测 density factor `1.1591797`、direct P95 `3.0192708px`，仍未过 closure；`1.0234375` 实测 factor `1.1503906`、direct P95 `2.9963783px`，但 QG 仍有 boundary 1 处失败且 native `local_scale_median` 仍拒绝。证据见 [task-16-station15-17-factor-followup-ab.json](../benchmarks/task-16-station15-17-factor-followup-ab.json)。因此 shared Jacobian correction 不能同时满足 density、boundary 和 native local-scale；停止 factor 扫描，不推广、不放宽门限，回到 local-scale native 根因 brief。
 
+## local-scale native contract 与 scale=1 brief
+
+代码合同明确：`run_gate.rs` 在 `acceptance_render_scale < 1.0` 时把 `local_scale_median` 标记为 diagnostic，`criterion_verdict` 必然返回 `not_applicable`；native acceptance 对该 criterion 不接受 `not_applicable`。因此 task16 的 scale=0.25 QG pass + native reject 是预期合同边界，不能继续在 0.25 扫 Jacobian factor。
+
+若要验证 local-scale，下一步只能做 scale=1 native feasibility control，固定同一 47 张输入、同一 test binary、exclusive 槽和24GiB门；在 control 的 local-scale、density、closure、source contract、memory 全部有结果前，不启动任何 Jacobian experiment。brief：[task-16-native-scale1-brief.json](../benchmarks/task-16-native-scale1-brief.json)。
+
 ## 下一步 bounded brief
 
 若继续运行，控制组和实验组必须使用同一冻结 binary 与输入摘要；任何实验仍需经过原有 output-pixel closure 门。0.25 结果不能外推原生 D2/D3。
