@@ -1,0 +1,214 @@
+{
+  "schema": 1,
+  "method": "fengying_failure_geometry_sensitivity_audit_v1",
+  "production_impact": "test_only_read_only_source_to_world_sensitivity_no_pose_write_no_threshold_change",
+  "analysis": "output/acceptance/task-12/fengying-diagnostics-r1/analysis.json",
+  "alignment": "output/acceptance/task-12/fengying-diagnostics-r1/source-alignment.json",
+  "failures": [
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 284.0,
+        "y": -4310.0
+      },
+      "measured": 0.9996805278192374,
+      "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04844.ARW",
+      "source_id": 34,
+      "source_to_world": [
+        1.0061769959857119,
+        0.0005555365919278722,
+        -5236.406910091368,
+        0.01188006213137237,
+        1.0012122704647968,
+        -17763.925596613557,
+        8.860483005536744e-07,
+        4.947251663605683e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": -3812.0,
+        "y": -4438.0
+      },
+      "measured": 1.0073599338052754,
+      "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04870.ARW",
+      "source_id": 50,
+      "source_to_world": [
+        0.9888945336810404,
+        -0.015312501150985317,
+        -15713.596995237973,
+        0.02203761859376106,
+        1.0137626625594418,
+        -18376.440292985142,
+        6.258467494170925e-07,
+        2.186530272876712e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": -3428.0,
+        "y": -4822.0
+      },
+      "measured": 0.8887075044462407,
+      "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04916.ARW",
+      "source_id": 58,
+      "source_to_world": [
+        0.8775132586120789,
+        0.005179070122968707,
+        -14044.652332089388,
+        0.0158552904146185,
+        0.9088096599965513,
+        -19660.9513254476,
+        2.414451242358505e-07,
+        -6.837368974329604e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": 1.0689681309622237
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": -3172.0,
+        "y": -5334.0
+      },
+      "measured": 1.4013835143540736,
+      "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04880.ARW",
+      "source_id": 63,
+      "source_to_world": [
+        1.3893429542606428,
+        0.04834294140417819,
+        -12837.035925464304,
+        -0.01582042084388566,
+        1.4266805491537653,
+        -21832.48178300203,
+        2.817771677072585e-07,
+        -3.5882030523958065e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 156.0,
+        "y": -5206.0
+      },
+      "measured": 1.4156914831539944,
+      "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04891.ARW",
+      "source_id": 70,
+      "source_to_world": [
+        1.414760490411835,
+        0.018636754500577845,
+        395.1261382353847,
+        0.0055714352971533015,
+        1.4050061092242225,
+        -21559.979408163264,
+        6.717765155545649e-07,
+        7.242610626619262e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 1692.0,
+        "y": -5078.0
+      },
+      "measured": 1.3904516647704006,
+      "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04894.ARW",
+      "source_id": 72,
+      "source_to_world": [
+        1.37317193556324,
+        -0.03596268967085677,
+        6527.448496119214,
+        0.06644601588757118,
+        1.4073182532170738,
+        -21525.15972248591,
+        3.1819812601342064e-08,
+        -4.980119378761215e-08,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 3356.0,
+        "y": -5206.0
+      },
+      "measured": 1.4032167431971154,
+      "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04905.ARW",
+      "source_id": 78,
+      "source_to_world": [
+        1.39944576674406,
+        -0.01137383045334587,
+        13023.435624812133,
+        0.016503648445427992,
+        1.4240618204637017,
+        -21357.526959205527,
+        9.203662006105284e-07,
+        -1.4403186776332197e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": -1508.0,
+        "y": -4950.0
+      },
+      "measured": 1.0924261050420787,
+      "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/toubu/DSC04920.ARW",
+      "source_id": 79,
+      "source_to_world": [
+        1.0841307087477474,
+        0.061480764335283294,
+        -6509.466107291127,
+        -0.05529277264616986,
+        1.0764175350714624,
+        -20141.035744298366,
+        1.0824185229311891e-06,
+        1.0299588868599375e-06,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": -3428.0,
+        "y": -4822.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/枫鹰雉鸡/DSC04916.ARW",
+      "source_id": 58,
+      "source_to_world": [
+        0.8775132586120789,
+        0.005179070122968707,
+        -14044.652332089388,
+        0.0158552904146185,
+        0.9088096599965513,
+        -19660.9513254476,
+        2.414451242358505e-07,
+        -6.837368974329604e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    }
+  ],
+  "summary": {
+    "failure_points": 9,
+    "points_below_0_95": 1,
+    "minimum_required_scale_factor": 1.0689681309622237,
+    "maximum_required_scale_factor": 1.0689681309622237,
+    "decision": "sensitivity_only; required factors are evidence for a geometry hypothesis, not an instruction to alter source poses"
+  }
+}

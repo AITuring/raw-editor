@@ -58,3 +58,9 @@ QG source visual capture 完整覆盖失败 ROI：`roi-02` 对应 station 2 / ow
 [fengying-task-12-resampling.json](../benchmarks/fengying-task-12-resampling.json)。
 
 结论：该单源 resampling 只改变像素与锐度，不能改变几何 Jacobian 或制造 owner Coverage；不进入生产 resampling/fallback。下一步应转向 source-to-world 几何倍率和 owner coverage 根因。
+
+## source-to-world geometry sensitivity（只读）
+
+对保存的 9 个 local-scale failure records 做 source-to-world sensitivity：只有 DSC04916.ARW 的测值低于 0.95，理论 isotropic factor 为 `1.068968`；其余失败记录测值在 `0.99968–1.41569`，不支持统一倍率修复。审计只保存 world 坐标、source id、原始 homography 和理论 factor，不修改 pose、owner、阈值或像素。
+
+机器摘要：[fengying-task-12-geometry-sensitivity-audit.json](../benchmarks/fengying-task-12-geometry-sensitivity-audit.json)。这个结果支持继续定位 DSC04916 的局部 source-to-world/owner 根因，但不授权把 factor 直接写入生产路径。
