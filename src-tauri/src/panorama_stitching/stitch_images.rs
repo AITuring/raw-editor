@@ -115,6 +115,28 @@ const MAX_SKIPPED_SCAN_SOURCES_DENOMINATOR: usize = 20;
 const RAW_STACK_NUMERATOR: usize = 4;
 
 #[cfg(test)]
+fn write_unresolved_owner_diagnostics(
+    directory: &Path,
+    records: &BTreeMap<usize, Vec<serde_json::Value>>,
+) -> std::io::Result<()> {
+    if records.is_empty() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(directory)?;
+    for (station, station_records) in records {
+        let payload = serde_json::json!({
+            "schema": 1,
+            "station": station,
+            "record_count": station_records.len(),
+            "records": station_records,
+        });
+        let path = directory.join(format!("station-{station:03}.json"));
+        std::fs::write(path, serde_json::to_vec_pretty(&payload)?)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
 fn apply_test_geometry_sensitivity(
     tile_infos: &[ImageInfo],
     tile_group_indices: &HashMap<usize, usize>,
@@ -3481,8 +3503,7 @@ fn stitch_images_attempt<R: Runtime>(
                     #[cfg(test)]
                     apply_test_station_jacobian_scale(&tile_infos, &mut tile_homographies);
                     #[cfg(test)]
-                    if std::env::var("RAW_EDITOR_TEST_MODE").as_deref()
-                        == Ok("density_diagnostics")
+                    if std::env::var("RAW_EDITOR_TEST_MODE").as_deref() == Ok("density_diagnostics")
                     {
                         if let Some(directory) =
                             std::env::var_os("RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR")
@@ -3983,6 +4004,13 @@ fn stitch_images_attempt<R: Runtime>(
                                     "RAW_EDITOR_FOCUS_FINAL_ROI_MAPPING_DIR",
                                 )
                                 .map(|_| vec![None::<(usize, usize, u16)>; ownership.len()]);
+                                #[cfg(test)]
+                                let unresolved_owner_directory = std::env::var_os(
+                                    "RAW_EDITOR_FOCUS_OWNER_UNRESOLVED_DIR",
+                                )
+                                .map(PathBuf::from);
+                                #[cfg(test)]
+                                let mut unresolved_owner_records = BTreeMap::new();
                                 // Report-only diagnostic plane: a non-transparent
                                 // output sample whose exact bicubic footprint
                                 // touched an uncovered station pixel.
@@ -4096,6 +4124,51 @@ fn stitch_images_attempt<R: Runtime>(
                                         footprint_uncovered[index] = 1;
                                     }
                                     let Some(sampled) = sampled else {
+                                        #[cfg(test)]
+                                        if unresolved_owner_directory.is_some() {
+                                            let reason = if !rounded_x.is_finite()
+                                                || !rounded_y.is_finite()
+                                            {
+                                                "transform_non_finite"
+                                            } else if local.x < 0.0
+                                                || local.y < 0.0
+                                                || local.x >= f64::from(mask_width)
+                                                || local.y >= f64::from(mask_height)
+                                            {
+                                                "local_out_of_bounds"
+                                            } else {
+                                                "raw_owner_unresolved"
+                                            };
+                                            unresolved_owner_records
+                                                .entry(station)
+                                                .or_insert_with(Vec::new)
+                                                .push(serde_json::json!({
+                                                    "station": station,
+                                                    "output": {
+                                                        "x": x,
+                                                        "y": y,
+                                                        "world_x": rendered.sampling_origin.0 + x,
+                                                        "world_y": rendered.sampling_origin.1 + y,
+                                                        "index": index,
+                                                    },
+                                                    "local": {
+                                                        "x": local.x.is_finite().then_some(local.x),
+                                                        "y": local.y.is_finite().then_some(local.y),
+                                                    },
+                                                    "rounded": {
+                                                        "x": rounded_x.is_finite().then_some(rounded_x),
+                                                        "y": rounded_y.is_finite().then_some(rounded_y),
+                                                    },
+                                                    "compositor_owner": compositor_owner,
+                                                    "tile_index": tile_index,
+                                                    "covered": covered_pixel(index),
+                                                    "mask": {
+                                                        "width": mask_width,
+                                                        "height": mask_height,
+                                                    },
+                                                    "reason": reason,
+                                                }));
+                                        }
                                         *owner = 0;
                                         if covered_pixel(index) {
                                             unresolved_pixel_count += 1;
@@ -4161,6 +4234,14 @@ fn stitch_images_attempt<R: Runtime>(
                                             evidence,
                                         );
                                     }
+                                }
+                                #[cfg(test)]
+                                if let Some(directory) = unresolved_owner_directory.as_ref() {
+                                    write_unresolved_owner_diagnostics(
+                                        directory,
+                                        &unresolved_owner_records,
+                                    )
+                                    .expect("write unresolved owner diagnostics");
                                 }
                                 #[cfg(test)]
                                 if let (Some(directory), Some(lookup)) = (
@@ -4887,4 +4968,41 @@ fn stitch_images_attempt<R: Runtime>(
         ordered_paths,
         stack_report_path: None,
     })
+}
+
+#[cfg(test)]
+mod unresolved_owner_diagnostics_tests {
+    use super::write_unresolved_owner_diagnostics;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn writes_one_json_file_per_station_with_coordinate_contract() {
+        let directory = std::env::temp_dir().join(format!(
+            "raw-editor-owner-unresolved-contract-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let mut records = BTreeMap::new();
+        records.insert(
+            7,
+            vec![serde_json::json!({
+                "station": 7,
+                "output": {"x": 12, "y": 13},
+                "local": {"x": 1.25, "y": 2.75},
+                "rounded": {"x": 1.0, "y": 3.0},
+                "compositor_owner": 8,
+            })],
+        );
+
+        write_unresolved_owner_diagnostics(&directory, &records).expect("write diagnostics");
+        let bytes = std::fs::read(directory.join("station-007.json")).expect("read diagnostics");
+        let value: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON");
+        assert_eq!(value["schema"], 1);
+        assert_eq!(value["station"], 7);
+        assert_eq!(value["record_count"], 1);
+        assert_eq!(value["records"][0]["output"]["x"], 12);
+        assert_eq!(value["records"][0]["compositor_owner"], 8);
+
+        std::fs::remove_dir_all(directory).expect("remove diagnostics");
+    }
 }
