@@ -108,7 +108,7 @@
       "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-excluded-source-tone-fidelity-scale1-r1/run/wenyuan-s1-task-14-excluded-source-tone-fidelity-scale1-r1-stack-reports/stack-report-81423147-0e31-4ce4-bc88-4a106fb4fc22.json"
     }
   ],
-  "decision": "forced_source_fidelity_had_no_effect_on_full_scale1",
+  "decision": "force_hook_redundant_full_scale1",
   "comparison": {
     "baseline_label": "wenyuan-excluded-source-scale1-r1",
     "baseline_output_sha256": "f253dddcf66af93486eec65daa57e5d1fce939bb60da5f73dfd02126c22ebfa4",
@@ -118,6 +118,8 @@
     "forced_tone_model": "station_affine",
     "baseline_tone_boundary_delta_e00_max": 8.778901254993071,
     "forced_tone_boundary_delta_e00_max": 8.778901254993071,
-    "interpretation": "The test-only boolean did not change the full-material path; station_affine and the same tone rejection remained. No production fallback or threshold change is justified."
+    "interpretation": "The baseline already had source_fidelity=true (min strength 0.111686 proves the constrained branch); the test-only boolean was true-to-true and therefore produced no contrast. The full scale1 mode shift is explained by local fit returning None at the 40M analysis budget.",
+    "source_fidelity_gate_baseline": "true",
+    "source_fidelity_gate_forced": "true"
   }
 }

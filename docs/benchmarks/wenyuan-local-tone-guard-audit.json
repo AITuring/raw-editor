@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "method": "wenyuan_local_tone_guard_read_only_audit_v1",
+  "production_impact": "read-only arithmetic over existing Stack_Report outputs and source constants; no code, manifest, baseline, or threshold writes",
+  "source_evidence": [
+    {
+      "path": "/Users/dp/Desktop/raw-editor/src-tauri/src/panorama_utils/stack_pipeline/tone_local.rs",
+      "lines": "103-125",
+      "guard": "count.checked_mul(tiles.len()) > 40_000_000 => None"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/src-tauri/src/panorama_utils/stack_pipeline/tone.rs",
+      "line": 22,
+      "constant": "TONE_GRID_DIVISOR = 16"
+    },
+    {
+      "path": "/Users/dp/Desktop/raw-editor/src-tauri/src/panorama_utils/stack_pipeline/tone/harmonize.rs",
+      "lines": "175-201",
+      "effect": "local Some => supported_spatial_affine; local None with source_fidelity => constrain_source_fidelity and station_affine"
+    }
+  ],
+  "runs": [
+    {
+      "id": "wenyuan-full-scale1",
+      "scope": "scale1 full",
+      "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-excluded-source-scale1-r1/run/wenyuan-s1-task-14-excluded-source-scale1-r1-stack-reports/stack-report-d074efa8-394d-4bb2-976b-86fd9593942f.json",
+      "output": {
+        "width": 24681,
+        "height": 13091
+      },
+      "tone_tiles": 43,
+      "local_fit_budget": {
+        "stride": 16,
+        "grid_width": 1543,
+        "grid_height": 819,
+        "grid_cells": 1263717,
+        "tile_cells_product": 54339831,
+        "budget": 40000000,
+        "budget_exceeded": true
+      },
+      "observed": {
+        "correction_model": "station_affine",
+        "native_fitting_relation_count": 0,
+        "tone_status": "degraded",
+        "pairs_without_evidence": 0,
+        "tone_insufficient_samples_degradations": 0,
+        "source_fidelity_strength_min": 0.1116861736227694,
+        "source_fidelity_strength_max": 1.0
+      }
+    },
+    {
+      "id": "wenyuan-full-scale025",
+      "scope": "scale0.25 full",
+      "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-excluded-source-r1/run/wenyuan-s0p25-task-14-excluded-source-r1-stack-reports/stack-report-18ca34b5-8b42-45c8-9239-dab0f3dab9fa.json",
+      "output": {
+        "width": 5912,
+        "height": 3235
+      },
+      "tone_tiles": 43,
+      "local_fit_budget": {
+        "stride": 16,
+        "grid_width": 370,
+        "grid_height": 203,
+        "grid_cells": 75110,
+        "tile_cells_product": 3229730,
+        "budget": 40000000,
+        "budget_exceeded": false
+      },
+      "observed": {
+        "correction_model": "supported_spatial_affine",
+        "native_fitting_relation_count": 162,
+        "tone_status": "degraded",
+        "pairs_without_evidence": 0,
+        "tone_insufficient_samples_degradations": 0,
+        "source_fidelity_strength_min": 1.0,
+        "source_fidelity_strength_max": 1.0
+      }
+    },
+    {
+      "id": "wenyuan-10-scale1",
+      "scope": "scale1 subset",
+      "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-14/wenyuan-10-tone-source-fidelity-scale1-r1/run/wenyuan-10-s1-task-14-tone-source-fidelity-scale1-r1-stack-reports/stack-report-52b7e0a6-f2c5-43a8-82c3-2783d45710a9.json",
+      "output": {
+        "width": 9764,
+        "height": 9827
+      },
+      "tone_tiles": 3,
+      "local_fit_budget": {
+        "stride": 16,
+        "grid_width": 611,
+        "grid_height": 615,
+        "grid_cells": 375765,
+        "tile_cells_product": 1127295,
+        "budget": 40000000,
+        "budget_exceeded": false
+      },
+      "observed": {
+        "correction_model": "supported_spatial_affine",
+        "native_fitting_relation_count": 3,
+        "tone_status": "applied",
+        "pairs_without_evidence": 0,
+        "tone_insufficient_samples_degradations": 0,
+        "source_fidelity_strength_min": 1.0,
+        "source_fidelity_strength_max": 1.0
+      }
+    }
+  ],
+  "conclusion": {
+    "scale1_full_return_none_guard": "analysis_budget_exceeded",
+    "evidence": "24681x13091, 43 tiles -> 54,339,831 cells > 40,000,000; observed station_affine and native_fitting_relations=0",
+    "next_test_only_observability": "emit cfg(test)-only local-fit guard reason and per-relation retained/observation counts; do not raise budget or change production default"
+  }
+}
