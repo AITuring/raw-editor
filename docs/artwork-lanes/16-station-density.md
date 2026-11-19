@@ -88,7 +88,7 @@ probe 的低尺度组连续落在 station15/16/17：minimum 分别为 `0.8829276
 
 test-only `RAW_EDITOR_FOCUS_OWNER_UNRESOLVED_DIR` 导出的 163 点全部是 `raw_owner_unresolved`，集中在 station13（124 点，local y=`5252.81–5471.70`）和 station14（39 点，local y=`5234.35–5448.85`）的下部区域；其余 transform/out-of-bounds/station/evidence 计数均为零。这个空间聚类支持一次可证伪的 5×5 owner-stencil A/B，但不能预先假定它会通过 owner gate。
 
-机器摘要：[task-16-native-boundary-repair-owner-export-ab.json](../benchmarks/task-16-native-boundary-repair-owner-export-ab.json)；原始坐标文件在该 run directory 的 `owner-unresolved/`。下一步只做一次可配置 5×5 stencil test-only A/B；若 unresolved 不降为零或引入新失败，则停止 owner fallback，保留 density residual-aware brief。
+机器摘要：[task-16-native-boundary-repair-owner-export-ab.json](../benchmarks/task-16-native-boundary-repair-owner-export-ab.json)；原始坐标文件在该 run directory 的 `owner-unresolved/`。5×5 stencil A/B 已完成并将 unresolved 降为零；保留生产 3×3，不再叠加变量或重复 owner fallback，转回 boundary 可测性与 residual-aware density 合同。
 
 ## 5×5 owner-stencil A/B 结果
 

@@ -44,6 +44,6 @@
     ],
     "acceptance": "diagnostic only; no task16 D2/D3 checkmark from export"
   },
-  "decision": "defer until owner/boundary A/B is audited; if resumed, implement as a separate test-only probe sink and compare against the current bypass without changing planner behavior",
-  "next_step": "finish current boundary repair A/B, then decide whether a residual-aware diagnostic implementation is worth another full run"
+  "decision": "owner/boundary A/B are complete: owner radius2 fixes unresolved=163, boundary repair fixes one local seam but native gate remains rejected; density bypass remains independent and no factor scan is justified",
+  "next_step": "if another code change is authorized, implement a test-only residual-aware composed-Jacobian export without applying density or changing production; otherwise task16 remains open with an explicit density bypass"
 }

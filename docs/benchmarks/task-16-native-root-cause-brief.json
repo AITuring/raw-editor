@@ -796,6 +796,26 @@
     "estimate_gib": 24,
     "decision_pending_until_complete": true
   },
-  "decision": "do not run Jacobian factor experiment; first inspect unresolved coordinate export and strict boundary repair outcome; density remains an independent residual-warp contract blocker",
-  "next_step": "after A/B completion, compare boundary criterion, unresolved coordinate distribution, source/output/memory contracts; then write residual-aware density diagnostic brief before any further full run"
+  "decision": "owner stencil radius2 is locally effective and boundary repair locally reduces the seam error, but neither completes native acceptance; retain production radius1, stop owner fallback and Jacobian factor scans, and handle boundary candidate measurability plus residual-aware density as separate contracts",
+  "next_step": "write final task16 closure decision and, if continuing, implement only a test-only residual-aware density diagnostic or a boundary candidate-measurability brief; do not combine variables",
+  "experiment_result": {
+    "boundary_repair": {
+      "run": "docs/benchmarks/task-16-native-boundary-repair-owner-export-ab.json",
+      "local_error_px": "3.000->0.000",
+      "native_boundary_verdict": "not_applicable",
+      "native_acceptance": "rejected"
+    },
+    "owner_stencil5": {
+      "run": "docs/benchmarks/task-16-native-owner-stencil5-ab.json",
+      "unresolved": "163->0",
+      "owner_sharpness_coverage": "insufficient_evidence->pass",
+      "native_acceptance": "rejected"
+    },
+    "remaining": [
+      "boundary_stroke_alignment=fail at 3.0px with 3x3 owner default",
+      "effective_pixel_count=insufficient_evidence",
+      "mtf50_normalized=not_applicable",
+      "output_density bypassed by nonidentity_world_residual"
+    ]
+  }
 }
