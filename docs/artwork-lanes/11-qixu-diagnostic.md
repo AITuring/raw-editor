@@ -40,3 +40,15 @@
 - owner coverage 失败点位于无 Coverage 邻域，**0 个**可用 fallback。
 
 因此当前最小 fallback 假设没有足够收益证据：scale/owner 失败不能靠同一 3×3 邻域补救，boundary 混合点需要独立 source resampling 和 QG 重算。审计脚本：[qixu_owner_fallback_audit.py](../../scripts/stack-lab/qixu_owner_fallback_audit.py)；报告：`/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-owner-fallback-audit.json`。本次不改生产 owner 选择。
+
+## ownership feather test-only A/B（2026-11-19）
+
+在冻结 `base-2026-11-12`、祁序1 全量 75 输入、scale=0.25、exclusive 槽下，固定其余路径，只改变 `RAW_EDITOR_FLAT_OWNERSHIP_FEATHER`：默认 `0.65`、实验 `1.0` 和 `1.5`。
+
+- 默认：6 个 `local_scale_pixel_ratio=0` 失败、3 个 boundary 失败、owner coverage `0.9113826565`。
+- feather `1.0`：仍是 6 个 local-scale 失败；boundary 失败降为 1 个但测值为 4px；owner coverage 提到 `0.9153221017`；QG 仍 fail。
+- feather `1.5`：仍是 6 个 local-scale 失败；boundary 2 个 4px 失败；owner coverage 回落到 `0.9143601652`；QG 仍 fail。
+
+feather=1.0 只对 seam/owner 有局部改善，不能解释或修复几何尺度失败，不进入生产默认，也不授予 D2/D3。机器摘要：[qixu-task-11-feather-audit.json](../benchmarks/qixu-task-11-feather-audit.json)。
+
+下一步转向 local-scale ratio=0 的 source-to-world 几何/采样根因；不再继续调 feather，也不自动应用 3×3 owner fallback。

@@ -1,0 +1,208 @@
+{
+  "schema": 1,
+  "task": 11,
+  "method": "qixu_streaming_ownership_feather_bounded_v1",
+  "production_impact": "test_only_env_experiment_no_default_or_manifest_change",
+  "dataset": "qixu-1",
+  "scale": 0.25,
+  "binary": "base-2026-11-12",
+  "default_feather": 0.65,
+  "experiments": [
+    {
+      "label": "qixu-1-ownership-feather-1p0-r1",
+      "env": "RAW_EDITOR_FLAT_OWNERSHIP_FEATHER=1.0",
+      "result": {
+        "label": "qixu-1-ownership-feather-1p0-r1",
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-ownership-feather-1p0-r1",
+        "status": "rejected",
+        "binary": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+        "peak_rss_bytes": 15353839616,
+        "wall_seconds": 941.4733381271362,
+        "qg": "fail",
+        "runner_failures": [
+          "the Stack_Report has no verified TIFF export at the requested path",
+          "verified TIFF dimensions do not match the rendered result",
+          "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])",
+          "inputs missing from the stitching order: DSC_3842.NEF, DSC_3910.NEF, DSC_3911.NEF",
+          "streaming compositor used 70/75 inputs (0 lending detail only); absent: DSC_3842.NEF, DSC_3879.NEF, DSC_3907.NEF, DSC_3910.NEF, DSC_3911.NEF",
+          "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+        ],
+        "sources": {
+          "inputs": 75,
+          "report_sources": 72,
+          "ordered": 72,
+          "streamed": 70,
+          "lending": null,
+          "expected_skipped": [],
+          "covered_pixels": 16275398,
+          "owned_pixels": 16275398
+        },
+        "detail_repairs": 34,
+        "output_sha256": "e2347f9e4a36fe5fb33c9ed4086cdaa4c6012c3639267d16eaf70424ebd9c404",
+        "criteria": {
+          "local_scale_pixel_ratio": {
+            "verdict": "fail",
+            "failed_count": 6,
+            "failed_values": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "measured_count": 8
+          },
+          "boundary_stroke_alignment": {
+            "verdict": "fail",
+            "failed_count": 1,
+            "failed_values": [
+              4.0
+            ],
+            "measured_count": 15
+          },
+          "owner_sharpness_coverage": {
+            "verdict": "fail",
+            "failed_count": 1,
+            "failed_values": [
+              0.9153221016866059
+            ],
+            "measured_count": 1
+          }
+        },
+        "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-ownership-feather-1p0-r1/run/qixu-1-s0p25-task-11-ownership-feather-1p0-r1-stack-reports/stack-report-0be34f50-4765-4424-b021-b3c8dbdf5691.json"
+      }
+    },
+    {
+      "label": "qixu-1-ownership-feather-1p5-r1",
+      "env": "RAW_EDITOR_FLAT_OWNERSHIP_FEATHER=1.5",
+      "result": {
+        "label": "qixu-1-ownership-feather-1p5-r1",
+        "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-ownership-feather-1p5-r1",
+        "status": "rejected",
+        "binary": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+        "peak_rss_bytes": 15284977664,
+        "wall_seconds": 957.3783278465271,
+        "qg": "fail",
+        "runner_failures": [
+          "the Stack_Report has no verified TIFF export at the requested path",
+          "verified TIFF dimensions do not match the rendered result",
+          "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])",
+          "inputs missing from the stitching order: DSC_3842.NEF, DSC_3910.NEF, DSC_3911.NEF",
+          "streaming compositor used 70/75 inputs (0 lending detail only); absent: DSC_3842.NEF, DSC_3879.NEF, DSC_3907.NEF, DSC_3910.NEF, DSC_3911.NEF",
+          "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+        ],
+        "sources": {
+          "inputs": 75,
+          "report_sources": 72,
+          "ordered": 72,
+          "streamed": 70,
+          "lending": null,
+          "expected_skipped": [],
+          "covered_pixels": 16275477,
+          "owned_pixels": 16275477
+        },
+        "detail_repairs": 51,
+        "output_sha256": "c3d4c6919e236a65d7b90f7e68304d95b793808e6fdb16a075e3b5fa135e4ff2",
+        "criteria": {
+          "local_scale_pixel_ratio": {
+            "verdict": "fail",
+            "failed_count": 6,
+            "failed_values": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "measured_count": 8
+          },
+          "boundary_stroke_alignment": {
+            "verdict": "fail",
+            "failed_count": 2,
+            "failed_values": [
+              4.0,
+              4.0
+            ],
+            "measured_count": 19
+          },
+          "owner_sharpness_coverage": {
+            "verdict": "fail",
+            "failed_count": 1,
+            "failed_values": [
+              0.9143601651654433
+            ],
+            "measured_count": 1
+          }
+        },
+        "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-ownership-feather-1p5-r1/run/qixu-1-s0p25-task-11-ownership-feather-1p5-r1-stack-reports/stack-report-f42667d8-23cd-44eb-a2e6-deeee5cfac10.json"
+      }
+    }
+  ],
+  "baseline": {
+    "label": "qixu-1-diagnostics-r2",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-diagnostics-r2",
+    "status": "rejected",
+    "binary": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+    "peak_rss_bytes": 15329722368,
+    "wall_seconds": 1070.729761838913,
+    "qg": "fail",
+    "runner_failures": [
+      "the Stack_Report has no verified TIFF export at the requested path",
+      "verified TIFF dimensions do not match the rendered result",
+      "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])",
+      "inputs missing from the stitching order: DSC_3842.NEF, DSC_3910.NEF, DSC_3911.NEF",
+      "streaming compositor used 70/75 inputs (0 lending detail only); absent: DSC_3842.NEF, DSC_3879.NEF, DSC_3907.NEF, DSC_3910.NEF, DSC_3911.NEF",
+      "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+    ],
+    "sources": {
+      "inputs": 75,
+      "report_sources": 72,
+      "ordered": 72,
+      "streamed": 70,
+      "lending": null,
+      "expected_skipped": [],
+      "covered_pixels": 16275362,
+      "owned_pixels": 16275362
+    },
+    "detail_repairs": 30,
+    "output_sha256": "e032aed6cb63241f47c53dc9cfca3cd8e719f83bf4bbb512060edb919a5c2115",
+    "criteria": {
+      "local_scale_pixel_ratio": {
+        "verdict": "fail",
+        "failed_count": 6,
+        "failed_values": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "measured_count": 8
+      },
+      "boundary_stroke_alignment": {
+        "verdict": "fail",
+        "failed_count": 3,
+        "failed_values": [
+          3.0,
+          3.0,
+          3.0
+        ],
+        "measured_count": 14
+      },
+      "owner_sharpness_coverage": {
+        "verdict": "fail",
+        "failed_count": 1,
+        "failed_values": [
+          0.9113826564746993
+        ],
+        "measured_count": 1
+      }
+    },
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-diagnostics-r2/run/qixu-1-s0p25-task-11-diagnostics-r2-stack-reports/stack-report-1d628740-6e9c-4189-8fea-4e1b63e9f8a3.json"
+  },
+  "decision": "stop_test_only_feather_experiment: 1.0 is locally best among tested values for owner/boundary, but six local-scale ratio failures remain unchanged and QG stays fail; no production default change",
+  "next_step": "target source-to-world geometry/local-scale root cause; do not treat seam feather as D2/D3 evidence"
+}
