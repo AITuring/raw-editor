@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_station15_17_minimal_density_feasible_factor_brief_v1",
+  "production_impact": "test_only_shared_station_pose_scale_no_production_change",
+  "dataset": "mayuan-2",
+  "binary": "task-16-station15-17-jacobian-r1",
+  "inputs_sha256": "4e39ee193f336801a7918307307f8c9ba7d6c9490fb105678c3b4a112663294f",
+  "hypothesis": {
+    "stations": [
+      15,
+      16,
+      17
+    ],
+    "shared_factor": 1.015625,
+    "center_preserving": true,
+    "env": "RAW_EDITOR_TEST_STATION_JACOBIAN_SCALE=15,16,17:1.015625"
+  },
+  "derivation": {
+    "control_base_direct_pair_p95_px": 2.5861552350888948,
+    "control_density_factor": 1.17578125,
+    "density_factor_cap_px3": 1.1600231723510133,
+    "control_minimum_scale": 0.850826957635308,
+    "quantized_predicted_factor": 1.158203125,
+    "predicted_direct_pair_p95_px": 2.9952930750150677
+  },
+  "purpose": "reduce the overcorrection seen at factor 1.1767578125 while remaining just inside the unchanged output-pixel closure gate",
+  "decision": "run one experiment against existing same-binary control; do not scan further factors unless native local_scale and source contracts both improve",
+  "next_derived_factor": {
+    "shared_factor": 1.0234375,
+    "derivation": "minimal 1.015625 produced measured density factor 1.1591797 and direct P95 3.0192708; 1.0234375 is next quantized candidate to cross the actual <=3px cap"
+  }
+}

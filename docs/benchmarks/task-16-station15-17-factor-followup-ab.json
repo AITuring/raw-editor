@@ -1,0 +1,167 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_station15_17_factor_followup_ab_v1",
+  "production_impact": "test_only_shared_station_pose_scale_no_production_change",
+  "dataset": "mayuan-2",
+  "binary": "task-16-station15-17-jacobian-r1",
+  "runs": [
+    {
+      "label": "mayuan-2-mayuan-2-station15-17-min-factor-r1",
+      "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-min-factor-r1",
+      "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-min-factor-r1/analysis.json",
+      "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-min-factor-r1/run/mayuan-2-s0p25-task-16-mayuan-2-station15-17-min-factor-r1-stack-reports/stack-report-d70c920b-fed4-4089-8beb-a7cc4261e380.json",
+      "binary_sha256": "c809bbfed9f89ee1109d0e48caacad5a81dd9f5aadd9b7f8500ed0c2ba0d67a8",
+      "inputs_sha256": "4e39ee193f336801a7918307307f8c9ba7d6c9490fb105678c3b4a112663294f",
+      "status": "rejected",
+      "qg": {
+        "verdict": "not_run",
+        "roi_count": 0,
+        "criteria": {},
+        "non_pass": [],
+        "unresolved_pixels": null,
+        "detail_repairs": 0
+      },
+      "density": {
+        "status": "rejected",
+        "factor": 1.1591796875,
+        "pixel_count_multiplier": 1.3436975479125977,
+        "canvas_pixels": 0,
+        "output_plane_lower_bound_bytes": 0,
+        "target_minimum_scale": 1.0,
+        "probe_step_px": 32,
+        "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+        "source_count": 47,
+        "sample_count": 124543,
+        "invalid_probe_count": 0,
+        "boundary_probe_count": 3281,
+        "worst_station_index": 17,
+        "worst_source_id": 33,
+        "worst_station_point": [
+          2049.0,
+          33.0
+        ],
+        "direct_pair_p95_output_px": 3.019270838515249,
+        "residual_median_output_px": 0.5174808499563023,
+        "max_corner_correction_output_px": 5.384917074911626,
+        "minimum_scale": 0.8631768181919894,
+        "p01_scale": 0.8829773039007016,
+        "median_scale": 1.05552753496831,
+        "bypass_reason": "output_pixel_closure_limit_exceeded"
+      },
+      "closure": "converged",
+      "checks": {
+        "inputs_unchanged": true,
+        "reference_unchanged": true,
+        "binary_unchanged": true,
+        "memory_gate_pass": true,
+        "runner_exit_zero": false,
+        "native_child_exit_zero": false,
+        "runner_summary_present": true,
+        "runner_failures_empty": false,
+        "quality_gate_pass": false,
+        "output_contract": false,
+        "report_source_digests": true
+      },
+      "peak_rss_bytes": 11351441408,
+      "wall_seconds": 625.7720980644226,
+      "memory_gate_pass": true,
+      "native_failures": [
+        "harness failed (exit 101); see /Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-min-factor-r1/run/mayuan-2-s0p25-task-16-mayuan-2-station15-17-min-factor-r1.log",
+        "no focus-stack result line in the log",
+        "acceptance metrics were not written",
+        "full-resolution TIFF is missing or empty",
+        "the Stack_Report has no verified TIFF export at the requested path",
+        "verified TIFF dimensions do not match the rendered result",
+        "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])",
+        "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+      ]
+    },
+    {
+      "label": "mayuan-2-mayuan-2-station15-17-factor1023-r1",
+      "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-factor1023-r1",
+      "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-factor1023-r1/analysis.json",
+      "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-station15-17-factor1023-r1/run/mayuan-2-s0p25-task-16-mayuan-2-station15-17-factor1023-r1-stack-reports/stack-report-a77d7820-4ff4-4121-817d-c8931f795fb0.json",
+      "binary_sha256": "c809bbfed9f89ee1109d0e48caacad5a81dd9f5aadd9b7f8500ed0c2ba0d67a8",
+      "inputs_sha256": "4e39ee193f336801a7918307307f8c9ba7d6c9490fb105678c3b4a112663294f",
+      "status": "rejected",
+      "qg": {
+        "verdict": "fail",
+        "roi_count": 8,
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "pass"
+        },
+        "non_pass": [
+          "local_scale_median:not_applicable",
+          "mtf50_normalized:not_applicable",
+          "noise_sigma_ratio:not_applicable",
+          "boundary_stroke_alignment:fail"
+        ],
+        "unresolved_pixels": null,
+        "detail_repairs": 0
+      },
+      "density": {
+        "status": "applied",
+        "factor": 1.150390625,
+        "pixel_count_multiplier": 1.3233985900878906,
+        "canvas_pixels": 12702886,
+        "output_plane_lower_bound_bytes": 228651948,
+        "target_minimum_scale": 1.0,
+        "probe_step_px": 32,
+        "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+        "source_count": 47,
+        "sample_count": 124543,
+        "invalid_probe_count": 0,
+        "boundary_probe_count": 3281,
+        "worst_station_index": 17,
+        "worst_source_id": 33,
+        "worst_station_point": [
+          2049.0,
+          33.0
+        ],
+        "direct_pair_p95_output_px": 2.9963783047775596,
+        "residual_median_output_px": 0.5135572377830868,
+        "max_corner_correction_output_px": 5.344087880577839,
+        "minimum_scale": 0.8695106981402004,
+        "p01_scale": 0.8897253648426384,
+        "median_scale": 1.05552753496831,
+        "bypass_reason": null
+      },
+      "closure": "converged",
+      "checks": {
+        "inputs_unchanged": true,
+        "reference_unchanged": true,
+        "binary_unchanged": true,
+        "memory_gate_pass": true,
+        "runner_exit_zero": false,
+        "native_child_exit_zero": false,
+        "runner_summary_present": true,
+        "runner_failures_empty": false,
+        "quality_gate_pass": false,
+        "output_contract": true,
+        "report_source_digests": true
+      },
+      "peak_rss_bytes": 12196020224,
+      "wall_seconds": 1757.053377866745,
+      "memory_gate_pass": true,
+      "native_failures": [
+        "layered native acceptance failed: native output did not pass the complete quality gate",
+        "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+      ]
+    }
+  ],
+  "factors": [
+    1.015625,
+    1.0234375
+  ],
+  "decision": "stop_factor_scan: 1.015625 remains over 3px after actual closure recalculation; 1.0234375 passes density but QG/native still reject local_scale_median and boundary; shared Jacobian correction cannot satisfy all gates simultaneously",
+  "next_step": "return to local-scale native root-cause brief; do not promote shared pose correction or relax gates"
+}

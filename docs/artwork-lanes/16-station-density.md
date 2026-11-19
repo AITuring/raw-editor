@@ -53,6 +53,14 @@ probe 的低尺度组连续落在 station15/16/17：minimum 分别为 `0.8829276
 
 机器摘要：[task-16-station15-17-jacobian-ab.json](../benchmarks/task-16-station15-17-jacobian-ab.json)。结论：shared Jacobian 修正只证明可以越过 output-density/QG 表面门，不能推广到生产；不扩大 station 集合、不继续扫 factor，回到 local-scale native 根因诊断。
 
+## minimal density-feasible factor brief
+
+上一次 shared factor `1.1767578125` 使 density/QG 通过，但 native `local_scale_median` 被过度校正后拒绝。基于同 binary control 的基础 direct P95 `2.5861552px`，3px 门允许 density factor 上限 `1.1600232`；station17 minimum scale `0.8508270` 只需共享 factor `1.015625`，量化后的 predicted density factor 为 `1.1582031`，predicted direct P95 `2.9952931px`。
+
+这不是盲扫：只验证一个由现有 closure 上限推导出的最小可行 factor，目标是减少 local-scale 过校正，同时保留 output-pixel closure 门。brief：[task-16-station15-17-minimal-factor-brief.json](../benchmarks/task-16-station15-17-minimal-factor-brief.json)。
+
+后续两档已完成并收口：`1.015625` 实测 density factor `1.1591797`、direct P95 `3.0192708px`，仍未过 closure；`1.0234375` 实测 factor `1.1503906`、direct P95 `2.9963783px`，但 QG 仍有 boundary 1 处失败且 native `local_scale_median` 仍拒绝。证据见 [task-16-station15-17-factor-followup-ab.json](../benchmarks/task-16-station15-17-factor-followup-ab.json)。因此 shared Jacobian correction 不能同时满足 density、boundary 和 native local-scale；停止 factor 扫描，不推广、不放宽门限，回到 local-scale native 根因 brief。
+
 ## 下一步 bounded brief
 
 若继续运行，控制组和实验组必须使用同一冻结 binary 与输入摘要；任何实验仍需经过原有 output-pixel closure 门。0.25 结果不能外推原生 D2/D3。
