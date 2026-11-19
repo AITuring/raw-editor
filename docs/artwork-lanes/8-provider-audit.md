@@ -1,6 +1,6 @@
 # 任务8：注册 provider 离线对照
 
-- 更新：2026-11-19；状态：**部分完成，OpenCV候选已闭合，learned provider 仍阻断**；当前变更已落在`v1`。
+- 更新：2026-11-19；状态：**部分完成，OpenCV与 learned 候选已运行，Rust sidecar adapter 仍阻断**；当前变更已落在`v1`。
 - 目标范围：固定阆苑0–2代理/原生平面，对照FAST/BRIEF、SIFT/AKAZE、ECC、LightGlue+DISK/ALIKED、RoMa；provider只提交候选，Rust几何门禁保持最终权威。
 - 本次输出：[能力与fallback报告](../benchmarks/task-8-provider-audit.json)；[provider_audit.py](../../scripts/stack-lab/provider_audit.py)。
 
@@ -14,9 +14,9 @@
 
 ## 结论与阻断
 
-初始能力审计没有产生任何 SIFT/AKAZE/ECC/learned-provider 质量分数，因此当时不能完成 PF.10。现在 OpenCV 候选已在隔离 bundle 中完成，但 learned provider 仍缺少权重和 sidecar；完整 PF.10 仍需使用相同代理、输入摘要、预算和 Rust 几何门禁重跑 0–2，并记录召回、inliers、重投影 P95、耗时、RSS、候选连通分量及 fallback。
+初始能力审计没有产生任何 SIFT/AKAZE/ECC/learned-provider 质量分数，因此当时不能完成 PF.10。现在 OpenCV 候选和 RaCo-ALIKED-LightGlue+ learned 候选都已在隔离环境运行；但 learned pipeline 只输出 keypoints/matches/mscores，没有 descriptors→`FeatureProviderResult` adapter，也未通过 Rust geometry gate。完整 PF.10 仍不能宣称完成。
 
-任务8保持未勾选；当前交付包含固定 OpenCV bundle 和可复现的候选对照，下一步只剩 learned-provider 权重、许可证、sidecar schema 以及 Rust 几何门接入验证。
+任务8保持未勾选；当前交付包含固定 OpenCV/learned bundle 和可复现候选对照。由于 learned sidecar 仍不满足 Rust 合同，本轮按条件转入任务11 的单变量 bounded A/B。
 
 ## provider bundle r1：OpenCV 候选对照
 
@@ -28,4 +28,12 @@
 - 0→2：SIFT `61` / P95 `1.892px`，AKAZE `5` / `1.370px`，ECC `0.144`；Rust 为 `64` / `1.260px`。
 - 1→2：SIFT `1364` / P95 `1.626px`，AKAZE `36` / `1.100px`，ECC `0.616`；Rust 为 `583` / `0.998px`。
 
-这些是 provider candidate metrics，不是 Stack_Report、QG 或 D2/D3 结果；候选没有通过 Rust sidecar 边界重新提交，也没有写入 pose、阈值或生产默认。ONNX Runtime 运行时已安装，但 LightGlue/DISK/ALIKED 权重和 sidecar 仍缺失；固定索引没有 `lightglue` PyPI distribution，`kornia 0.9.2` 也不满足本项目的 ONNX sidecar 合同；RoMa 仍不可用。候选脚本用同一参数重放后，三组 SIFT/AKAZE/ECC 指标逐字段一致。因此任务8仍保持未勾选，下一步需要固定 learned-provider 权重、许可证和 sidecar schema 后，才能把完整 PF.10 对照接入 Rust 几何门。
+这些是 provider candidate metrics，不是 Stack_Report、QG 或 D2/D3 结果；候选没有通过 Rust sidecar 边界重新提交，也没有写入 pose、阈值或生产默认。OpenCV 候选脚本重放后，三组 SIFT/AKAZE/ECC 指标逐字段一致。
+
+## learned bundle r1：RaCo-ALIKED-LightGlue+ 候选
+
+隔离 venv 固定为 Python 3.13.3、NumPy 2.5.1、OpenCV 5.0.0、ONNX Runtime 1.27.0、`lightglue-onnx` 3.0.0；模型来自 LightGlue-ONNX v3.0，模型 SHA 为 `3ad66df4caef716588b3c8666f19f819d31fc13b2756fc2551dc20a8da473a98`。LightGlue 代码按 Apache-2.0 记录，ALIKED 组件按 BSD-3-Clause 记录，许可证文本 SHA 与上游 commit/archive 见 [learned provider 摘要](../benchmarks/langyuan-raco-aliked-provider-r1.json)。
+
+在相同阆苑 0–2 planes、512×512、ORT intra/inter threads=1 下完成候选运行：[langyuan-raco-aliked-provider-r1.json](../benchmarks/langyuan-raco-aliked-provider-r1.json)。结果为：0→1 `45` matches / `34` inliers / P95 `2.093px` / hull `0.0965`；0→2 `12` / `5` / `0.689px` / `0.0438`；1→2 `117` / `96` / `2.493px` / `0.1529`。
+
+该 end-to-end ONNX pipeline 只输出 `keypoints`、`matches`、`mscores`，不输出 descriptors；因此当前 Rust `FeatureProviderResult` 不兼容，Rust geometry gate 未重跑。模型本身可运行，但 learned provider 仍不能作为任务8的已接入 provider；随后完成的任务11 source-resampling bounded A/B 见[qixu-task-11-source-resampling-ab.json](../benchmarks/qixu-task-11-source-resampling-ab.json)。

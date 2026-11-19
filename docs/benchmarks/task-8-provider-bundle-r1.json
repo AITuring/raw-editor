@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "task": 8,
-  "status": "opencv_candidate_comparison_complete_learned_weights_blocked",
+  "status": "opencv_and_learned_candidate_comparison_complete_rust_adapter_blocked",
   "production_impact": "test_only_candidate_metrics_no_provider_selected_no_stack_report_or_qg_change",
   "environment": {
     "venv": "/private/tmp/raw-editor-provider-audit-venv",
@@ -23,7 +23,8 @@
     "ecc": true,
     "onnxruntime_runtime": true,
     "lightglue_disk_aliked_weights": false,
-    "roma": false
+    "roma": false,
+    "raco_aliked_lightglue_weights": true
   },
   "learned_asset_check": {
     "pip_index_query": {
@@ -62,13 +63,37 @@
       "ecc"
     ],
     "fixed_threads": 1,
-    "rust_geometry_gate_rerun": false
+    "rust_geometry_gate_rerun": false,
+    "learned_candidate_artifact": "/Users/dp/Desktop/raw-editor/docs/benchmarks/langyuan-raco-aliked-provider-r1.json",
+    "learned_provider": "python_onnx_raco_aliked_lightglue",
+    "learned_pairs": [
+      [
+        0,
+        1
+      ],
+      [
+        0,
+        2
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    "learned_outputs": [
+      "keypoints",
+      "matches",
+      "mscores"
+    ],
+    "learned_descriptors_output": false
   },
   "decision": {
     "sift_akaze_ecc_candidate_metrics": true,
-    "learned_provider_comparison": false,
+    "learned_provider_comparison": true,
     "production_default_changed": false,
     "qg_acceptance_claim": false,
-    "next_action": "provide pinned LightGlue/DISK or ALIKED ONNX sidecar/weights with SHA and license, then add a provider boundary runner and rerun the same three pairs through Rust geometry validation"
+    "next_action": "keep learned candidate test-only; implement a descriptor-producing sidecar/adapter that satisfies FeatureProviderResult and rerun Rust geometry gate, or continue bounded diagnostics",
+    "learned_provider_runtime_verified": true,
+    "learned_provider_rust_adapter": false
   }
 }

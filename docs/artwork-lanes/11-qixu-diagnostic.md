@@ -65,6 +65,16 @@ feather=1.0 只对 seam/owner 有局部改善，不能解释或修复几何尺�
 
 该单源 pose 假设不能推广；实验 hook 已从主线移除。机器摘要：[qixu-task-11-legacy-geometry-ab.json](../benchmarks/qixu-task-11-legacy-geometry-ab.json)。
 
+## 单源 source resampling bounded A/B（2026-11-19）
+
+learned provider 候选虽能在独立 ONNX 环境输出匹配，但没有 descriptors→Rust `FeatureProviderResult` adapter，也未通过 Rust geometry gate；按任务边界转入一个不改 pose 的单变量实验。使用同一 `task-11-legacy-geometry-r1` test binary、同一 75 张输入、scale=0.25、`exclusive` 和 streaming diagnostics，仅对已知失败源 `DSC_3882.NEF`（source id=39）设置 `RAW_EDITOR_TEST_SOURCE_RESAMPLE_DIVISOR=1.25`。控制组不设置该环境变量。
+
+- 控制组：[qixu-1-source-resample-dsc3882-control-r1](/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-qixu-1-source-resample-dsc3882-control-r1)，实验组：[qixu-1-source-resample-dsc3882-r1](/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-qixu-1-source-resample-dsc3882-r1)。两组 binary SHA、输入 SHA 和参考摘要一致；内存门均通过。
+- 两组 QG 均 fail：local-scale-median 为 `not_applicable`，local-scale pixel ratio 仍 `6/8` 个零值，boundary 仍 `3` 个失败，owner coverage 由 `0.9113826565` 变为 `0.9140979335`，detail repairs `30→34`；来源计数保持 `75/72/70`，closure 仍 `not_run`。
+- 实验组 wall `983.44s`、峰值 RSS `12,796,116,992B`；控制组 wall `1046.21s`、峰值 RSS `13,238,452,224B`。TIFF/Stack_Report 仍被来源合同和导出合同拒绝，不能把资源差异解释为质量收益。
+
+机器摘要：[qixu-task-11-source-resampling-ab.json](../benchmarks/qixu-task-11-source-resampling-ab.json)。结论是拒绝把单源 resampling 推广到生产；不改生产 resampling、owner 或阈值，也不把 0.25 结果外推到原生 D2/D3。
+
 ## 联合 geometry + owner A/B（已否定）
 
 将 DSC_3882 factor `1.2166592079` 与 feather `1.0` 组合后，local-scale ratio 的一个点仍为 `0.01953125`，但 owner coverage 只有 `0.8850510328`，boundary 仍有两个 4px 失败，QG 继续 fail。该联合假设不能推广；停止继续扫描 pose/feather 参数。

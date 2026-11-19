@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "method": "langyuan_raco_aliked_lightglue_candidate_v1",
+  "production_impact": "test_only_candidate_no_pose_write_no_stack_report_or_qg_change",
+  "provider": "python_onnx_raco_aliked_lightglue",
+  "upstream_repository": "https://github.com/fabio-sim/LightGlue-ONNX",
+  "upstream_commit": "d12b4ba1632f558234e3f084e1f3d8bdf9147890",
+  "release": "v3.0",
+  "planes": "output/acceptance/langyuan-v44-joint-field/candidate-repeat/langyuan-10/planes",
+  "model": {
+    "path": "/private/tmp/raco_aliked_lightglue_pipeline_k512.onnx",
+    "filename": "raco_aliked_lightglue_pipeline_k512.onnx",
+    "sha256": "3ad66df4caef716588b3c8666f19f819d31fc13b2756fc2551dc20a8da473a98"
+  },
+  "license": {
+    "path": "/private/tmp/LightGlue-ONNX-audit/LICENSE",
+    "sha256": "63c179c56fd1bd31a15a3e2527e35200d219a018eeeef49c4044578563d98418",
+    "lightglue_code": "Apache-2.0",
+    "aliked_component": "BSD-3-Clause",
+    "review_required": true,
+    "aliked_source": "https://github.com/Shiaoming/ALIKED",
+    "aliked_license_sha256": "c48ae933e262f77087a1956ae95f4675bfe20895b52fb328eed5b4e11d477bfb"
+  },
+  "runtime": {
+    "python": "3.13.3",
+    "numpy": "2.5.1",
+    "opencv": "5.0.0",
+    "onnxruntime": "1.27.0",
+    "input_resize": [
+      512,
+      512
+    ],
+    "onnx_intra_op_threads": 1,
+    "onnx_inter_op_threads": 1
+  },
+  "records": [
+    {
+      "left": 0,
+      "right": 1,
+      "status": "ok",
+      "coordinate_frame": [
+        512,
+        512
+      ],
+      "keypoints": [
+        512,
+        512
+      ],
+      "matches": 45,
+      "inliers": 34,
+      "median_reprojection_px": 0.7699593901634216,
+      "p95_reprojection_px": 2.093322277069092,
+      "hull_support": 0.09647062695816144,
+      "elapsed_s": 1.8048424168955535
+    },
+    {
+      "left": 0,
+      "right": 2,
+      "status": "ok",
+      "coordinate_frame": [
+        512,
+        512
+      ],
+      "keypoints": [
+        512,
+        512
+      ],
+      "matches": 12,
+      "inliers": 5,
+      "median_reprojection_px": 0.07729273289442062,
+      "p95_reprojection_px": 0.6890912055969238,
+      "hull_support": 0.043799129967139416,
+      "elapsed_s": 1.8079854999668896
+    },
+    {
+      "left": 1,
+      "right": 2,
+      "status": "ok",
+      "coordinate_frame": [
+        512,
+        512
+      ],
+      "keypoints": [
+        512,
+        512
+      ],
+      "matches": 117,
+      "inliers": 96,
+      "median_reprojection_px": 0.932007908821106,
+      "p95_reprojection_px": 2.492830991744995,
+      "hull_support": 0.152911654669996,
+      "elapsed_s": 1.7016257089562714
+    }
+  ],
+  "outputs": [
+    "keypoints",
+    "matches",
+    "mscores"
+  ],
+  "descriptors_output": false,
+  "rust_feature_provider_result_compatible": false,
+  "rust_geometry_gate_rerun": false,
+  "decision": "candidate_runtime_verified_but_rust_sidecar_unavailable: pipeline emits keypoints/matches/mscores without descriptors, so it cannot satisfy FeatureProviderResult or be submitted to Rust geometry gate; transition to task11 bounded A/B",
+  "upstream_release_tag_commit": "953bd8dee53569f69a3cc8082862828b6f385ded",
+  "upstream_archive_sha256": "76e3fcc6030aed263b11c251c901e19d8968479dbbdb1fab1cde072337cc6ec8",
+  "environment_wheels_sha256": {
+    "numpy-2.5.1": "6165343f81b56ef8f514f396989e529b61d9dc709b99421b07e9f3e698e2287d",
+    "opencv-python-5.0.0.93": "198a75138241810206a17c829dbcc40a7cb1841cda538ca86cbbfc6c7d95f898",
+    "onnxruntime-1.27.0": "b3e5b58b8c89c2b20e086e890aa9527377e5c240dc3ecc1640d18e07705eeb1c",
+    "onnx-1.22.0": "596fbf0490947533c1c1045ba860851dc9fb77471023dac9a71ba5b42ceab103",
+    "typer-0.27.0": "6f4b27631e47f077871b7dc30e933ec0131c1390fbe0e387ea5574b5bac9ccf1",
+    "matplotlib-3.11.0": "373db8f91214e8cc35ac833cc1dd59dd961e148bbd55dd027141591dde1313"
+  },
+  "runner": "scripts/stack-lab/langyuan_raco_candidate_compare.py"
+}
