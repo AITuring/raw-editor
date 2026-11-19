@@ -64,3 +64,14 @@ QG source visual capture 完整覆盖失败 ROI：`roi-02` 对应 station 2 / ow
 对保存的 9 个 local-scale failure records 做 source-to-world sensitivity：只有 DSC04916.ARW 的测值低于 0.95，理论 isotropic factor 为 `1.068968`；其余失败记录测值在 `0.99968–1.41569`，不支持统一倍率修复。审计只保存 world 坐标、source id、原始 homography 和理论 factor，不修改 pose、owner、阈值或像素。
 
 机器摘要：[fengying-task-12-geometry-sensitivity-audit.json](../benchmarks/fengying-task-12-geometry-sensitivity-audit.json)。这个结果支持继续定位 DSC04916 的局部 source-to-world/owner 根因，但不授权把 factor 直接写入生产路径。
+
+## DSC04916.ARW 单源 geometry A/B（已完成）
+
+使用 test-only legacy source-scan pose hook，对 source id=58 的 `DSC04916.ARW` 施加 sensitivity audit 得到的 factor `1.06896813096`，完成三文件夹 110 输入、scale=0.25 独占 QG 验证。
+
+- `local_scale_pixel_ratio`：`fail (0.0) → pass`；
+- `owner_sharpness_coverage`：`0.9713647986 → 0.9708641435`，仍 fail；
+- `boundary_stroke_alignment`：原本 pass，新增 2 个 `2px` 失败；
+- detail repairs：`409 → 406`；24GiB 内存门通过；来源计数保持一致；最终 QG 仍 fail。
+
+结论：该倍率只能修复单一尺度门，代价是 owner/边界退化，不能进入生产默认，也不能授予 D2/D3。机器摘要：[fengying-task-12-legacy-geometry-ab.json](../benchmarks/fengying-task-12-legacy-geometry-ab.json)。实验 hook 已从主线移除。

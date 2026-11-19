@@ -1,0 +1,200 @@
+{
+  "schema": 1,
+  "task": 12,
+  "method": "fengying_legacy_single_source_geometry_sensitivity_ab_v1",
+  "production_impact": "test_only_cfg_test_legacy_pose_hook_no_default_or_threshold_change",
+  "dataset": "fengying",
+  "scale": 0.25,
+  "binary": "task-12-fengying-legacy-geometry-r1",
+  "source_id": 58,
+  "source_filename": "DSC04916.ARW",
+  "factor": 1.06896813096,
+  "baseline": {
+    "label": "fengying-diagnostics-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-12/fengying-diagnostics-r1",
+    "status": "rejected",
+    "peak_rss_bytes": 13988659200,
+    "wall_seconds": 1934.7325282096863,
+    "qg": "fail",
+    "output_sha256": "3fd5424c8b54cd319b4ecb2b2ad44539b4ac55a9e1d29435efc56c34b0116cbe",
+    "sources": {
+      "inputs": 110,
+      "report_sources": 104,
+      "ordered": 104,
+      "streamed": 104,
+      "lending": null,
+      "expected_skipped": [
+        "未标题-10-1.jpg",
+        "未标题-11 拷贝.jpg",
+        "未标题-12 拷贝.jpg",
+        "未标题-13-1.jpg",
+        "未标题-13.jpg",
+        "未标题-9.jpg"
+      ],
+      "covered_pixels": 77157204,
+      "owned_pixels": 77157204
+    },
+    "local_scale_pixel_ratio": {
+      "verdict": "fail",
+      "failed": [
+        0.0
+      ],
+      "measured": [
+        1.0,
+        1.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "owner_sharpness_coverage": {
+      "verdict": "fail",
+      "failed": [
+        0.971364798589639
+      ],
+      "measured": [
+        0.971364798589639
+      ]
+    },
+    "boundary_stroke_alignment": {
+      "verdict": "pass",
+      "failed": [],
+      "measured": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        2.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        0.0
+      ]
+    }
+  },
+  "experiment": {
+    "label": "fengying-legacy-geometry-dsc04916-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-12/fengying-legacy-geometry-dsc04916-r1",
+    "status": "rejected",
+    "peak_rss_bytes": 14758821888,
+    "wall_seconds": 1918.973228931427,
+    "qg": "fail",
+    "output_sha256": "4f0b674b6208771ce5be3c3b748c9acdf8fa9e42c5a2ac6f805d108de9867cca",
+    "sources": {
+      "inputs": 110,
+      "report_sources": 104,
+      "ordered": 104,
+      "streamed": 104,
+      "lending": null,
+      "expected_skipped": [
+        "未标题-10-1.jpg",
+        "未标题-11 拷贝.jpg",
+        "未标题-12 拷贝.jpg",
+        "未标题-13-1.jpg",
+        "未标题-13.jpg",
+        "未标题-9.jpg"
+      ],
+      "covered_pixels": 77200471,
+      "owned_pixels": 77200471
+    },
+    "local_scale_pixel_ratio": {
+      "verdict": "pass",
+      "failed": [],
+      "measured": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "owner_sharpness_coverage": {
+      "verdict": "fail",
+      "failed": [
+        0.970864143502818
+      ],
+      "measured": [
+        0.970864143502818
+      ]
+    },
+    "boundary_stroke_alignment": {
+      "verdict": "fail",
+      "failed": [
+        2.0,
+        2.0
+      ],
+      "measured": [
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        2.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "decision": "reject_single_source_geometry_factor_for_promotion: local_scale_pixel_ratio passes, but owner coverage regresses and two boundary failures appear; QG remains fail",
+  "next_step": "require an independently justified geometry-plus-owner hypothesis; do not tune this factor further"
+}
