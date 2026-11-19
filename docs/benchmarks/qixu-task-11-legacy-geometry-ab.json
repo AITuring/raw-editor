@@ -1,0 +1,898 @@
+{
+  "schema": 1,
+  "task": 11,
+  "method": "qixu_legacy_single_source_geometry_sensitivity_ab_v1",
+  "production_impact": "test_only_cfg_test_legacy_pose_hook_no_default_or_threshold_change",
+  "dataset": "qixu-1",
+  "scale": 0.25,
+  "binary": "task-11-legacy-geometry-r1",
+  "source_id": 39,
+  "source_filename": "DSC_3882.NEF",
+  "factor": 1.2166592079,
+  "baseline": {
+    "label": "qixu-1-diagnostics-r2",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-diagnostics-r2",
+    "status": "rejected",
+    "peak_rss_bytes": 15329722368,
+    "wall_seconds": 1070.729761838913,
+    "qg": "fail",
+    "runner_failures": [
+      "the Stack_Report has no verified TIFF export at the requested path",
+      "verified TIFF dimensions do not match the rendered result",
+      "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])",
+      "inputs missing from the stitching order: DSC_3842.NEF, DSC_3910.NEF, DSC_3911.NEF",
+      "streaming compositor used 70/75 inputs (0 lending detail only); absent: DSC_3842.NEF, DSC_3879.NEF, DSC_3907.NEF, DSC_3910.NEF, DSC_3911.NEF",
+      "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+    ],
+    "closure": "not_run",
+    "sources": {
+      "inputs": 75,
+      "report_sources": 72,
+      "ordered": 72,
+      "streamed": 70,
+      "lending": null,
+      "expected_skipped": [],
+      "covered_pixels": 16275362,
+      "owned_pixels": 16275362
+    },
+    "output_sha256": "e032aed6cb63241f47c53dc9cfca3cd8e719f83bf4bbb512060edb919a5c2115",
+    "detail_repairs": 30,
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-diagnostics-r2/run/qixu-1-s0p25-task-11-diagnostics-r2-stack-reports/stack-report-1d628740-6e9c-4189-8fea-4e1b63e9f8a3.json",
+    "local_scale_median": {
+      "verdict": "not_applicable",
+      "measured": [
+        [
+          {
+            "x": 411.0,
+            "y": 129.0
+          },
+          1.000051882780211,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3844.NEF"
+        ],
+        [
+          {
+            "x": 1307.0,
+            "y": 897.0
+          },
+          0.967439496928828,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3845.NEF"
+        ],
+        [
+          {
+            "x": 1051.0,
+            "y": 2049.0
+          },
+          0.8339863935957978,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3850.NEF"
+        ],
+        [
+          {
+            "x": -485.0,
+            "y": 1921.0
+          },
+          0.8251997975544141,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3855.NEF"
+        ],
+        [
+          {
+            "x": -869.0,
+            "y": 385.0
+          },
+          0.8675728360413059,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3860.NEF"
+        ],
+        [
+          {
+            "x": -1125.0,
+            "y": 1409.0
+          },
+          0.836485929454487,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3863.NEF"
+        ],
+        [
+          {
+            "x": -2277.0,
+            "y": 1153.0
+          },
+          0.7808267046700104,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3867.NEF"
+        ],
+        [
+          {
+            "x": -2917.0,
+            "y": 385.0
+          },
+          0.7572122846991967,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3882.NEF"
+        ]
+      ],
+      "failed": [
+        [
+          {
+            "x": 411.0,
+            "y": 129.0
+          },
+          1.000051882780211,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3844.NEF"
+        ],
+        [
+          {
+            "x": 1307.0,
+            "y": 897.0
+          },
+          0.967439496928828,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3845.NEF"
+        ],
+        [
+          {
+            "x": 1051.0,
+            "y": 2049.0
+          },
+          0.8339863935957978,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3850.NEF"
+        ],
+        [
+          {
+            "x": -485.0,
+            "y": 1921.0
+          },
+          0.8251997975544141,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3855.NEF"
+        ],
+        [
+          {
+            "x": -869.0,
+            "y": 385.0
+          },
+          0.8675728360413059,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3860.NEF"
+        ],
+        [
+          {
+            "x": -1125.0,
+            "y": 1409.0
+          },
+          0.836485929454487,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3863.NEF"
+        ],
+        [
+          {
+            "x": -2277.0,
+            "y": 1153.0
+          },
+          0.7808267046700104,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3867.NEF"
+        ],
+        [
+          {
+            "x": -2917.0,
+            "y": 385.0
+          },
+          0.7572122846991967,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3882.NEF"
+        ]
+      ]
+    },
+    "local_scale_pixel_ratio": {
+      "verdict": "fail",
+      "measured": [
+        [
+          {
+            "x": 411.0,
+            "y": 129.0
+          },
+          1.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3844.NEF"
+        ],
+        [
+          {
+            "x": 1307.0,
+            "y": 897.0
+          },
+          1.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3845.NEF"
+        ],
+        [
+          {
+            "x": 1051.0,
+            "y": 2049.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3850.NEF"
+        ],
+        [
+          {
+            "x": -485.0,
+            "y": 1921.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3855.NEF"
+        ],
+        [
+          {
+            "x": -869.0,
+            "y": 385.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3860.NEF"
+        ],
+        [
+          {
+            "x": -1125.0,
+            "y": 1409.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3863.NEF"
+        ],
+        [
+          {
+            "x": -2277.0,
+            "y": 1153.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3867.NEF"
+        ],
+        [
+          {
+            "x": -2917.0,
+            "y": 385.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3882.NEF"
+        ]
+      ],
+      "failed": [
+        [
+          {
+            "x": 1051.0,
+            "y": 2049.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3850.NEF"
+        ],
+        [
+          {
+            "x": -485.0,
+            "y": 1921.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3855.NEF"
+        ],
+        [
+          {
+            "x": -869.0,
+            "y": 385.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3860.NEF"
+        ],
+        [
+          {
+            "x": -1125.0,
+            "y": 1409.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3863.NEF"
+        ],
+        [
+          {
+            "x": -2277.0,
+            "y": 1153.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3867.NEF"
+        ],
+        [
+          {
+            "x": -2917.0,
+            "y": 385.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3882.NEF"
+        ]
+      ]
+    },
+    "boundary_stroke_alignment": {
+      "verdict": "fail",
+      "measured": [
+        [
+          {
+            "x": 1200.0,
+            "y": 917.5
+          },
+          0.0,
+          "station:1/station:10;owner:1/owner:3;samples:1202.0,914.0|1202.0,922.0"
+        ],
+        [
+          {
+            "x": -3571.5,
+            "y": 633.0
+          },
+          1.0,
+          "station:3/station:7;owner:60/owner:41;samples:-3575.0,635.0|-3567.0,634.0"
+        ],
+        [
+          {
+            "x": -2443.5,
+            "y": 536.0
+          },
+          2.0,
+          "station:3/station:8;owner:40/owner:27;samples:-2447.0,538.0|-2439.0,536.0"
+        ],
+        [
+          {
+            "x": -3785.0,
+            "y": 977.5
+          },
+          3.0,
+          "station:7/station:12;owner:60/owner:58;samples:-3783.0,974.0|-3786.0,982.0"
+        ],
+        [
+          {
+            "x": -1493.5,
+            "y": 451.0
+          },
+          0.0,
+          "station:8/station:9;owner:38/owner:27;samples:-1497.0,453.0|-1489.0,453.0"
+        ],
+        [
+          {
+            "x": 1192.0,
+            "y": 1489.5
+          },
+          0.0,
+          "station:10/station:20;owner:4/owner:6;samples:1190.0,1486.0|1190.0,1494.0"
+        ],
+        [
+          {
+            "x": -3896.0,
+            "y": 1261.5
+          },
+          3.0,
+          "station:12/station:19;owner:59/owner:56;samples:-3894.0,1258.0|-3897.0,1266.0"
+        ],
+        [
+          {
+            "x": 1184.0,
+            "y": 1705.5
+          },
+          2.0,
+          "station:20/station:33;owner:8/owner:6;samples:1186.0,1702.0|1184.0,1710.0"
+        ],
+        [
+          {
+            "x": -4397.5,
+            "y": 2133.0
+          },
+          1.0,
+          "station:23/station:30;owner:55/owner:53;samples:-4401.0,2134.0|-4393.0,2135.0"
+        ],
+        [
+          {
+            "x": -4315.5,
+            "y": 1933.0
+          },
+          1.0,
+          "station:23/station:30;owner:55/owner:53;samples:-4319.0,1934.0|-4311.0,1935.0"
+        ],
+        [
+          {
+            "x": -4145.0,
+            "y": 1896.5
+          },
+          2.0,
+          "station:23/station:30;owner:55/owner:52;samples:-4143.0,1893.0|-4145.0,1901.0"
+        ],
+        [
+          {
+            "x": -4078.0,
+            "y": 1725.5
+          },
+          2.0,
+          "station:23/station:30;owner:55/owner:52;samples:-4076.0,1722.0|-4078.0,1730.0"
+        ],
+        [
+          {
+            "x": -4080.0,
+            "y": 1733.5
+          },
+          3.0,
+          "station:23/station:30;owner:52/owner:55;samples:-4078.0,1730.0|-4081.0,1738.0"
+        ],
+        [
+          {
+            "x": 1175.0,
+            "y": 2010.5
+          },
+          0.0,
+          "station:33/station:37;owner:8/owner:11;samples:1177.0,2007.0|1177.0,2015.0"
+        ]
+      ],
+      "failed": [
+        [
+          {
+            "x": -3785.0,
+            "y": 977.5
+          },
+          3.0,
+          "station:7/station:12;owner:60/owner:58;samples:-3783.0,974.0|-3786.0,982.0"
+        ],
+        [
+          {
+            "x": -3896.0,
+            "y": 1261.5
+          },
+          3.0,
+          "station:12/station:19;owner:59/owner:56;samples:-3894.0,1258.0|-3897.0,1266.0"
+        ],
+        [
+          {
+            "x": -4080.0,
+            "y": 1733.5
+          },
+          3.0,
+          "station:23/station:30;owner:52/owner:55;samples:-4078.0,1730.0|-4081.0,1738.0"
+        ]
+      ]
+    },
+    "owner_sharpness_coverage": {
+      "verdict": "fail",
+      "measured": [
+        [
+          {
+            "x": -4581.0,
+            "y": 1.0
+          },
+          0.9113826564746993,
+          ""
+        ]
+      ],
+      "failed": [
+        [
+          {
+            "x": -4581.0,
+            "y": 1.0
+          },
+          0.9113826564746993,
+          ""
+        ]
+      ]
+    }
+  },
+  "experiment": {
+    "label": "qixu-1-legacy-geometry-dsc3882-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-legacy-geometry-dsc3882-r1",
+    "status": "rejected",
+    "peak_rss_bytes": 15478341632,
+    "wall_seconds": 964.9914870262146,
+    "qg": "fail",
+    "runner_failures": [
+      "the Stack_Report has no verified TIFF export at the requested path",
+      "verified TIFF dimensions do not match the rendered result",
+      "the TIFF export lacks verified unassociated coverage alpha (ExtraSamples=[2])",
+      "inputs missing from the stitching order: DSC_3842.NEF, DSC_3910.NEF, DSC_3911.NEF",
+      "streaming compositor used 69/75 inputs (0 lending detail only); absent: DSC_3842.NEF, DSC_3879.NEF, DSC_3884.NEF, DSC_3907.NEF, DSC_3910.NEF, DSC_3911.NEF",
+      "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+    ],
+    "closure": "not_run",
+    "sources": {
+      "inputs": 75,
+      "report_sources": 72,
+      "ordered": 72,
+      "streamed": 69,
+      "lending": null,
+      "expected_skipped": [],
+      "covered_pixels": 16509487,
+      "owned_pixels": 16509487
+    },
+    "output_sha256": "866b8cc8f72d6d05b48645ecdd089c8014a24f3fbde74632fdc31a861892f020",
+    "detail_repairs": 25,
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-legacy-geometry-dsc3882-r1/run/qixu-1-s0p25-task-11-legacy-geometry-dsc3882-r1-stack-reports/stack-report-f963ff17-12f8-49b1-91e5-d8e372682c61.json",
+    "local_scale_median": {
+      "verdict": "not_applicable",
+      "measured": [
+        [
+          {
+            "x": 411.0,
+            "y": 129.0
+          },
+          1.000051882780211,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3844.NEF"
+        ],
+        [
+          {
+            "x": 1307.0,
+            "y": 897.0
+          },
+          0.9672675412006422,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3845.NEF"
+        ],
+        [
+          {
+            "x": 1051.0,
+            "y": 2049.0
+          },
+          0.8340109694467535,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3850.NEF"
+        ],
+        [
+          {
+            "x": -485.0,
+            "y": 1921.0
+          },
+          0.8251997975544141,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3855.NEF"
+        ],
+        [
+          {
+            "x": -869.0,
+            "y": 385.0
+          },
+          0.8677760070755827,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3860.NEF"
+        ],
+        [
+          {
+            "x": -1125.0,
+            "y": 1409.0
+          },
+          0.8364858828768722,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3863.NEF"
+        ],
+        [
+          {
+            "x": -1893.0,
+            "y": 1025.0
+          },
+          0.8093825852973443,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3867.NEF"
+        ],
+        [
+          {
+            "x": -2789.0,
+            "y": 257.0
+          },
+          0.9345783805259454,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3882.NEF"
+        ]
+      ],
+      "failed": [
+        [
+          {
+            "x": 411.0,
+            "y": 129.0
+          },
+          1.000051882780211,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3844.NEF"
+        ],
+        [
+          {
+            "x": 1307.0,
+            "y": 897.0
+          },
+          0.9672675412006422,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3845.NEF"
+        ],
+        [
+          {
+            "x": 1051.0,
+            "y": 2049.0
+          },
+          0.8340109694467535,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3850.NEF"
+        ],
+        [
+          {
+            "x": -485.0,
+            "y": 1921.0
+          },
+          0.8251997975544141,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3855.NEF"
+        ],
+        [
+          {
+            "x": -869.0,
+            "y": 385.0
+          },
+          0.8677760070755827,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3860.NEF"
+        ],
+        [
+          {
+            "x": -1125.0,
+            "y": 1409.0
+          },
+          0.8364858828768722,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3863.NEF"
+        ],
+        [
+          {
+            "x": -1893.0,
+            "y": 1025.0
+          },
+          0.8093825852973443,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3867.NEF"
+        ],
+        [
+          {
+            "x": -2789.0,
+            "y": 257.0
+          },
+          0.9345783805259454,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3882.NEF"
+        ]
+      ]
+    },
+    "local_scale_pixel_ratio": {
+      "verdict": "fail",
+      "measured": [
+        [
+          {
+            "x": 411.0,
+            "y": 129.0
+          },
+          1.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3844.NEF"
+        ],
+        [
+          {
+            "x": 1307.0,
+            "y": 897.0
+          },
+          1.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3845.NEF"
+        ],
+        [
+          {
+            "x": 1051.0,
+            "y": 2049.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3850.NEF"
+        ],
+        [
+          {
+            "x": -485.0,
+            "y": 1921.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3855.NEF"
+        ],
+        [
+          {
+            "x": -869.0,
+            "y": 385.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3860.NEF"
+        ],
+        [
+          {
+            "x": -1125.0,
+            "y": 1409.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3863.NEF"
+        ],
+        [
+          {
+            "x": -1893.0,
+            "y": 1025.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3867.NEF"
+        ],
+        [
+          {
+            "x": -2789.0,
+            "y": 257.0
+          },
+          0.01953125,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3882.NEF"
+        ]
+      ],
+      "failed": [
+        [
+          {
+            "x": 1051.0,
+            "y": 2049.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3850.NEF"
+        ],
+        [
+          {
+            "x": -485.0,
+            "y": 1921.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3855.NEF"
+        ],
+        [
+          {
+            "x": -869.0,
+            "y": 385.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3860.NEF"
+        ],
+        [
+          {
+            "x": -1125.0,
+            "y": 1409.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3863.NEF"
+        ],
+        [
+          {
+            "x": -1893.0,
+            "y": 1025.0
+          },
+          0.0,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3867.NEF"
+        ],
+        [
+          {
+            "x": -2789.0,
+            "y": 257.0
+          },
+          0.01953125,
+          "/Users/dp/Downloads/书画拼图/祁序1/DSC_3882.NEF"
+        ]
+      ]
+    },
+    "boundary_stroke_alignment": {
+      "verdict": "fail",
+      "measured": [
+        [
+          {
+            "x": 1200.0,
+            "y": 917.5
+          },
+          0.0,
+          "station:1/station:10;owner:1/owner:3;samples:1202.0,914.0|1202.0,922.0"
+        ],
+        [
+          {
+            "x": -2619.5,
+            "y": 556.0
+          },
+          2.0,
+          "station:3/station:5;owner:41/owner:66;samples:-2623.0,558.0|-2615.0,556.0"
+        ],
+        [
+          {
+            "x": -2569.5,
+            "y": 550.0
+          },
+          0.0,
+          "station:3/station:5;owner:66/owner:41;samples:-2573.0,552.0|-2565.0,552.0"
+        ],
+        [
+          {
+            "x": -3725.0,
+            "y": 818.5
+          },
+          2.0,
+          "station:3/station:7;owner:40/owner:60;samples:-3724.0,815.0|-3726.0,823.0"
+        ],
+        [
+          {
+            "x": -3847.0,
+            "y": 1109.5
+          },
+          0.0,
+          "station:3/station:19;owner:56/owner:40;samples:-3847.0,1106.0|-3847.0,1114.0"
+        ],
+        [
+          {
+            "x": -1996.5,
+            "y": 494.0
+          },
+          0.0,
+          "station:8/station:9;owner:39/owner:27;samples:-2000.0,496.0|-1992.0,496.0"
+        ],
+        [
+          {
+            "x": -1867.5,
+            "y": 484.0
+          },
+          2.0,
+          "station:8/station:9;owner:27/owner:39;samples:-1871.0,486.0|-1863.0,484.0"
+        ],
+        [
+          {
+            "x": -1823.5,
+            "y": 479.0
+          },
+          0.0,
+          "station:8/station:9;owner:39/owner:27;samples:-1827.0,481.0|-1819.0,481.0"
+        ],
+        [
+          {
+            "x": -1496.5,
+            "y": 452.0
+          },
+          0.0,
+          "station:8/station:9;owner:38/owner:27;samples:-1500.0,454.0|-1492.0,454.0"
+        ],
+        [
+          {
+            "x": -3998.0,
+            "y": 1520.5
+          },
+          3.0,
+          "station:19/station:23;owner:56/owner:54;samples:-3996.0,1517.0|-3999.0,1525.0"
+        ],
+        [
+          {
+            "x": 1184.0,
+            "y": 1705.5
+          },
+          2.0,
+          "station:20/station:33;owner:8/owner:6;samples:1186.0,1702.0|1184.0,1710.0"
+        ],
+        [
+          {
+            "x": -4076.0,
+            "y": 1725.5
+          },
+          2.0,
+          "station:23/station:30;owner:55/owner:52;samples:-4076.0,1722.0|-4078.0,1730.0"
+        ],
+        [
+          {
+            "x": -4080.0,
+            "y": 1733.5
+          },
+          3.0,
+          "station:23/station:30;owner:52/owner:55;samples:-4078.0,1730.0|-4081.0,1738.0"
+        ]
+      ],
+      "failed": [
+        [
+          {
+            "x": -3998.0,
+            "y": 1520.5
+          },
+          3.0,
+          "station:19/station:23;owner:56/owner:54;samples:-3996.0,1517.0|-3999.0,1525.0"
+        ],
+        [
+          {
+            "x": -4080.0,
+            "y": 1733.5
+          },
+          3.0,
+          "station:23/station:30;owner:52/owner:55;samples:-4078.0,1730.0|-4081.0,1738.0"
+        ]
+      ]
+    },
+    "owner_sharpness_coverage": {
+      "verdict": "fail",
+      "measured": [
+        [
+          {
+            "x": -4581.0,
+            "y": 1.0
+          },
+          0.8852725021530815,
+          ""
+        ]
+      ],
+      "failed": [
+        [
+          {
+            "x": -4581.0,
+            "y": 1.0
+          },
+          0.8852725021530815,
+          ""
+        ]
+      ]
+    }
+  },
+  "decision": "reject_single_source_pose_factor_for_promotion: one ratio and two boundary measurements improved, but owner coverage regressed 0.9113826565_to_0.8852725022 and QG remained fail",
+  "next_step": "do not search more pose factors on this path; keep task11 at diagnosis unless a bounded joint geometry-owner hypothesis is independently specified"
+}

@@ -58,3 +58,9 @@ feather=1.0 只对 seam/owner 有局部改善，不能解释或修复几何尺�
 对祁序1 保存的 14 个 local-scale failure records 重算 source-to-world sensitivity：6 个实际低于 0.95 的点需要理论 isotropic factor `1.095009–1.254602` 才能到 0.95；其余 8 个 ratio/median 失败点不能从 `0` 的测量值倒推倍率。该审计只保存失败 world 坐标、owner source id、原始 homography 和理论 factor，不修改 pose、阈值或像素。
 
 机器摘要：[qixu-task-11-geometry-sensitivity-audit.json](../benchmarks/qixu-task-11-geometry-sensitivity-audit.json)。这些 factor 只是几何假设证据，不能直接套用到生产；下一步若继续，必须固定单一 station/source 假设做 test-only bounded A/B，并同时复核 closure、boundary、owner、density 和来源合同。
+
+## legacy source-scan geometry A/B（已停止）
+
+为覆盖祁序实际使用的 legacy source-scan 路径，加入了仅 test binary 的 source pose hook，对 `DSC_3882.NEF`（source id=39）施加审计得到的 factor `1.2166592079`。祁序1 75 输入、scale=0.25 独占运行中，1 个 local-scale ratio 从 `0` 提到 `0.01953125`，boundary 失败从 3 个降到 2 个；但 owner coverage 从 `0.9113826565` 降到 `0.8852725022`，QG 仍 fail，来源计数与 legacy runner 观测缺口也仍在。
+
+该单源 pose 假设不能推广；实验 hook 已从主线移除。机器摘要：[qixu-task-11-legacy-geometry-ab.json](../benchmarks/qixu-task-11-legacy-geometry-ab.json)。
