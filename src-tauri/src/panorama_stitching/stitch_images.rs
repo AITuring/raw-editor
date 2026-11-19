@@ -174,52 +174,6 @@ fn apply_test_geometry_sensitivity(
     }
 }
 
-#[cfg(test)]
-fn apply_test_legacy_geometry_sensitivity(
-    images: &[&ImageInfo],
-    homographies: &mut HashMap<usize, Matrix3<f64>>,
-) {
-    let Some(selector) = std::env::var("RAW_EDITOR_TEST_LEGACY_SOURCE_ID").ok() else {
-        return;
-    };
-    let Ok(source_id) = selector.parse::<usize>() else {
-        return;
-    };
-    let Ok(factor) = std::env::var("RAW_EDITOR_TEST_LEGACY_SOURCE_SCALE")
-        .ok()
-        .and_then(|value| value.parse::<f64>().ok())
-        .ok_or(())
-    else {
-        return;
-    };
-    if !(factor.is_finite() && factor > 0.0 && factor != 1.0) {
-        return;
-    }
-    let Some(info) = images.iter().find(|image| image.id == source_id) else {
-        return;
-    };
-    let center_x = f64::from(info.width) * 0.5;
-    let center_y = f64::from(info.height) * 0.5;
-    let around_center = Matrix3::new(
-        factor,
-        0.0,
-        center_x * (1.0 - factor),
-        0.0,
-        factor,
-        center_y * (1.0 - factor),
-        0.0,
-        0.0,
-        1.0,
-    );
-    if let Some(pose) = homographies.get_mut(&source_id) {
-        *pose *= around_center;
-        println!(
-            "  - TEST_LEGACY_GEOMETRY_SENSITIVITY source_id={} factor={factor}",
-            source_id
-        );
-    }
-}
-
 #[cfg(not(test))]
 fn apply_test_geometry_sensitivity(
     _tile_infos: &[ImageInfo],
@@ -2012,8 +1966,9 @@ fn stitch_images_attempt<R: Runtime>(
             render_images_info.len()
         );
     }
-    let mut render_homographies = if render_scale < 1.0 {
-        let scaled_global_homographies =
+    let scaled_global_homographies;
+    let render_homographies = if render_scale < 1.0 {
+        scaled_global_homographies =
             scaled_source_render_homographies(&global_homographies, render_scale);
         let (render_width, render_height) = stitching::output_canvas_dimensions(
             &render_images_info,
@@ -2026,9 +1981,9 @@ fn stitch_images_attempt<R: Runtime>(
         );
         println!("{message}");
         let _ = app_handle.emit(progress_event, &message);
-        scaled_global_homographies
+        &scaled_global_homographies
     } else {
-        global_homographies.clone()
+        &global_homographies
     };
 
     let start_time = Instant::now();
@@ -2170,7 +2125,7 @@ fn stitch_images_attempt<R: Runtime>(
             println!("Warping and blending flat artwork with detail-preserving ownership...");
             crate::panorama_utils::mosaic::detail_preserving_mosaic(
                 &render_images_info,
-                &render_homographies,
+                render_homographies,
                 projection,
                 focus_capture_group_ids.as_ref(),
                 // FlatArtwork is a position mosaic even when grouping found a
@@ -2211,7 +2166,7 @@ fn stitch_images_attempt<R: Runtime>(
             };
             crate::panorama_utils::scan_mosaic::planar_scan_mosaic(
                 &render_images_info,
-                &render_homographies,
+                render_homographies,
                 app_handle.clone(),
                 progress_event,
                 &mut load_scan_source,
@@ -2226,7 +2181,7 @@ fn stitch_images_attempt<R: Runtime>(
         }
         BlendMode::Panorama => stitching::progressive_seam_stitcher(
             &render_images_info,
-            &render_homographies,
+            render_homographies,
             projection,
             alignment_mode == AlignmentMode::FlatArtwork || psd_source_scan,
             app_handle.clone(),
@@ -2353,14 +2308,9 @@ fn stitch_images_attempt<R: Runtime>(
                 fallback_reason.as_deref().unwrap_or("none"),
             );
             if !path_selection.use_virtual_tiles {
-                #[cfg(test)]
-                apply_test_legacy_geometry_sensitivity(
-                    &render_images_info,
-                    &mut render_homographies,
-                );
                 stitching::focus_stack_stitcher_observed(
                     &render_images_info,
-                    &render_homographies,
+                    render_homographies,
                     projection,
                     if render_scale < 1.0 {
                         // Test-only reduced renders validate global layout. Local
@@ -2447,7 +2397,7 @@ fn stitch_images_attempt<R: Runtime>(
                         focus_anchor_render_frames(
                             groups,
                             &image_data,
-                            &render_homographies,
+                            render_homographies,
                             tile_focus_warp,
                         )
                         .ok_or("cannot establish camera-station anchor coordinates")?,
@@ -4310,7 +4260,7 @@ fn stitch_images_attempt<R: Runtime>(
                             }
                             stitching::focus_stack_stitcher(
                                 &render_images_info,
-                                &render_homographies,
+                                render_homographies,
                                 projection,
                                 focus_layer_warp.as_ref(),
                                 focus_capture_group_ids.as_ref(),
@@ -4334,7 +4284,7 @@ fn stitch_images_attempt<R: Runtime>(
                     }
                     stitching::focus_stack_stitcher(
                         &render_images_info,
-                        &render_homographies,
+                        render_homographies,
                         projection,
                         focus_layer_warp.as_ref(),
                         focus_capture_group_ids.as_ref(),
