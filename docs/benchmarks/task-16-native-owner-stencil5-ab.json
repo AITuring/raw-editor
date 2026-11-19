@@ -1,0 +1,266 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_native_scale1_owner_stencil5_ab_v1",
+  "production_impact": "test_only_owner_stencil_radius2_no_production_change",
+  "dataset": "mayuan-2",
+  "scale": 1.0,
+  "binary": "task-16-owner-stencil5-r1",
+  "binary_sha256": "47f15a01f90ca61c4358dc00a918c52d385d8c14bb16d29b0c163f6e4e8240d0",
+  "commit": "a6803939a77d2b41d27eafb3266b9d69e09990ec",
+  "inputs_sha256": "4e39ee193f336801a7918307307f8c9ba7d6c9490fb105678c3b4a112663294f",
+  "manifest_sha256": "449224e8c2726a5c2732375641dd40c190f6e87f593cff2b7797d0b66add482f",
+  "runner_sha256": "443ed48a26ddef9f26f827ea81f27798c2cec50dea55d8ef55310f8ecb780317",
+  "control_reference": "docs/benchmarks/task-16-native-boundary-repair-owner-export-ab.json",
+  "experiment": {
+    "label": "mayuan-2-s1-task-16-mayuan-2-native-owner-stencil5-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-owner-stencil5-r1",
+    "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-owner-stencil5-r1/analysis.json",
+    "execution": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-owner-stencil5-r1/execution.json",
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-owner-stencil5-r1/run/mayuan-2-s1-task-16-mayuan-2-native-owner-stencil5-r1-stack-reports/stack-report-e27253ac-5819-4cb9-a9ad-9546c93f370b.json",
+    "report_sha256": "3667dd828d6f87545e387d598638d04a7fc05770827e4d1ff89a793af4f061b3",
+    "env": {
+      "RAW_EDITOR_FOCUS_OWNER_STENCIL_RADIUS": "2",
+      "RAW_EDITOR_FOCUS_OWNER_UNRESOLVED_DIR": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-owner-stencil5-r1/owner-unresolved"
+    }
+  },
+  "status": "rejected",
+  "exit": {
+    "runner_exit_code": 1,
+    "native_child_exit_code": 101,
+    "runner_verdict": "failed",
+    "runner_failures": [
+      "layered native acceptance failed: native output did not pass the complete quality gate",
+      "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+    ]
+  },
+  "checks": {
+    "inputs_unchanged": true,
+    "reference_unchanged": true,
+    "binary_unchanged": true,
+    "memory_gate_pass": true,
+    "runner_exit_zero": false,
+    "native_child_exit_zero": false,
+    "runner_summary_present": true,
+    "runner_failures_empty": false,
+    "quality_gate_pass": false,
+    "output_contract": true,
+    "report_source_digests": true
+  },
+  "quality_gate": {
+    "verdict": "fail",
+    "roi_count": 8,
+    "criteria": {
+      "local_scale_median": {
+        "verdict": "pass",
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {}
+      },
+      "local_scale_pixel_ratio": {
+        "verdict": "pass",
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {}
+      },
+      "effective_pixel_count": {
+        "verdict": "insufficient_evidence",
+        "measurable_count": 0,
+        "unmeasurable_count": 1,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "technical_unmeasurable_count": 1,
+        "unmeasurable_reasons": {
+          "quality_gate_insufficient_evidence": 1
+        },
+        "failed": [],
+        "rejected_content_reasons": {}
+      },
+      "mtf50_normalized": {
+        "verdict": "not_applicable",
+        "measurable_count": 0,
+        "unmeasurable_count": 0,
+        "candidate_count": 512,
+        "eligible_count": 0,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {
+          "slanted_edge_angle_out_of_range": 182,
+          "slanted_edge_contrast_insufficient": 24,
+          "slanted_edge_line_fit_residual_exceeded": 9,
+          "slanted_edge_too_short": 297
+        }
+      },
+      "gradient_energy_normalized": {
+        "verdict": "pass",
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {}
+      },
+      "noise_sigma_ratio": {
+        "verdict": "pass",
+        "measurable_count": 24,
+        "unmeasurable_count": 0,
+        "candidate_count": 26,
+        "eligible_count": 24,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {
+          "roi_not_flat": 2
+        }
+      },
+      "roi_delta_e00": {
+        "verdict": "pass",
+        "measurable_count": 8,
+        "unmeasurable_count": 0,
+        "candidate_count": 8,
+        "eligible_count": 8,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {}
+      },
+      "boundary_stroke_alignment": {
+        "verdict": "fail",
+        "measurable_count": 2,
+        "unmeasurable_count": 0,
+        "candidate_count": 1286,
+        "eligible_count": 2,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [
+          {
+            "world": {
+              "x": 699.0,
+              "y": 3621.5
+            },
+            "measured": 3.0,
+            "owner_path": "station:1/station:3;owner:10/owner:4;samples:698.0,3618.0|701.0,3626.0"
+          }
+        ],
+        "rejected_content_reasons": {
+          "boundary_low_contrast": 1284
+        }
+      },
+      "owner_sharpness_coverage": {
+        "verdict": "pass",
+        "measurable_count": 1,
+        "unmeasurable_count": 0,
+        "candidate_count": 0,
+        "eligible_count": 0,
+        "technical_unmeasurable_count": 0,
+        "unmeasurable_reasons": {},
+        "failed": [],
+        "rejected_content_reasons": {}
+      }
+    },
+    "non_pass": [
+      "effective_pixel_count:insufficient_evidence",
+      "mtf50_normalized:not_applicable",
+      "boundary_stroke_alignment:fail"
+    ],
+    "detail_repairs": 0
+  },
+  "owner_stencil": {
+    "default_radius": 1,
+    "experiment_radius": 2,
+    "default_candidate_capacity": 9,
+    "experiment_candidate_capacity": 25,
+    "unresolved_before": 163,
+    "unresolved_after": 0,
+    "owner_criterion_before": "insufficient_evidence",
+    "owner_criterion_after": "pass",
+    "new_unresolved_files": []
+  },
+  "boundary": {
+    "verdict": "fail",
+    "failed": [
+      {
+        "world": {
+          "x": 699.0,
+          "y": 3621.5
+        },
+        "measured": 3.0,
+        "owner_path": "station:1/station:3;owner:10/owner:4;samples:698.0,3618.0|701.0,3626.0"
+      }
+    ],
+    "candidate_count": 1286
+  },
+  "density": {
+    "status": "bypassed",
+    "factor": 1.0,
+    "pixel_count_multiplier": 1.0,
+    "canvas_pixels": 153231600,
+    "output_plane_lower_bound_bytes": 2758168800,
+    "target_minimum_scale": 1.0,
+    "probe_step_px": 32,
+    "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+    "source_count": 42,
+    "sample_count": 0,
+    "invalid_probe_count": 394,
+    "boundary_probe_count": 37446,
+    "worst_station_index": null,
+    "worst_source_id": null,
+    "worst_station_point": null,
+    "direct_pair_p95_output_px": null,
+    "residual_median_output_px": null,
+    "max_corner_correction_output_px": null,
+    "minimum_scale": null,
+    "p01_scale": null,
+    "median_scale": null,
+    "bypass_reason": "nonidentity_world_residual"
+  },
+  "closure": {
+    "status": "converged",
+    "native_joint_before_prune": {
+      "relation_count": 111,
+      "matrix_direct_pair_p95_px": 155.82331418433606,
+      "accepted": true
+    }
+  },
+  "output": {
+    "alpha_preserved": true,
+    "artifact_validation": "pass",
+    "artifact_validation_error": null,
+    "bit_depth": 16,
+    "format": "TIFF",
+    "height": 11019,
+    "icc": "sRGB",
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-owner-stencil5-r1/run/mayuan-2-s1-task-16-mayuan-2-native-owner-stencil5-r1.tiff",
+    "preview": {
+      "path": "",
+      "max_roi_delta_e": 0.0
+    },
+    "result_id": "native-fixture-e27253ac-5819-4cb9-a9ad-9546c93f370b",
+    "tiff_extra_samples": [
+      2
+    ],
+    "width": 13299,
+    "written": true
+  },
+  "resources": {
+    "peak_rss_bytes": 13850673152,
+    "memory_threshold_bytes": 25769803776,
+    "memory_gate_pass": true,
+    "wall_seconds": 10010.327001810074
+  },
+  "decision": "owner 5x5 test-only stencil eliminated all 163 unresolved owner pixels and passed owner_sharpness_coverage, but boundary remains a concrete 3px failure and density remains bypassed; native acceptance still rejects. Stop owner fallback and do not combine variables blindly.",
+  "next_step": "retain owner radius 1 in production; write final task16 root-cause decision, keep boundary repair as local diagnostic only, and design residual-aware density diagnostic separately."
+}

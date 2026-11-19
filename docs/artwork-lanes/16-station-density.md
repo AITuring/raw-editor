@@ -89,3 +89,11 @@ probe 的低尺度组连续落在 station15/16/17：minimum 分别为 `0.8829276
 test-only `RAW_EDITOR_FOCUS_OWNER_UNRESOLVED_DIR` 导出的 163 点全部是 `raw_owner_unresolved`，集中在 station13（124 点，local y=`5252.81–5471.70`）和 station14（39 点，local y=`5234.35–5448.85`）的下部区域；其余 transform/out-of-bounds/station/evidence 计数均为零。这个空间聚类支持一次可证伪的 5×5 owner-stencil A/B，但不能预先假定它会通过 owner gate。
 
 机器摘要：[task-16-native-boundary-repair-owner-export-ab.json](../benchmarks/task-16-native-boundary-repair-owner-export-ab.json)；原始坐标文件在该 run directory 的 `owner-unresolved/`。下一步只做一次可配置 5×5 stencil test-only A/B；若 unresolved 不降为零或引入新失败，则停止 owner fallback，保留 density residual-aware brief。
+
+## 5×5 owner-stencil A/B 结果
+
+使用 `RAW_EDITOR_FOCUS_OWNER_STENCIL_RADIUS=2` 完成同一 47 源、scale=1、exclusive/24GiB 运行，boundary repair 关闭。163 个 unresolved owner 坐标全部归零，`owner_sharpness_coverage` 从 `insufficient_evidence` 变为 `pass`；默认生产半径仍是 1（3×3，最多 9 个候选）。
+
+但 boundary seam 仍在 `(699,3621.5)` 为 `3.0px`，`boundary_stroke_alignment=fail`；`effective_pixel_count` 仍 `insufficient_evidence`，`mtf50_normalized` 仍 `not_applicable`，output density 仍 `bypassed/nonidentity_world_residual`。完整 native acceptance 仍拒绝，所以不把 5×5 fallback 推广，也不把它与 boundary repair 叠加再跑。
+
+机器摘要：[task-16-native-owner-stencil5-ab.json](../benchmarks/task-16-native-owner-stencil5-ab.json)。结论：owner fallback 假设已验证为局部有效但不足以完成任务16；保留生产 3×3 合同，后续只处理 boundary 合同和 residual-aware density 诊断。
