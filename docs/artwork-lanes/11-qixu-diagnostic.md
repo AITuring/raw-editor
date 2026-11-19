@@ -64,3 +64,9 @@ feather=1.0 只对 seam/owner 有局部改善，不能解释或修复几何尺�
 为覆盖祁序实际使用的 legacy source-scan 路径，加入了仅 test binary 的 source pose hook，对 `DSC_3882.NEF`（source id=39）施加审计得到的 factor `1.2166592079`。祁序1 75 输入、scale=0.25 独占运行中，1 个 local-scale ratio 从 `0` 提到 `0.01953125`，boundary 失败从 3 个降到 2 个；但 owner coverage 从 `0.9113826565` 降到 `0.8852725022`，QG 仍 fail，来源计数与 legacy runner 观测缺口也仍在。
 
 该单源 pose 假设不能推广；实验 hook 已从主线移除。机器摘要：[qixu-task-11-legacy-geometry-ab.json](../benchmarks/qixu-task-11-legacy-geometry-ab.json)。
+
+## 联合 geometry + owner A/B（已否定）
+
+将 DSC_3882 factor `1.2166592079` 与 feather `1.0` 组合后，local-scale ratio 的一个点仍为 `0.01953125`，但 owner coverage 只有 `0.8850510328`，boundary 仍有两个 4px 失败，QG 继续 fail。该联合假设不能推广；停止继续扫描 pose/feather 参数。
+
+机器摘要：[qixu-task-11-joint-geometry-owner-ab.json](../benchmarks/qixu-task-11-joint-geometry-owner-ab.json)。

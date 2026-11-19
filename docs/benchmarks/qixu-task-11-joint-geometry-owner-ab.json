@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "task": 11,
+  "method": "qixu_joint_geometry_owner_bounded_ab_v1",
+  "production_impact": "test_only_reused_frozen_experiment_binary_no_default_or_threshold_change",
+  "dataset": "qixu-1",
+  "scale": 0.25,
+  "binary": "task-11-legacy-geometry-r1",
+  "geometry": {
+    "source_id": 39,
+    "source_filename": "DSC_3882.NEF",
+    "factor": 1.2166592079
+  },
+  "owner": {
+    "feather": 1.0
+  },
+  "run": {
+    "label": "qixu-1-legacy-geometry-dsc3882-feather1p0-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-legacy-geometry-dsc3882-feather1p0-r1",
+    "status": "rejected",
+    "peak_rss_bytes": 13264257024,
+    "wall_seconds": 1062.43017411232,
+    "qg": "fail",
+    "closure": "not_run",
+    "sources": {
+      "inputs": 75,
+      "report_sources": 72,
+      "ordered": 72,
+      "streamed": 69,
+      "lending": null,
+      "expected_skipped": [],
+      "covered_pixels": 16509427,
+      "owned_pixels": 16509427
+    },
+    "output_sha256": "e2b47cc7d4e6134bafa7d0d56ba434bf44d8402b9326de3614259880effb1cf4",
+    "detail_repairs": 31,
+    "local_scale_ratio_failed": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.01953125
+    ],
+    "boundary_failed": [
+      4.0,
+      4.0
+    ],
+    "owner_coverage_failed": [
+      0.8850510328138951
+    ],
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-legacy-geometry-dsc3882-feather1p0-r1/run/qixu-1-s0p25-task-11-legacy-geometry-dsc3882-feather1p0-r1-stack-reports/stack-report-3f3d7429-8a21-4c38-8e3b-562c3a3cd7df.json"
+  },
+  "decision": "reject_joint_geometry_owner_hypothesis_for_promotion: geometry improvement remains but owner coverage stays degraded at 0.885051 and boundary remains two 4px failures",
+  "next_step": "stop parameter search; require a new independently justified source/owner hypothesis before another run"
+}
