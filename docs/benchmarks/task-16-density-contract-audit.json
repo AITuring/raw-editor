@@ -1,0 +1,96 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_output_density_closure_contract_audit_v1",
+  "production_impact": "test_only_read_only_formula_audit_no_pose_write_no_threshold_change",
+  "source": "/Users/dp/Desktop/raw-editor/src-tauri/src/panorama_stitching.rs",
+  "source_sha256": "6c22ac57a59263192c1584dbf173861ea95142aeac666cc693ce7d2cefcd36d8",
+  "closure_limits": {
+    "direct_pair_p95_limit_px": 3.0,
+    "residual_median_limit_px": 2.0,
+    "max_corner_correction_limit_px": 256.0
+  },
+  "runs": [
+    {
+      "diagnostic": "docs/benchmarks/mayuan-2-baseline-r1-diagnostic.json",
+      "dataset": "mayuan-2",
+      "binary": {
+        "label": "base-2026-11-12",
+        "sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+        "commit": "c0c1e5a9037fb4f8a8f8b983802848feb667b9ba"
+      },
+      "inputs_sha256": "4e39ee193f336801a7918307307f8c9ba7d6c9490fb105678c3b4a112663294f",
+      "output_density": {
+        "status": "rejected",
+        "factor": 1.1767578125,
+        "minimum_scale": 0.8504955088348083,
+        "sample_count": 124543,
+        "worst_station_index": 17,
+        "worst_source_id": 33,
+        "worst_station_point": [
+          2049.0,
+          33.0
+        ]
+      },
+      "base_closure_px": {
+        "direct_pair_p95": 2.6046616163770975,
+        "residual_median": 0.4464198739302894,
+        "max_corner_correction": 4.64545499975527
+      },
+      "output_lattice_closure_px": {
+        "direct_pair_p95": 3.0650559059906275,
+        "residual_median": 0.5253280743027332,
+        "max_corner_correction": 5.466575463579199
+      },
+      "factor_caps_from_existing_limits": {
+        "direct_pair_p95": 1.1517810916923599,
+        "residual_median": 4.480087282835238,
+        "max_corner_correction": 55.10762670470094
+      },
+      "allowed_factor_upper_bound": 1.1517810916923599,
+      "actual_factor_exceeds_allowed": true,
+      "decision": "density_factor_is_rejected_by_existing_closure_contract; do_not cap factor or relax thresholds in production"
+    },
+    {
+      "diagnostic": "docs/benchmarks/sleeping-baseline-r1-diagnostic.json",
+      "dataset": "sleeping",
+      "binary": {
+        "label": "base-2026-11-12",
+        "sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+        "commit": "c0c1e5a9037fb4f8a8f8b983802848feb667b9ba"
+      },
+      "inputs_sha256": "f3ab1237ccedf7c23c5e34bc0d53c43bcac210de33c070538304859ebe9681df",
+      "output_density": {
+        "status": "rejected",
+        "factor": 1.37890625,
+        "minimum_scale": 0.7253261115764642,
+        "sample_count": 124386,
+        "worst_station_index": 14,
+        "worst_source_id": 21,
+        "worst_station_point": [
+          129.0,
+          1345.0
+        ]
+      },
+      "base_closure_px": {
+        "direct_pair_p95": 2.5386065228292236,
+        "residual_median": 0.3006962442975502,
+        "max_corner_correction": 3.7073573418163264
+      },
+      "output_lattice_closure_px": {
+        "direct_pair_p95": 3.500500400619984,
+        "residual_median": 0.41463193061341885,
+        "max_corner_correction": 5.112098209613919
+      },
+      "factor_caps_from_existing_limits": {
+        "direct_pair_p95": 1.1817506860640077,
+        "residual_median": 6.6512303958839105,
+        "max_corner_correction": 69.05188154173972
+      },
+      "allowed_factor_upper_bound": 1.1817506860640077,
+      "actual_factor_exceeds_allowed": true,
+      "decision": "density_factor_is_rejected_by_existing_closure_contract; do_not cap factor or relax thresholds in production"
+    }
+  ],
+  "next_step": "write a single-variable station-density brief before any 0.25 rerun; preserve the 3px gate and native-density evidence"
+}
