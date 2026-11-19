@@ -90,6 +90,51 @@ fn luminance(rgb: [f32; 3]) -> f32 {
     rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722
 }
 
+const LOCAL_FIT_MAX_TILE_CELLS: usize = 40_000_000;
+
+#[cfg(test)]
+fn record_local_fit_budget_exceeded(
+    grid_width: usize,
+    grid_height: usize,
+    count: usize,
+    tile_count: usize,
+) {
+    println!(
+        "  - TEST_TONE_LOCAL_FIT reason=analysis_budget_exceeded grid={}x{} count={} tiles={} budget={}",
+        grid_width, grid_height, count, tile_count, LOCAL_FIT_MAX_TILE_CELLS
+    );
+    let Some(directory) =
+        crate::panorama_utils::stack_pipeline::test_support::tone_diagnostics_dir()
+    else {
+        return;
+    };
+    if std::fs::create_dir_all(&directory).is_ok() {
+        let payload = serde_json::json!({
+            "schema": 1,
+            "reason": "analysis_budget_exceeded",
+            "grid_width": grid_width,
+            "grid_height": grid_height,
+            "grid_cells": count,
+            "tile_count": tile_count,
+            "tile_cells_product": count.saturating_mul(tile_count),
+            "budget": LOCAL_FIT_MAX_TILE_CELLS,
+        });
+        let _ = std::fs::write(
+            directory.join("tone-local-fit.json"),
+            serde_json::to_vec_pretty(&payload).unwrap_or_default(),
+        );
+    }
+}
+
+#[cfg(not(test))]
+fn record_local_fit_budget_exceeded(
+    _grid_width: usize,
+    _grid_height: usize,
+    _count: usize,
+    _tile_count: usize,
+) {
+}
+
 pub(crate) fn fit_local_tone(
     tiles: &[ToneTile],
     relations: &[(usize, usize)],
@@ -120,7 +165,8 @@ pub(crate) fn fit_local_tone_with_identity_prior(
     let height = output_height.div_ceil(stride) as usize;
     let count = width.checked_mul(height)?;
     // A bounded analysis allocation rather than a second full-resolution RGB canvas.
-    if count.checked_mul(tiles.len())? > 40_000_000 {
+    if count.checked_mul(tiles.len())? > LOCAL_FIT_MAX_TILE_CELLS {
+        record_local_fit_budget_exceeded(width, height, count, tiles.len());
         return None;
     }
     let position = |cell: usize| {
