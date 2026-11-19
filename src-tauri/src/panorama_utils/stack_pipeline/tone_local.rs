@@ -90,6 +90,29 @@ fn luminance(rgb: [f32; 3]) -> f32 {
     rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722
 }
 
+const DEFAULT_LOCAL_FIT_MAX_TILE_CELLS: usize = 40_000_000;
+
+#[cfg(test)]
+fn local_fit_max_tile_cells_for_test() -> usize {
+    let limit = std::env::var("RAW_EDITOR_TEST_TONE_LOCAL_FIT_MAX_CELLS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|&value| value > 0)
+        .unwrap_or(DEFAULT_LOCAL_FIT_MAX_TILE_CELLS);
+    if limit != DEFAULT_LOCAL_FIT_MAX_TILE_CELLS {
+        println!(
+            "  - TEST_TONE_LOCAL_FIT_MAX_CELLS={} (default={})",
+            limit, DEFAULT_LOCAL_FIT_MAX_TILE_CELLS
+        );
+    }
+    limit
+}
+
+#[cfg(not(test))]
+fn local_fit_max_tile_cells_for_test() -> usize {
+    DEFAULT_LOCAL_FIT_MAX_TILE_CELLS
+}
+
 pub(crate) fn fit_local_tone(
     tiles: &[ToneTile],
     relations: &[(usize, usize)],
@@ -120,7 +143,7 @@ pub(crate) fn fit_local_tone_with_identity_prior(
     let height = output_height.div_ceil(stride) as usize;
     let count = width.checked_mul(height)?;
     // A bounded analysis allocation rather than a second full-resolution RGB canvas.
-    if count.checked_mul(tiles.len())? > 40_000_000 {
+    if count.checked_mul(tiles.len())? > local_fit_max_tile_cells_for_test() {
         return None;
     }
     let position = |cell: usize| {
