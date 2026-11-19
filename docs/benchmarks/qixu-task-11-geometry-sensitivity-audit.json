@@ -1,0 +1,324 @@
+{
+  "schema": 1,
+  "method": "qixu_failure_geometry_sensitivity_audit_v1",
+  "production_impact": "test_only_read_only_source_to_world_sensitivity_no_pose_write_no_threshold_change",
+  "analysis": "output/acceptance/task-11/qixu-1-diagnostics-r2/analysis.json",
+  "alignment": "output/acceptance/task-11/qixu-1-diagnostics-r2/source-alignment.json",
+  "failures": [
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 411.0,
+        "y": 129.0
+      },
+      "measured": 1.000051882780211,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3844.NEF",
+      "source_id": 1,
+      "source_to_world": [
+        1.000064828285888,
+        8.38423516739796e-05,
+        -0.48769654293732145,
+        -4.001000341699956e-05,
+        1.0000629961230303,
+        0.1130293047566937,
+        1.9859794697115383e-09,
+        4.020500788285567e-09,
+        0.9999996964056637
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 1307.0,
+        "y": 897.0
+      },
+      "measured": 0.967439496928828,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3845.NEF",
+      "source_id": 2,
+      "source_to_world": [
+        0.9369596949538272,
+        -0.050766533061461255,
+        -53.89514523841149,
+        0.01848893449584418,
+        0.9515186348466742,
+        1377.9523186297354,
+        -1.7452265036300027e-06,
+        -1.4964667113903096e-06,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 1051.0,
+        "y": 2049.0
+      },
+      "measured": 0.8339863935957978,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3850.NEF",
+      "source_id": 7,
+      "source_to_world": [
+        0.7888214409156676,
+        -0.05171067314593146,
+        89.53960792620026,
+        0.004084602279213954,
+        0.784636728990915,
+        6678.375941749343,
+        -1.910738265022402e-06,
+        -5.352993991625309e-06,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": 1.1391073131349305
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": -485.0,
+        "y": 1921.0
+      },
+      "measured": 0.8251997975544141,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3855.NEF",
+      "source_id": 12,
+      "source_to_world": [
+        0.7938811028595488,
+        -0.07578423596441701,
+        -2532.7577669444554,
+        -0.015326647836422323,
+        0.7733280727596198,
+        7101.024715158895,
+        -4.198883827565815e-06,
+        -7.691719888312622e-06,
+        1.0005720623195236
+      ],
+      "required_isotropic_scale_to_0_95": 1.151236346416283
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": -869.0,
+        "y": 385.0
+      },
+      "measured": 0.8675728360413059,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3860.NEF",
+      "source_id": 17,
+      "source_to_world": [
+        0.858431176768344,
+        -0.14954821372766275,
+        -5450.793465796572,
+        -0.043194732379594654,
+        0.8666177521182119,
+        1391.1540267317496,
+        -9.940193676323952e-06,
+        -2.065290443505398e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": 1.0950089266681116
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": -1125.0,
+        "y": 1409.0
+      },
+      "measured": 0.836485929454487,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3863.NEF",
+      "source_id": 20,
+      "source_to_world": [
+        0.8194312853030303,
+        -0.13878597733663303,
+        -5650.302518447561,
+        -0.0460140157017849,
+        0.8504282219898163,
+        3505.233359431817,
+        -1.0113684914084154e-05,
+        2.108027667734093e-07,
+        0.9997292035724582
+      ],
+      "required_isotropic_scale_to_0_95": 1.135703502651313
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": -2277.0,
+        "y": 1153.0
+      },
+      "measured": 0.7808267046700104,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3867.NEF",
+      "source_id": 24,
+      "source_to_world": [
+        0.8062946977452303,
+        -0.19171240931247036,
+        -9747.126092553874,
+        -0.062323758508456145,
+        0.8316601221802227,
+        3649.7734859892844,
+        -9.576117888289938e-06,
+        2.622932543792732e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": 1.2166592078859353
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": -2917.0,
+        "y": 385.0
+      },
+      "measured": 0.7572122846991967,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3882.NEF",
+      "source_id": 39,
+      "source_to_world": [
+        0.8182541353329251,
+        -0.29362161914502216,
+        -14066.539158241234,
+        -0.09598738582680383,
+        0.7946493427022506,
+        1714.2579677836559,
+        -1.4154455537696623e-05,
+        3.0324260589388084e-06,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": 1.2546019381835418
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": 1051.0,
+        "y": 2049.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3850.NEF",
+      "source_id": 7,
+      "source_to_world": [
+        0.7888214409156676,
+        -0.05171067314593146,
+        89.53960792620026,
+        0.004084602279213954,
+        0.784636728990915,
+        6678.375941749343,
+        -1.910738265022402e-06,
+        -5.352993991625309e-06,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": -485.0,
+        "y": 1921.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3855.NEF",
+      "source_id": 12,
+      "source_to_world": [
+        0.7938811028595488,
+        -0.07578423596441701,
+        -2532.7577669444554,
+        -0.015326647836422323,
+        0.7733280727596198,
+        7101.024715158895,
+        -4.198883827565815e-06,
+        -7.691719888312622e-06,
+        1.0005720623195236
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": -869.0,
+        "y": 385.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3860.NEF",
+      "source_id": 17,
+      "source_to_world": [
+        0.858431176768344,
+        -0.14954821372766275,
+        -5450.793465796572,
+        -0.043194732379594654,
+        0.8666177521182119,
+        1391.1540267317496,
+        -9.940193676323952e-06,
+        -2.065290443505398e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": -1125.0,
+        "y": 1409.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3863.NEF",
+      "source_id": 20,
+      "source_to_world": [
+        0.8194312853030303,
+        -0.13878597733663303,
+        -5650.302518447561,
+        -0.0460140157017849,
+        0.8504282219898163,
+        3505.233359431817,
+        -1.0113684914084154e-05,
+        2.108027667734093e-07,
+        0.9997292035724582
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": -2277.0,
+        "y": 1153.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3867.NEF",
+      "source_id": 24,
+      "source_to_world": [
+        0.8062946977452303,
+        -0.19171240931247036,
+        -9747.126092553874,
+        -0.062323758508456145,
+        0.8316601221802227,
+        3649.7734859892844,
+        -9.576117888289938e-06,
+        2.622932543792732e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": -2917.0,
+        "y": 385.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/祁序1/DSC_3882.NEF",
+      "source_id": 39,
+      "source_to_world": [
+        0.8182541353329251,
+        -0.29362161914502216,
+        -14066.539158241234,
+        -0.09598738582680383,
+        0.7946493427022506,
+        1714.2579677836559,
+        -1.4154455537696623e-05,
+        3.0324260589388084e-06,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    }
+  ],
+  "summary": {
+    "failure_points": 14,
+    "points_below_0_95": 6,
+    "minimum_required_scale_factor": 1.0950089266681116,
+    "maximum_required_scale_factor": 1.2546019381835418,
+    "decision": "sensitivity_only; required factors are evidence for a geometry hypothesis, not an instruction to alter source poses"
+  }
+}

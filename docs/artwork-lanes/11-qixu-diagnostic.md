@@ -52,3 +52,9 @@
 feather=1.0 只对 seam/owner 有局部改善，不能解释或修复几何尺度失败，不进入生产默认，也不授予 D2/D3。机器摘要：[qixu-task-11-feather-audit.json](../benchmarks/qixu-task-11-feather-audit.json)。
 
 下一步转向 local-scale ratio=0 的 source-to-world 几何/采样根因；不再继续调 feather，也不自动应用 3×3 owner fallback。
+
+## source-to-world geometry sensitivity（只读）
+
+对祁序1 保存的 14 个 local-scale failure records 重算 source-to-world sensitivity：6 个实际低于 0.95 的点需要理论 isotropic factor `1.095009–1.254602` 才能到 0.95；其余 8 个 ratio/median 失败点不能从 `0` 的测量值倒推倍率。该审计只保存失败 world 坐标、owner source id、原始 homography 和理论 factor，不修改 pose、阈值或像素。
+
+机器摘要：[qixu-task-11-geometry-sensitivity-audit.json](../benchmarks/qixu-task-11-geometry-sensitivity-audit.json)。这些 factor 只是几何假设证据，不能直接套用到生产；下一步若继续，必须固定单一 station/source 假设做 test-only bounded A/B，并同时复核 closure、boundary、owner、density 和来源合同。
