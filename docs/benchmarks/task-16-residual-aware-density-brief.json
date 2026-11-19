@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_residual_aware_density_diagnostic_brief_v1",
+  "production_impact": "test_only_composed_jacobian_export_no_density_factor_or_tiff_change",
+  "dataset": "mayuan-2",
+  "control": "docs/benchmarks/task-16-native-scale1-control.json",
+  "observed": {
+    "density_status": "bypassed",
+    "bypass_reason": "nonidentity_world_residual",
+    "factor": 1.0,
+    "source_count": 42,
+    "sample_count": 0,
+    "invalid_probe_count": 394,
+    "boundary_probe_count": 37446,
+    "closure_post_residual": {
+      "status": "converged",
+      "max_direct_pair_p95_px": 2.709115,
+      "residual_median_px": 0.318255
+    },
+    "closure_pre_residual": {
+      "matrix_direct_pair_p95_px": 155.82331418433606,
+      "global_before_p95_px": 22.7076,
+      "max_corner_correction_px": 122.8162
+    },
+    "residual_regions": 18,
+    "residual_node_step_px": 64,
+    "max_node_displacement_px": 8.66
+  },
+  "hypothesis": "The density planner is correctly bypassing because it only composes station pose and source sampling; accepted nonidentity residual warp requires its local Jacobian and inverse/edge fade to be included before output-pixel density can be audited.",
+  "required_composition": "source_point = source_per_station_inverse * residual_inverse_or_forward_composed * station_to_world(world); retain invalid/boundary probes, source support, direct-pair closure and 3px gate.",
+  "diagnostic_contract": {
+    "mode": "export-only",
+    "must_not": "force residual_identity=true; reuse scale0.25 density factor; apply density factor; alter pose/source map/thresholds; write production TIFF changes",
+    "outputs": [
+      "per-sample composed 2x2 Jacobian",
+      "minimum/p01/median world-per-source scale",
+      "direct-pair output P95",
+      "residual median",
+      "corner correction",
+      "invalid/boundary counts",
+      "worst station/source/point",
+      "residual region and edge-fade metadata"
+    ],
+    "acceptance": "diagnostic only; no task16 D2/D3 checkmark from export"
+  },
+  "decision": "defer until owner/boundary A/B is audited; if resumed, implement as a separate test-only probe sink and compare against the current bypass without changing planner behavior",
+  "next_step": "finish current boundary repair A/B, then decide whether a residual-aware diagnostic implementation is worth another full run"
+}
