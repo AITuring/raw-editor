@@ -1,6 +1,6 @@
 # 任务16：马远2 / 睡觉输出密度与闭环诊断
 
-- 更新：2026-11-19；状态：**unit-contract 与 station/source probe 审计完成，单变量 factor A/B 尚未开始**。
+- 更新：2026-11-20；状态：**scale=1 native control 已完成但 native acceptance 仍拒绝；尚未启动新的 Jacobian 实验**。
 - 范围：马远2 47 张、睡觉 45 张，沿用 `base-2026-11-12`、scale=0.25 的任务5诊断；不改 pose、density 公式、3px 门限、输入 manifest 或历史基线。
 - 依赖：任务5.1、5.2；与任务13/14/15冲突。任务15未触发，因为两套运行均正常结束且峰值约12–13GiB，低于24GiB内存门。
 
@@ -70,3 +70,14 @@ probe 的低尺度组连续落在 station15/16/17：minimum 分别为 `0.8829276
 ## 下一步 bounded brief
 
 若继续运行，控制组和实验组必须使用同一冻结 binary 与输入摘要；任何实验仍需经过原有 output-pixel closure 门。0.25 结果不能外推原生 D2/D3。
+
+## scale=1 native control 结果
+
+使用同一 `task-16-station15-17-jacobian-r1` binary、同一 47 张输入、scale=1、exclusive 槽和 24GiB 内存门完成全量 control。运行约 `10014.76s`，峰值 RSS `10,928,963,584B`，内存门通过；输入、binary、source digest、RGBA16/sRGB/alpha TIFF 和 output contract 均通过，closure `converged`。
+
+- native local-scale 已经可测且通过：`local_scale_median=pass`、`local_scale_pixel_ratio=pass`，因此 0.25 的 `not_applicable` 合同解释得到原生验证。
+- native acceptance 仍拒绝：`boundary_stroke_alignment=fail`（8 个 ROI 中 1 个测量为 `3.0px`）、`owner_sharpness_coverage=insufficient_evidence`（163 个 `owner_reverse_lookup_unresolved`）、`effective_pixel_count=insufficient_evidence`，`mtf50_normalized=not_applicable`。
+- output density 没有形成可审计的原生 closure：`status=bypassed`、`factor=1.0`、`source_count=42`、`sample_count=0`，原因是 `nonidentity_world_residual`；因此不能把这次当成 density 通过。
+- report 保留 `493` 条 degradation：`station_relation_scale_out_of_range=35`、`intra_station_rejected_from_group=79`、`fusion_single_frame_degraded=33`，并有 5 个 topology ambiguous station。该结果不支持直接运行 station15–17 Jacobian experiment，也不推广到生产。
+
+机器摘要：[task-16-native-scale1-control.json](../benchmarks/task-16-native-scale1-control.json)；完整 analysis、Stack_Report 和 TIFF 位于 run directory。下一步只写 native boundary/owner reverse-lookup 与 density bypass 的 bounded root-cause brief；除非提出独立、可证伪的假设，否则不再扫描 Jacobian factor。
