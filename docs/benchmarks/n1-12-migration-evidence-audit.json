@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "task": "N1.12",
+  "method": "migration_evidence_prose_audit_v1",
+  "production_impact": "read_only_documentation_audit_no_code_change",
+  "sources": [
+    "docs/focus-stack-architecture.md",
+    "docs/archive/focus-stack-tasks-2026-11-04.md"
+  ],
+  "migrations": [
+    {
+      "migration": "N1-1",
+      "status": "documented",
+      "evidence": {
+        "targeted_tests": true,
+        "full_regression": true,
+        "output_equivalence": true
+      }
+    },
+    {
+      "migration": "N1-2",
+      "status": "documented",
+      "evidence": {
+        "targeted_tests": true,
+        "full_regression": true,
+        "output_equivalence": true
+      }
+    },
+    {
+      "migration": "N1-3",
+      "status": "documented",
+      "evidence": {
+        "targeted_tests": true,
+        "full_regression": true,
+        "output_equivalence": true
+      }
+    },
+    {
+      "migration": "N1-4",
+      "status": "documented",
+      "evidence": {
+        "targeted_tests": true,
+        "full_regression": true,
+        "output_equivalence": true
+      }
+    },
+    {
+      "migration": "N1-5",
+      "status": "documented",
+      "evidence": {
+        "targeted_tests": true,
+        "full_regression": true,
+        "output_equivalence": true
+      }
+    },
+    {
+      "migration": "N1-6",
+      "status": "documented",
+      "evidence": {
+        "targeted_tests": true,
+        "full_regression": true,
+        "output_equivalence": true
+      }
+    },
+    {
+      "migration": "N1-7",
+      "status": "documented",
+      "evidence": {
+        "targeted_tests": true,
+        "full_regression": true,
+        "output_equivalence": true
+      }
+    },
+    {
+      "migration": "N1-8",
+      "status": "documented",
+      "evidence": {
+        "targeted_tests": true,
+        "full_regression": true,
+        "output_equivalence": true
+      }
+    },
+    {
+      "migration": "N1-9",
+      "status": "documented",
+      "evidence": {
+        "targeted_tests": true,
+        "full_regression": true,
+        "output_equivalence": true
+      }
+    },
+    {
+      "migration": "N1-10",
+      "status": "documented",
+      "evidence": {
+        "targeted_tests": true,
+        "full_regression": true,
+        "output_equivalence": true
+      }
+    }
+  ],
+  "summary": {
+    "migration_count": 10,
+    "documented_count": 10,
+    "all_evidence_categories_present": true
+  },
+  "remaining": [
+    "historical evidence is prose and is not a machine-checked per-migration manifest",
+    "current WIP changes after the N1-10 migration are not treated as historical output-equivalence evidence",
+    "keep N1.12 open until a reviewed migration ledger and repeatable before/after comparison entrypoint exist"
+  ],
+  "decision": "record the documented evidence without marking N1.12 complete"
+}
