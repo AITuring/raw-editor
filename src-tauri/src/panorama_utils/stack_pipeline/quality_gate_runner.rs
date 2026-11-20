@@ -398,9 +398,9 @@ use coverage::{confidence_coverage_stats, effective_pixel_coverage_streaming};
 mod boundary_pairs;
 
 use boundary_pairs::{
-    boundary_pair_error, local_station_relation_for_pair, measure_large_boundaries,
-    parse_boundary_owner_pair, parse_boundary_sample_normal, parse_boundary_station_pair,
-    sample_quality_source_at_world_with_station_relation,
+    boundary_pair_error, flush_boundary_candidate_diagnostics, local_station_relation_for_pair,
+    measure_large_boundaries, parse_boundary_owner_pair, parse_boundary_sample_normal,
+    parse_boundary_station_pair, sample_quality_source_at_world_with_station_relation,
 };
 
 mod boundary_repair;

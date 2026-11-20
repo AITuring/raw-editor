@@ -649,6 +649,11 @@ pub(crate) fn run_quality_gate_with_cache(
     }
     timing.boundary_seconds = boundary_started.elapsed().as_secs_f64();
     timing.boundary_sample_count = boundary.observed_count + boundary.unmeasurable;
+    // Boundary candidate capture is explicitly opt-in through the
+    // test-only environment variable.  Diagnostics are flushed after the
+    // complete boundary criterion so selected edges and uniqueness decisions
+    // are represented without changing the criterion itself.
+    let _ = super::flush_boundary_candidate_diagnostics();
 
     // Dense criteria keep the shared station windows. Independent MTF/noise
     // searches and streaming boundary cells already own their population

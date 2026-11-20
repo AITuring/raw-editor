@@ -14,11 +14,115 @@ use image::Rgb;
 use image::Rgb32FImage;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
+use serde::Serialize;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 
 use super::{Criterion, QualitySource, classify_unmeasurable_reason, project};
 
 const BOUNDARY_DEFAULT_MIN_GRADIENT_STRENGTH: f64 = 0.15;
+const BOUNDARY_CANDIDATE_DIAGNOSTIC_LIMIT: usize = 50_000;
+
+#[derive(Debug, Serialize)]
+struct BoundaryCandidateRecord {
+    seam: [f64; 2],
+    normal: [f64; 2],
+    side: f64,
+    distance: f64,
+    offset: f64,
+    pixel: Option<[i32; 2]>,
+    owner: Option<u16>,
+    coverage_valid: bool,
+    owner_valid: bool,
+    gradient: Option<[f64; 2]>,
+    strength: Option<f64>,
+    tangent_alignment: Option<f64>,
+    accepted: bool,
+    rejection_reason: Option<String>,
+    selected: bool,
+    final_rejection_reason: Option<String>,
+}
+
+#[derive(Debug, Default)]
+struct BoundaryCandidateDiagnostics {
+    records: Vec<BoundaryCandidateRecord>,
+    truncated: bool,
+}
+
+static BOUNDARY_CANDIDATE_DIAGNOSTICS: OnceLock<Mutex<BoundaryCandidateDiagnostics>> =
+    OnceLock::new();
+
+fn boundary_candidate_diagnostics_store() -> Option<&'static Mutex<BoundaryCandidateDiagnostics>> {
+    // The environment check is deliberately at the call boundary rather than
+    // in the production sampling loop.  With no explicit directory the
+    // normal path does not allocate a store or acquire a lock.
+    std::env::var_os("RAW_EDITOR_FOCUS_BOUNDARY_CANDIDATE_DIR")?;
+    Some(BOUNDARY_CANDIDATE_DIAGNOSTICS.get_or_init(|| Mutex::new(Default::default())))
+}
+
+fn record_boundary_candidate(record: BoundaryCandidateRecord) -> Option<usize> {
+    let store = boundary_candidate_diagnostics_store()?;
+    let mut store = store.lock().ok()?;
+    if store.records.len() >= BOUNDARY_CANDIDATE_DIAGNOSTIC_LIMIT {
+        store.truncated = true;
+        return None;
+    }
+    let index = store.records.len();
+    store.records.push(record);
+    Some(index)
+}
+
+fn update_boundary_candidate(
+    index: Option<usize>,
+    update: impl FnOnce(&mut BoundaryCandidateRecord),
+) {
+    let Some(index) = index else {
+        return;
+    };
+    let Some(store) = boundary_candidate_diagnostics_store() else {
+        return;
+    };
+    let Ok(mut store) = store.lock() else {
+        return;
+    };
+    if let Some(record) = store.records.get_mut(index) {
+        update(record);
+    }
+}
+
+pub(super) fn flush_boundary_candidate_diagnostics() -> Result<(), String> {
+    let Some(directory) = std::env::var_os("RAW_EDITOR_FOCUS_BOUNDARY_CANDIDATE_DIR") else {
+        return Ok(());
+    };
+    let Some(store) = BOUNDARY_CANDIDATE_DIAGNOSTICS.get() else {
+        return Ok(());
+    };
+    let mut store = store
+        .lock()
+        .map_err(|_| "boundary candidate diagnostics lock poisoned".to_string())?;
+    let records = std::mem::take(&mut store.records);
+    let truncated = store.truncated;
+    store.truncated = false;
+    drop(store);
+
+    let directory = PathBuf::from(directory);
+    std::fs::create_dir_all(&directory)
+        .map_err(|error| format!("failed to create {}: {error}", directory.display()))?;
+    let path = directory.join("boundary-candidates.json");
+    let file = std::fs::File::create(&path)
+        .map_err(|error| format!("failed to create {}: {error}", path.display()))?;
+    serde_json::to_writer_pretty(
+        std::io::BufWriter::new(file),
+        &serde_json::json!({
+            "schema_version": 1,
+            "record_count": records.len(),
+            "truncated": truncated,
+            "records": records,
+        }),
+    )
+    .map_err(|error| format!("failed to write {}: {error}", path.display()))
+}
 
 /// Return the two-sided subpixel edge displacement at one ownership boundary.
 /// `normal` is either horizontal `(1,0)` or vertical `(0,1)` and is derived
@@ -42,6 +146,7 @@ pub(super) struct BoundaryEdge {
     pub(super) gradient: (f64, f64),
     pub(super) pixel: (u32, u32),
     pub(super) owner: u16,
+    diagnostic_index: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -118,10 +223,46 @@ where
         let ix = sx.round() as i32;
         let iy = sy.round() as i32;
         if ix < 1 || iy < 1 || ix + 1 >= width as i32 || iy + 1 >= height as i32 {
+            let _ = record_boundary_candidate(BoundaryCandidateRecord {
+                seam: [seam.0, seam.1],
+                normal: [normal.0, normal.1],
+                side,
+                distance,
+                offset,
+                pixel: None,
+                owner: None,
+                coverage_valid: false,
+                owner_valid: false,
+                gradient: None,
+                strength: None,
+                tangent_alignment: None,
+                accepted: false,
+                rejection_reason: Some("boundary_candidate_out_of_bounds".to_string()),
+                selected: false,
+                final_rejection_reason: None,
+            });
             continue;
         }
         let index = iy as usize * width as usize + ix as usize;
         let Some(owner) = ownership.get(index).copied() else {
+            let _ = record_boundary_candidate(BoundaryCandidateRecord {
+                seam: [seam.0, seam.1],
+                normal: [normal.0, normal.1],
+                side,
+                distance,
+                offset,
+                pixel: Some([ix, iy]),
+                owner: None,
+                coverage_valid: false,
+                owner_valid: false,
+                gradient: None,
+                strength: None,
+                tangent_alignment: None,
+                accepted: false,
+                rejection_reason: Some("boundary_candidate_owner_missing".to_string()),
+                selected: false,
+                final_rejection_reason: None,
+            });
             continue;
         };
         // The central-difference gradient reads the four neighbours as well,
@@ -135,14 +276,42 @@ where
             (ix, iy - 1),
             (ix, iy + 1),
         ];
-        if stencil.iter().any(|&(x, y)| {
+        let coverage_valid = stencil.iter().all(|&(x, y)| {
             let index = y as usize * width as usize + x as usize;
-            coverage.as_raw().get(index).copied().unwrap_or(0) == 0
-                || ownership
-                    .get(index)
-                    .copied()
-                    .is_none_or(|neighbour| neighbour != owner || !owner_matches(neighbour))
-        }) {
+            coverage.as_raw().get(index).copied().unwrap_or(0) != 0
+        });
+        let owner_valid = stencil.iter().all(|&(x, y)| {
+            let index = y as usize * width as usize + x as usize;
+            ownership
+                .get(index)
+                .copied()
+                .is_some_and(|neighbour| neighbour == owner && owner_matches(neighbour))
+        });
+        if !coverage_valid || !owner_valid {
+            let rejection_reason = match (coverage_valid, owner_valid) {
+                (false, false) => "boundary_candidate_coverage_and_owner_rejected",
+                (false, true) => "boundary_candidate_coverage_rejected",
+                (true, false) => "boundary_candidate_owner_rejected",
+                (true, true) => unreachable!(),
+            };
+            let _ = record_boundary_candidate(BoundaryCandidateRecord {
+                seam: [seam.0, seam.1],
+                normal: [normal.0, normal.1],
+                side,
+                distance,
+                offset,
+                pixel: Some([ix, iy]),
+                owner: Some(owner),
+                coverage_valid,
+                owner_valid,
+                gradient: None,
+                strength: None,
+                tangent_alignment: None,
+                accepted: false,
+                rejection_reason: Some(rejection_reason.to_string()),
+                selected: false,
+                final_rejection_reason: None,
+            });
             continue;
         }
         let gx = luminance(*image.get_pixel((ix + 1) as u32, iy as u32))
@@ -150,22 +319,95 @@ where
         let gy = luminance(*image.get_pixel(ix as u32, (iy + 1) as u32))
             - luminance(*image.get_pixel(ix as u32, (iy - 1) as u32));
         if !gx.is_finite() || !gy.is_finite() {
+            let _ = record_boundary_candidate(BoundaryCandidateRecord {
+                seam: [seam.0, seam.1],
+                normal: [normal.0, normal.1],
+                side,
+                distance,
+                offset,
+                pixel: Some([ix, iy]),
+                owner: Some(owner),
+                coverage_valid,
+                owner_valid,
+                gradient: Some([gx, gy]),
+                strength: None,
+                tangent_alignment: None,
+                accepted: false,
+                rejection_reason: Some(degradation::DIAGNOSTICS_ROI_INVALID.to_string()),
+                selected: false,
+                final_rejection_reason: None,
+            });
             return Err(degradation::DIAGNOSTICS_ROI_INVALID);
         }
         let strength = gx.hypot(gy) * 0.5;
         if strength < minimum_strength {
+            let _ = record_boundary_candidate(BoundaryCandidateRecord {
+                seam: [seam.0, seam.1],
+                normal: [normal.0, normal.1],
+                side,
+                distance,
+                offset,
+                pixel: Some([ix, iy]),
+                owner: Some(owner),
+                coverage_valid,
+                owner_valid,
+                gradient: Some([gx, gy]),
+                strength: Some(strength),
+                tangent_alignment: None,
+                accepted: false,
+                rejection_reason: Some("boundary_candidate_low_strength".to_string()),
+                selected: false,
+                final_rejection_reason: None,
+            });
             continue;
         }
         let tangent_alignment = (gx * tangent.0 + gy * tangent.1).abs() / gx.hypot(gy);
         if tangent_alignment < 30.0f64.to_radians().cos() {
+            let _ = record_boundary_candidate(BoundaryCandidateRecord {
+                seam: [seam.0, seam.1],
+                normal: [normal.0, normal.1],
+                side,
+                distance,
+                offset,
+                pixel: Some([ix, iy]),
+                owner: Some(owner),
+                coverage_valid,
+                owner_valid,
+                gradient: Some([gx, gy]),
+                strength: Some(strength),
+                tangent_alignment: Some(tangent_alignment),
+                accepted: false,
+                rejection_reason: Some("boundary_candidate_tangent_mismatch".to_string()),
+                selected: false,
+                final_rejection_reason: None,
+            });
             continue;
         }
+        let diagnostic_index = record_boundary_candidate(BoundaryCandidateRecord {
+            seam: [seam.0, seam.1],
+            normal: [normal.0, normal.1],
+            side,
+            distance,
+            offset,
+            pixel: Some([ix, iy]),
+            owner: Some(owner),
+            coverage_valid,
+            owner_valid,
+            gradient: Some([gx, gy]),
+            strength: Some(strength),
+            tangent_alignment: Some(tangent_alignment),
+            accepted: true,
+            rejection_reason: None,
+            selected: false,
+            final_rejection_reason: None,
+        });
         candidates.push(BoundaryEdge {
             offset,
             strength,
             gradient: (gx, gy),
             pixel: (ix as u32, iy as u32),
             owner,
+            diagnostic_index,
         });
     }
     candidates.sort_by(|left, right| {
@@ -180,7 +422,21 @@ where
     if candidates.iter().skip(1).any(|candidate| {
         (candidate.offset - best.offset).abs() >= 3.0 && candidate.strength > best.strength * 0.8
     }) {
+        for candidate in &candidates {
+            update_boundary_candidate(candidate.diagnostic_index, |record| {
+                record.final_rejection_reason =
+                    Some(degradation::BOUNDARY_STROKE_NOT_UNIQUE.to_string());
+            });
+        }
         return Err(degradation::BOUNDARY_STROKE_NOT_UNIQUE);
+    }
+    update_boundary_candidate(best.diagnostic_index, |record| {
+        record.selected = true;
+    });
+    for candidate in candidates.iter().skip(1) {
+        update_boundary_candidate(candidate.diagnostic_index, |record| {
+            record.final_rejection_reason = Some("boundary_candidate_not_selected".to_string());
+        });
     }
     Ok(best)
 }
@@ -796,4 +1052,54 @@ pub(super) fn measure_large_boundaries(
         criterion.observed_count,
         "station_boundary_streaming_candidates",
     );
+}
+
+#[cfg(test)]
+mod boundary_candidate_diagnostics_tests {
+    use super::BoundaryCandidateRecord;
+
+    #[test]
+    fn candidate_record_serializes_required_contract_fields() {
+        let record = BoundaryCandidateRecord {
+            seam: [10.0, 20.0],
+            normal: [1.0, 0.0],
+            side: -1.0,
+            distance: 4.0,
+            offset: 0.0,
+            pixel: Some([6, 20]),
+            owner: Some(7),
+            coverage_valid: true,
+            owner_valid: true,
+            gradient: Some([0.0, 0.8]),
+            strength: Some(0.4),
+            tangent_alignment: Some(1.0),
+            accepted: true,
+            rejection_reason: None,
+            selected: true,
+            final_rejection_reason: None,
+        };
+        let value = serde_json::to_value(record).expect("candidate record must be JSON");
+        for field in [
+            "seam",
+            "normal",
+            "side",
+            "distance",
+            "offset",
+            "pixel",
+            "owner",
+            "coverage_valid",
+            "owner_valid",
+            "gradient",
+            "strength",
+            "tangent_alignment",
+            "accepted",
+            "rejection_reason",
+            "selected",
+            "final_rejection_reason",
+        ] {
+            assert!(value.get(field).is_some(), "missing field {field}");
+        }
+        assert_eq!(value["selected"], true);
+        assert_eq!(value["rejection_reason"], serde_json::Value::Null);
+    }
 }
