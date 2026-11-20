@@ -1288,23 +1288,21 @@ fn stitch_images_attempt<R: Runtime>(
             for (_, first, second) in rescue_pairs {
                 let (source_index, target_index, invert_for_storage) =
                     canonical_match_direction(&image_data, first, second);
-                if !rescue_cache.contains_key(&source_index) {
-                    rescue_cache.insert(
-                        source_index,
-                        prepare_focus_rescue_image_from_analysis(
-                            &image_data[source_index],
-                            &brief_pairs,
-                        )?,
-                    );
+                if let std::collections::hash_map::Entry::Vacant(entry) =
+                    rescue_cache.entry(source_index)
+                {
+                    entry.insert(prepare_focus_rescue_image_from_analysis(
+                        &image_data[source_index],
+                        &brief_pairs,
+                    )?);
                 }
-                if !rescue_cache.contains_key(&target_index) {
-                    rescue_cache.insert(
-                        target_index,
-                        prepare_focus_rescue_image_from_analysis(
-                            &image_data[target_index],
-                            &brief_pairs,
-                        )?,
-                    );
+                if let std::collections::hash_map::Entry::Vacant(entry) =
+                    rescue_cache.entry(target_index)
+                {
+                    entry.insert(prepare_focus_rescue_image_from_analysis(
+                        &image_data[target_index],
+                        &brief_pairs,
+                    )?);
                 }
                 let source = rescue_cache
                     .get(&source_index)
@@ -1460,9 +1458,10 @@ fn stitch_images_attempt<R: Runtime>(
         // report that could overwrite the Virtual_Tile result.
         let mut closure = stack_report::ClosureReport::default();
         let mut station_relations = stack_report::StationRelationsReport::default();
+        #[cfg_attr(not(test), allow(unused_mut))]
         let mut stitching_order = build_focus_stack_stitching_order_with_report(
             &image_data,
-            &pairwise_matches,
+            pairwise_matches,
             &mut closure,
             &mut station_relations,
             !defer_authoritative_station_solve,
@@ -1563,12 +1562,12 @@ fn stitch_images_attempt<R: Runtime>(
     } else {
         (ordered_indices, global_homographies)
     };
-    if blend_mode == BlendMode::Panorama && alignment_mode == AlignmentMode::FlatArtwork {
-        if let Some(refined) =
+    if blend_mode == BlendMode::Panorama
+        && alignment_mode == AlignmentMode::FlatArtwork
+        && let Some(refined) =
             refine_flat_artwork_tree_poses(&image_data, &pairwise_matches, &global_homographies)
-        {
-            global_homographies = refined;
-        }
+    {
+        global_homographies = refined;
     }
     // Several captures of one artwork: the canvas takes the scale and
     // orientation the composing capture has stitched alone (`capture_gauge`).

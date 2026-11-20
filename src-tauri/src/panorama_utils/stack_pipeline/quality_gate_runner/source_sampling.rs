@@ -107,6 +107,7 @@ pub(crate) fn measure_source_local_scale(
     })
 }
 
+#[cfg(test)]
 pub(super) fn source_roi(
     source: &Rgb32FImage,
     roi: &QualityRoi,
@@ -242,7 +243,7 @@ pub(super) fn source_roi_for_station_quality_with_budget(
     load_source: &mut SourceLoader<'_>,
     max_cache_bytes: usize,
 ) -> Result<Rgb32FImage, &'static str> {
-    if canvas_width == 0 || ownership.len() % canvas_width as usize != 0 {
+    if canvas_width == 0 || !ownership.len().is_multiple_of(canvas_width as usize) {
         return Err(degradation::DIAGNOSTICS_ROI_INVALID);
     }
     let canvas_height = ownership.len() / canvas_width as usize;
@@ -352,7 +353,7 @@ pub(crate) fn measure_station_local_scale(
 ) -> Result<quality_gate::LocalScaleMeasurement, &'static str> {
     if roi.side == 0
         || canvas_width == 0
-        || ownership.len() % canvas_width as usize != 0
+        || !ownership.len().is_multiple_of(canvas_width as usize)
         || !acceptance_render_scale.is_finite()
         || acceptance_render_scale <= 0.0
     {
@@ -750,7 +751,7 @@ pub(super) fn map_world_to_source_for_quality(
 ) -> Result<Point2<f64>, &'static str> {
     let unwarped = residual.warp_inverse(world, geometry.station_id);
     let Some(native_warp) = native_warp else {
-        return project(inverse, unwarped).map_or(Err(degradation::OWNER_SOURCE_UNDECODABLE), Ok);
+        return project(inverse, unwarped).ok_or(degradation::OWNER_SOURCE_UNDECODABLE);
     };
     let tile_inverse = native_warp
         .station_to_world

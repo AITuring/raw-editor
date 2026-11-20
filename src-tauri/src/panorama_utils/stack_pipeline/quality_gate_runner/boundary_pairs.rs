@@ -124,21 +124,6 @@ pub(super) fn flush_boundary_candidate_diagnostics() -> Result<(), String> {
     .map_err(|error| format!("failed to write {}: {error}", path.display()))
 }
 
-/// Return the two-sided subpixel edge displacement at one ownership boundary.
-/// `normal` is either horizontal `(1,0)` or vertical `(0,1)` and is derived
-/// directly from the neighbouring ownership pixels, so no full label image is
-/// needed.
-pub(super) fn boundary_point_error(
-    image: &Rgb32FImage,
-    coverage: &GrayImage,
-    x: u32,
-    y: u32,
-    normal: (f64, f64),
-) -> Result<f64, &'static str> {
-    quality_gate::paired_boundary_edge_error_with_coverage(image, Some(coverage), x, y, normal)
-        .map(|value| value.0)
-}
-
 #[derive(Debug, Clone)]
 pub(super) struct BoundaryEdge {
     pub(super) offset: f64,
@@ -496,29 +481,6 @@ pub(super) fn boundary_pair_error(
         return Err(degradation::BOUNDARY_ORIENTATION_MISMATCH);
     }
     Ok((left, right))
-}
-
-pub(super) fn boundary_pair_error_for_stations(
-    image: &Rgb32FImage,
-    coverage: &GrayImage,
-    ownership: &[u16],
-    seam: (f64, f64),
-    normal: (f64, f64),
-    left_station: usize,
-    right_station: usize,
-    owner_stations: &BTreeMap<u16, usize>,
-) -> Result<(BoundaryEdge, BoundaryEdge), &'static str> {
-    boundary_pair_error_for_stations_with_threshold(
-        image,
-        coverage,
-        ownership,
-        seam,
-        normal,
-        left_station,
-        right_station,
-        owner_stations,
-        BOUNDARY_DEFAULT_MIN_GRADIENT_STRENGTH,
-    )
 }
 
 fn boundary_pair_error_for_stations_with_threshold(

@@ -4,27 +4,19 @@
   "method": "strict_clippy_debt_inventory_v2",
   "command": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
   "exit_code": 101,
-  "diagnostic_count": 407,
+  "diagnostic_count": 385,
   "target_diagnostics": {
-    "lib": 182,
-    "lib test": 225
+    "lib": 170,
+    "lib test": 215
   },
   "top_files": [
     {
       "path": "src/panorama_stitching/stitch_images.rs",
-      "diagnostics": 13
-    },
-    {
-      "path": "src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
       "diagnostics": 8
     },
     {
       "path": "src/panorama_station_closure_refine.rs",
       "diagnostics": 8
-    },
-    {
-      "path": "src/panorama_utils/stack_pipeline/quality_gate_runner/source_sampling.rs",
-      "diagnostics": 7
     },
     {
       "path": "src/panorama_station_closure.rs",
@@ -44,6 +36,10 @@
     },
     {
       "path": "src/panorama_utils/stack_pipeline/joint_warp.rs",
+      "diagnostics": 5
+    },
+    {
+      "path": "src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
       "diagnostics": 5
     },
     {
@@ -109,8 +105,12 @@
     {
       "path": "src/panorama_utils/stitching/virtual_tiles.rs",
       "diagnostics": 3
+    },
+    {
+      "path": "src/panorama_utils/mosaic/streaming_store.rs",
+      "diagnostics": 3
     }
   ],
   "scope_note": "source_raw_direct, source_raw_direct_basin, source_raw_direct_pairs, source_raw_layer_diagnostics, feature_provider, focus_pyramid, focus_color, test-only focus_masks/focus_alignment/focus_tone helpers, and the test-only closure/Jacobian helpers are cfg(test)-isolated research/test contracts; remaining files are not reclassified by this snapshot",
-  "source_log": "/private/tmp/raw-editor-eng4-clippy-after-seam-cleanup.log"
+  "source_log": "/private/tmp/raw-editor-eng4-clippy-boundary-final2.log"
 }

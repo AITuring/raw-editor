@@ -377,13 +377,15 @@ pub(crate) use criteria::{criterion_verdict, owner_sharpness_stats};
 
 pub(crate) mod source_sampling;
 
+#[cfg(test)]
+use source_sampling::source_roi;
 pub(crate) use source_sampling::source_roi_for_station_quality;
+#[cfg(test)]
+use source_sampling::source_roi_with_registration;
 use source_sampling::{apply_run_tone_transform, source_quad, source_roi_for_quality};
 pub(crate) use source_sampling::{
     measure_source_local_scale, measure_station_local_scale, sample_quality_source_at_world,
 };
-#[cfg(test)]
-use source_sampling::{source_roi, source_roi_with_registration};
 
 mod coverage;
 mod criterion_rois;
