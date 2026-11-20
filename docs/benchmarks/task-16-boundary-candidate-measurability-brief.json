@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_boundary_candidate_measurability_brief_v1",
+  "production_impact": "read_only_contract_audit_no_production_change",
+  "observed": {
+    "candidate_count_control": 1387,
+    "content_rejected_control": 1385,
+    "measurable_control": 2,
+    "failed_control_px": 3.0,
+    "candidate_count_repaired": 1286,
+    "content_rejected_repaired": 1284,
+    "measurable_repaired": 2,
+    "verdict_repaired": "not_applicable"
+  },
+  "contract": {
+    "quality_min_measurable": 8,
+    "boundary_p95_max_px": 1.5,
+    "boundary_max_px": 3.0,
+    "criterion_rule": "sparse criterion with measurable < QUALITY_MIN_MEASURABLE becomes NotApplicable when no failed measurement remains"
+  },
+  "interpretation": "The strict repair removed the one 3px failure, but it cannot make the boundary criterion pass because only two measurable samples survive content rejection. A further pixel repair or owner fallback cannot satisfy this contract without an independent candidate-content hypothesis.",
+  "allowed_next_hypotheses": [
+    "test-only export/classification of the 1385 boundary_low_contrast candidates to determine whether a same-content texture/contrast probe can make at least 8 valid measurements without changing thresholds",
+    "product decision to keep boundary NotApplicable for this artwork, explicitly outside native acceptance"
+  ],
+  "forbidden": [
+    "lower QUALITY_MIN_MEASURABLE",
+    "raise 3px/1.5px thresholds",
+    "relabel low contrast as measurable without evidence",
+    "repeat full A/B with combined variables"
+  ],
+  "decision": "task16 boundary remains unresolved at the evidence contract; no more full image runs until a candidate-content hypothesis is specified",
+  "references": [
+    "task-16-native-boundary-repair-owner-export-ab.json",
+    "task-16-native-owner-stencil5-ab.json",
+    "task-16-final-decision.json"
+  ]
+}

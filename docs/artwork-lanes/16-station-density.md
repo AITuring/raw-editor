@@ -112,4 +112,4 @@ test-only 组成链已完成一次全量 scale=1 诊断：`station pose → Resi
 
 owner radius2 只在 test-only 路径把 unresolved `163→0`；生产仍保持 3×3。boundary repair 只把一个具体 seam 的局部误差 `3.000→0.000px`，但可测候选仍不足以让 native criterion 通过；residual-aware density 诊断证明 nonidentity residual 的 composed scale 最低 `0.0172509`，不能复用旧 factor。任务16仍不勾选、不推广生产、不继续 factor 扫描。
 
-最终机器决策：[task-16-final-decision.json](../benchmarks/task-16-final-decision.json)。若继续，只能另写 boundary candidate-measurability 或产品合同；没有新的可证伪假设，不再启动全量 A/B。
+最终机器决策：[task-16-final-decision.json](../benchmarks/task-16-final-decision.json)。boundary 合同补充核对见 [task-16-boundary-candidate-measurability-brief.json](../benchmarks/task-16-boundary-candidate-measurability-brief.json)：当前只有 2 个可测样本，低于 `QUALITY_MIN_MEASURABLE=8`。若继续，只能先提出 candidate-content 证据或产品合同；没有新的可证伪假设，不再启动全量 A/B。
