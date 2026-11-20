@@ -55,7 +55,7 @@ def main() -> int:
         "diagnostic_count": total,
         "target_diagnostics": targets,
         "top_files": top_files,
-        "scope_note": "source_raw_direct, source_raw_direct_basin, source_raw_direct_pairs, source_raw_layer_diagnostics, feature_provider, station_seam, and tile_source are cfg(test)-isolated research/test contracts; remaining files are not reclassified by this snapshot",
+        "scope_note": "source_raw_direct, source_raw_direct_basin, source_raw_direct_pairs, source_raw_layer_diagnostics, feature_provider, focus_pyramid, focus_color, station_seam, and tile_source are cfg(test)-isolated research/test contracts; remaining files are not reclassified by this snapshot",
         "source_log": str(args.log),
     }
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

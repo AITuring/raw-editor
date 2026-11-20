@@ -21,6 +21,8 @@ pub(crate) mod degradation;
 #[cfg(test)]
 pub(crate) mod feature_provider;
 /// Offline ECC/FocusPyramid comparison provider (task 21.3); native ownership remains default.
+/// This provider is a research/test contract and is not wired into production.
+#[cfg(test)]
 pub(crate) mod focus_pyramid;
 // Diagnostics_Recorder: ROI validity, pixel provenance and ROI plane export.
 /// Deterministic iteration helpers shared by every stage (需求 14.6).

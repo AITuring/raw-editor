@@ -200,36 +200,13 @@ const FOCUS_SEAM_BLEND_RADIUS: usize = 512;
 const FOCUS_FOREGROUND_HARD_EDGE_RADIUS_AT_2400: f32 = 8.0;
 const FOCUS_SEAM_TONE_MIN_SAMPLES: usize = 128;
 const FOCUS_SEAM_TONE_MAX_ADJUSTMENT: f32 = 0.075;
-const FOCUS_COLOR_SAMPLE_BUDGET: u64 = 12_000;
 const FOCUS_COLOR_MIN_SAMPLES: usize = 96;
-const FOCUS_COLOR_MIN_CHANNEL_VALUE: f32 = 0.025;
-const FOCUS_COLOR_MIN_GAIN: f32 = 0.78;
-const FOCUS_COLOR_MAX_GAIN: f32 = 1.28;
-const FOCUS_COLOR_MAX_OFFSET: f32 = 0.06;
-// Bright plastic, glass, or paper edges can sit above the normal colour-sample
-// ceiling. Admit those pixels only inside a matched foreground consensus band;
-// ordinary bright highlights remain excluded from exposure estimation.
-const FOCUS_COLOR_MAX_RELAXED_LUMA: f32 = 0.995;
 // Focus stacks must not average a displaced subject at a seam. The seam path
 // therefore blends only the low-frequency tone bands and restores protected
 // foreground pixels after reconstruction; the visible detail bands stay on a
 // single source. This lets a shifted scan remove exposure blocks without
 // turning a displaced brush stroke into a double contour.
 const FOCUS_ALLOW_LOW_FREQUENCY_SEAM_BLEND: bool = false;
-// Correct broad local illumination differences without allowing individual
-// brush strokes or the canvas weave to become a colour reference. The field is
-// sampled in candidate-image space, then interpolated while the layer is
-// copied into the final canvas.
-const FOCUS_COLOR_CELL_SIZE: u32 = 768;
-const FOCUS_COLOR_MIN_CELL_SAMPLES: usize = 12;
-const FOCUS_COLOR_SPATIAL_VARIATION_THRESHOLD: f32 = 0.015;
-const FOCUS_COLOR_SPATIAL_OFFSET_THRESHOLD: f32 = 0.004;
-// Overlap samples do not cover the newly exposed side of every shifted frame.
-// Let a measured local correction fade into nearby unsampled cells instead of
-// stopping at a grid boundary, but keep the reach and strength bounded so an
-// isolated overlap cannot recolour an entire new region.
-const FOCUS_COLOR_PROPAGATION_RADIUS_CELLS: i32 = 3;
-const FOCUS_COLOR_PROPAGATION_MAX_CONFIDENCE: f32 = 0.65;
 // The final canvas can still contain a broad, source-sized exposure step when
 // a newly exposed background region has no direct overlap samples. Work on a
 // bounded analysis image and correct only a slowly varying background field;
@@ -429,6 +406,7 @@ use focus_layers::{
     render_focus_layer_with_refinement, source_is_focus_foreground,
 };
 
+#[cfg(test)]
 mod focus_color;
 
 #[cfg(test)]

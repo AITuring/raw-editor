@@ -8,14 +8,25 @@ use image::Rgb32FImage;
 use rayon::prelude::*;
 
 use super::{
-    FOCUS_COLOR_CELL_SIZE, FOCUS_COLOR_MAX_GAIN, FOCUS_COLOR_MAX_OFFSET,
-    FOCUS_COLOR_MAX_RELAXED_LUMA, FOCUS_COLOR_MIN_CELL_SAMPLES, FOCUS_COLOR_MIN_CHANNEL_VALUE,
-    FOCUS_COLOR_MIN_GAIN, FOCUS_COLOR_MIN_SAMPLES, FOCUS_COLOR_PROPAGATION_MAX_CONFIDENCE,
-    FOCUS_COLOR_PROPAGATION_RADIUS_CELLS, FOCUS_COLOR_SAMPLE_BUDGET,
-    FOCUS_COLOR_SPATIAL_OFFSET_THRESHOLD, FOCUS_COLOR_SPATIAL_VARIATION_THRESHOLD,
-    RenderedFocusLayer, focus_analysis_dimensions, focus_stack_pixel_is_canvas_like,
-    linear_samples, luminance, median_f32, resize_binary_mask, resize_rgb,
+    FOCUS_COLOR_MIN_SAMPLES, RenderedFocusLayer, focus_analysis_dimensions,
+    focus_stack_pixel_is_canvas_like, linear_samples, luminance, median_f32, resize_binary_mask,
+    resize_rgb,
 };
+
+const FOCUS_COLOR_SAMPLE_BUDGET: u64 = 12_000;
+const FOCUS_COLOR_MIN_CHANNEL_VALUE: f32 = 0.025;
+const FOCUS_COLOR_MIN_GAIN: f32 = 0.78;
+const FOCUS_COLOR_MAX_GAIN: f32 = 1.28;
+const FOCUS_COLOR_MAX_OFFSET: f32 = 0.06;
+// Bright plastic, glass, or paper edges can sit above the normal colour-sample
+// ceiling. Admit those pixels only inside a matched foreground consensus band.
+const FOCUS_COLOR_MAX_RELAXED_LUMA: f32 = 0.995;
+const FOCUS_COLOR_CELL_SIZE: u32 = 768;
+const FOCUS_COLOR_MIN_CELL_SAMPLES: usize = 12;
+const FOCUS_COLOR_SPATIAL_VARIATION_THRESHOLD: f32 = 0.015;
+const FOCUS_COLOR_SPATIAL_OFFSET_THRESHOLD: f32 = 0.004;
+const FOCUS_COLOR_PROPAGATION_RADIUS_CELLS: i32 = 3;
+const FOCUS_COLOR_PROPAGATION_MAX_CONFIDENCE: f32 = 0.65;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct FocusColorCorrection {
