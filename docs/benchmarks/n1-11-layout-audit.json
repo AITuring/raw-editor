@@ -4,6 +4,17 @@
   "method": "source_layout_long_declaration_inventory_v1",
   "production_impact": "read_only_inventory_no_code_change",
   "source_layout_command": "python3 scripts/source-layout.py",
+  "source_layout_doc_stale_files": [
+    "src-tauri/src/panorama_stitching/stitch_images.rs",
+    "tests/focus-stack-quality-contract.mjs",
+    "src-tauri/src/panorama_utils/stitching/tile_ownership_stitcher.rs",
+    "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+    "src/hooks/useAppContextMenus.ts",
+    "src/components/views/BrightnessToolView.tsx",
+    "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
+    "src/App.tsx",
+    "src/components/panel/MainLibrary.tsx"
+  ],
   "long_files": [
     {
       "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
