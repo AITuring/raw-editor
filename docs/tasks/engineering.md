@@ -44,4 +44,4 @@
 
 - [x] **N2.1** fixture/test_support、alignment、Virtual_Tile、acceptance、interpolation及properties按领域拆分；保留测试名、过滤路径、生成器和失败种子，历史迁移检查通过。
 - [x] **N2.2** structural/owner/final-world oracle的依赖方向彻底收口；2026-11-20质量合同测试通过，静态依赖方向清单17/17通过，声明、导入及 facade 调用均保持在`cfg(test)`边界内；未将任何 oracle 提升为 release gate。见 [N2.2 audit](../benchmarks/n2-2-oracle-dependency-boundary-audit.json) 和 [dependency inventory](../benchmarks/n2-2-oracle-dependency-inventory.json)。
-- [ ] **N2.3** 将production invariant与research oracle契约分离；`stack-pair-evidence:check`维持研究用途，未重新定义及验收前不能充当release gate。2026-11-20只读审计确认 pair harness 未进入 release/CI，但 `focus-stack-quality:check` 仍混合 owner/final-world 等 research 断言，需拆成 production-only 与 research-only 两个入口。见 [N2.3 audit](../benchmarks/n2-3-release-gate-audit.json)。
+- [x] **N2.3** 将production invariant与research oracle契约分离；`stack-pair-evidence:check` 仍为 `--ignored` research harness，未进入 release/CI workflow；`focus-stack-quality:check` 为 production-only，research oracle 断言通过 `focus-stack-research:check` 显式 opt-in。2026-11-20两条合同命令均通过。见 [N2.3 release-gate audit](../benchmarks/n2-3-release-gate-audit.json)。

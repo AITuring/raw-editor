@@ -3,7 +3,7 @@
   "task": "N2.3",
   "method": "production_research_release_gate_audit_v1",
   "production_impact": "read_only_source_and_workflow_audit",
-  "status": "open",
+  "status": "pass",
   "checks": [
     {
       "name": "pair harness is explicitly research-only in package scripts",
@@ -17,18 +17,31 @@
     },
     {
       "name": "quality contract contains production and research assertions",
-      "status": "open",
+      "status": "pass",
       "research_markers": {
         "owner Source_RAW oracle": [
-          232
+          237
         ],
         "final-world Source_RAW optimizer": [
-          439
+          446
+        ],
+        "research": [
+          12,
+          13,
+          15,
+          233,
+          375
         ]
       },
-      "production_contract_entry": "focus-stack-quality:check"
+      "research_marker_guards": {
+        "owner Source_RAW oracle": true,
+        "final-world Source_RAW optimizer": true
+      },
+      "production_contract_entry": "node tests/focus-stack-quality-contract.mjs",
+      "research_contract_entry": "node tests/focus-stack-quality-contract.mjs --research",
+      "research_flag_guarded": true
     }
   ],
-  "decision": "pair evidence remains outside release/CI workflows; N2.3 stays open until production and research quality-contract assertions are split",
-  "next_step": "add a production-only contract entry and keep research oracle assertions behind a separate opt-in command"
+  "decision": "pair evidence remains outside release/CI workflows; production quality checks and research oracle checks use separate package entries",
+  "next_step": "keep the research entry opt-in and out of release workflows"
 }

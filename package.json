@@ -27,6 +27,7 @@
     "export-dialog:check": "node tests/export-dialog-contract.mjs",
     "image-stack-preview:check": "node tests/image-stack-preview-contract.mjs",
     "focus-stack-quality:check": "node tests/focus-stack-quality-contract.mjs",
+    "focus-stack-research:check": "node tests/focus-stack-quality-contract.mjs --research",
     "focus-stack-datasets:check": "node tests/focus-stack-datasets-contract.mjs",
     "focus-stack-regression": "node tests/focus-stack-regression.mjs",
     "focus-stack-regression:check": "node --test tests/focus-stack-regression-verdict.mjs",
