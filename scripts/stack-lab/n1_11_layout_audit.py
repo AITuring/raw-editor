@@ -79,12 +79,22 @@ def main() -> int:
         if len(path.read_text(encoding="utf-8").splitlines()) > 1000
     ]
     long_files.sort(key=lambda item: (-int(item["lines"]), str(item["path"])))
+    layout_doc = (ROOT / "docs/source-layout.md").read_text(encoding="utf-8")
+    stale_doc_files = [
+        item["path"]
+        for item in long_files
+        if not re.search(
+            rf"`{re.escape(str(item['path']))}`[^\n]*{int(item['lines']):,}",
+            layout_doc,
+        )
+    ]
     result = {
         "schema": 1,
         "task": "N1.11",
         "method": "source_layout_long_declaration_inventory_v1",
         "production_impact": "read_only_inventory_no_code_change",
         "source_layout_command": "python3 scripts/source-layout.py",
+        "source_layout_doc_stale_files": stale_doc_files,
         "long_files": long_files,
         "summary": {
             "long_file_count": len(long_files),
