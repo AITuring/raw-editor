@@ -19,18 +19,29 @@ STITCH = ROOT / "src-tauri/src/panorama_stitching/stitch_images.rs"
 
 
 def main() -> int:
-    source = STITCH.read_text(encoding="utf-8")
     checks = []
     switches = {
-        "RAW_EDITOR_STACK_RAW_FIXED_GAIN": "test_stack_raw_fixed_gain",
-        "RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION": "test_skip_stack_raw_exposure_normalization",
-        "RAW_EDITOR_DISABLE_SHARED_RAW_NORMALIZATION": "test_disable_shared_raw_normalization",
+        "RAW_EDITOR_STACK_RAW_FIXED_GAIN": (STITCH, "test_stack_raw_fixed_gain"),
+        "RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION": (STITCH, "test_skip_stack_raw_exposure_normalization"),
+        "RAW_EDITOR_DISABLE_SHARED_RAW_NORMALIZATION": (STITCH, "test_disable_shared_raw_normalization"),
+        "RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS": (
+            ROOT / "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
+            "ownership_diagnostics",
+        ),
     }
-    for env_name, helper in switches.items():
+    for env_name, (source_path, helper) in switches.items():
+        source = source_path.read_text(encoding="utf-8")
         count = source.count(env_name)
         helper_guarded = (
-            f"#[cfg(test)]\nfn {helper}" in source
-            and f"#[cfg(not(test))]\nfn {helper}" in source
+            (
+                f"#[cfg(test)]\nfn {helper}" in source
+                and f"#[cfg(not(test))]\nfn {helper}" in source
+            )
+            if helper != "ownership_diagnostics"
+            else (
+                "#[cfg(test)]\n    let ownership_diagnostics" in source
+                and "#[cfg(not(test))]\n    let ownership_diagnostics" in source
+            )
         )
         checks.append(
             {

@@ -96,6 +96,7 @@ def main() -> int:
         "RAW_EDITOR_FORCE_STREAMING_MOSAIC",
         "RAW_EDITOR_TEST_SOURCE_RESAMPLE_PATH",
         "RAW_EDITOR_TEST_SOURCE_RESAMPLE_DIVISOR",
+        "RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS",
     }
     grouped = {
         name: {

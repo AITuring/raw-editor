@@ -26,7 +26,7 @@
 
 - [x] **N0.1** 建立输入manifest、参考图digest、工作区快照和keep/adapt/test-only/exclude分流；v28已验收源码固定到独立本地分支，未覆盖当前WIP。
 - [x] **N0.2** 恢复并保护兰亭45张legacy成片行为，保留不一致的裁切/质量诊断；2026-11-03完成编译、契约、库测试、Web检查、macOS构建和单图桌面冒烟的范围化集成。
-- [ ] **N0.3** 清理生产源码中的raw/preview/命令报告引用及实验artifact；当前新增WIP也须登记归属。2026-11-20先收口 `stitch_images.rs` 的三项 RAW display 实验开关：环境读取仅在 `cfg(test)` helper，release helper 固定为 `None/false`；完整盘点记录240个变量、368处源码读取，parent-module `cfg(test)` 解析将125处归入测试边界，剩101个变量仍在 shared/production review scope，需逐项核对；preview 与 Stack_Report 字段保留为产品契约，legacy sharpen knob 仍待处理。见 [N0.3 audit](../benchmarks/n0-3-production-artifact-audit.json) 和 [RAW env inventory](../benchmarks/n0-3-raw-env-inventory.json)。清理引用不意味着删除用户素材、其他修改或历史证据。
+- [ ] **N0.3** 清理生产源码中的raw/preview/命令报告引用及实验artifact；当前新增WIP也须登记归属。2026-11-20先收口 `stitch_images.rs` 的三项 RAW display 实验开关，并将 focus ownership 诊断再收口为第四项：环境读取仅在 `cfg(test)` helper/local binding，release 固定为 `None/false`；完整盘点记录240个变量、368处源码读取，parent-module `cfg(test)` 解析将125处归入测试边界，剩100个变量仍在 shared/production review scope，需逐项核对；preview 与 Stack_Report 字段保留为产品契约，legacy sharpen knob 仍待处理。见 [N0.3 audit](../benchmarks/n0-3-production-artifact-audit.json) 和 [RAW env inventory](../benchmarks/n0-3-raw-env-inventory.json)。清理引用不意味着删除用户素材、其他修改或历史证据。
 
 <a id="n1"></a>
 

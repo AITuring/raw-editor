@@ -278,6 +278,11 @@ for (const variable of [
     `${variable} must not gate Tone_Harmonizer in the production stitching path`,
   );
 }
+assert.match(
+  stitching,
+  /#\[cfg\(test\)\]\s*let ownership_diagnostics[\s\S]*?RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS[\s\S]*?#\[cfg\(not\(test\)\)\]\s*let ownership_diagnostics/,
+  'ownership diagnostics must be test-only and unavailable to shipped rendering',
+);
 
 // Stage 5 residual geometry keeps its activation and three node gates explicit
 // so a threshold change cannot silently widen the local warp domain.

@@ -806,7 +806,12 @@ where
         // sample itself. Sharpening would create a value that no owner supplied.
         println!("  - Source-owned Capture_Station tile; skipping tile sharpening");
     }
-    if std::env::var_os("RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS").is_some() {
+    #[cfg(test)]
+    let ownership_diagnostics =
+        std::env::var_os("RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS").is_some();
+    #[cfg(not(test))]
+    let ownership_diagnostics = false;
+    if ownership_diagnostics {
         let mut counts = vec![0usize; images.len() + 2];
         for (&owner, &valid) in merged_owner.as_raw().iter().zip(merged_mask.as_raw()) {
             if valid == 0 {
