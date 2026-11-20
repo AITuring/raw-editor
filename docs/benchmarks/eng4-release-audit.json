@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "task": "ENG.4",
+  "method": "strict_clippy_release_signing_audit_v1",
+  "production_impact": "read_only_release_audit_no_code_change",
+  "status": "open",
+  "checks": [
+    {
+      "name": "strict clippy workflow exists",
+      "status": "pass"
+    },
+    {
+      "name": "strict clippy current checkout",
+      "status": "fail",
+      "command": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
+      "exit_code": 101,
+      "errors": 233,
+      "note": "strict lint is not currently clean; ordinary cargo check remains separate"
+    },
+    {
+      "name": "release workflow publishes artifacts",
+      "status": "pass"
+    },
+    {
+      "name": "desktop release platform matrix",
+      "status": "pass",
+      "note": "build/publish matrix exists; this is not signing evidence"
+    },
+    {
+      "name": "macOS signing and notarization",
+      "status": "open",
+      "evidence": "no Apple signing identity, notarization or stapling step found in release/build workflows"
+    },
+    {
+      "name": "Windows signing",
+      "status": "open",
+      "evidence": "Windows package build exists, but no certificate/signing step is recorded"
+    },
+    {
+      "name": "Linux distribution verification",
+      "status": "open",
+      "evidence": "Linux artifacts are uploaded, but no install/smoke/distribution acceptance record is present"
+    }
+  ],
+  "decision": "keep ENG.4 open: strict clippy fails and signing/notarization/distribution evidence is incomplete",
+  "next_step": "fix strict clippy in a scoped pass, then add verified signing/notarization/distribution acceptance evidence"
+}
