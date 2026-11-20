@@ -582,8 +582,10 @@ use virtual_tile_geometry_repair::{
     plan_virtual_tile_prior_repairs, virtual_tile_prior_repair_is_bounded_at_center,
 };
 
+#[cfg(test)]
 mod source_raw_direct;
 
+#[cfg(test)]
 use source_raw_direct::{
     SOURCE_RAW_DIRECT_MAX_SEEDS, SOURCE_RAW_DIRECT_PATCH_GATES, SOURCE_RAW_DIRECT_PATCH_RADIUS,
     SOURCE_RAW_DIRECT_SEARCH_RADIUS, SourceRawCorrelationProposal, SourceRawCorrelationPyramid,
@@ -592,21 +594,26 @@ use source_raw_direct::{
     source_raw_direct_raw_transform, source_raw_direct_refine,
 };
 
+#[cfg(test)]
 mod source_raw_direct_basin;
 
 #[cfg(test)]
 use source_raw_direct_basin::source_raw_direct_localize_holdout;
+#[cfg(test)]
 use source_raw_direct_basin::{source_raw_direct_closure, source_raw_direct_select_basin};
 
+#[cfg(test)]
 mod source_raw_direct_pairs;
 
 #[cfg(test)]
 use source_raw_direct_pairs::source_raw_direct_pair_diagnostics;
 
+#[cfg(test)]
 mod source_raw_layer_diagnostics;
 
 #[cfg(test)]
 use source_raw_layer_diagnostics::source_raw_layer_pair_diagnostics;
+#[cfg(test)]
 use source_raw_layer_diagnostics::{
     SourceRawLayerDiagnosticModel, source_raw_independent_observations,
 };

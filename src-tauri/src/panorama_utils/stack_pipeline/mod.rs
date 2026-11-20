@@ -18,6 +18,7 @@ pub(crate) mod compositor;
 pub(crate) mod degradation;
 /// Stable value schema and fallback boundary for optional proxy feature providers
 /// (requirements 17 and 21.4/21.5/21.9).  This module has no Python dependency.
+#[cfg(test)]
 pub(crate) mod feature_provider;
 /// Offline ECC/FocusPyramid comparison provider (task 21.3); native ownership remains default.
 pub(crate) mod focus_pyramid;
@@ -47,9 +48,11 @@ pub(crate) mod resources;
 /// "joins no Capture_Station" rejection (需求 12.1, 12.2, 12.5).
 pub(crate) mod station_degradation;
 /// Coverage-constrained station seam boundary (task 21.6); not default-wired yet.
+#[cfg(test)]
 pub(crate) mod station_seam;
 /// Full-resolution source-window and deterministic output-tile contracts
 /// (需求 21.7).
+#[cfg(test)]
 pub(crate) mod tile_source;
 /// Tone_Harmonizer: robust low-frequency affine correction after ownership.
 pub(crate) mod tone;

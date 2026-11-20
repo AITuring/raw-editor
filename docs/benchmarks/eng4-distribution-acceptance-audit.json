@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "task": "ENG.4",
+  "method": "release_signing_linux_distribution_evidence_audit_v1",
+  "production_impact": "read_only_no_signing_no_install_no_publish",
+  "observed_at_utc": "2026-11-20T13:12:54.387914+00:00",
+  "host": "macOS-26.5-arm64-arm-64bit-Mach-O",
+  "android_signing_declared": true,
+  "checks": [
+    {
+      "name": "Linux build matrix and package upload declared",
+      "status": "pass",
+      "evidence": "release.yml has Ubuntu matrix and package globs; tauri targets=all"
+    },
+    {
+      "name": "Linux package artifact present in current checkout",
+      "status": "open",
+      "artifacts": [],
+      "note": "No local package means metadata/install checks cannot be accepted."
+    },
+    {
+      "name": "Linux package inspection tools",
+      "status": "open",
+      "tools": {
+        "file": {
+          "available": true,
+          "path": "/usr/bin/file",
+          "version": "file-5.41",
+          "exit_code": 0
+        },
+        "dpkg_deb": {
+          "available": false,
+          "path": null,
+          "version": null
+        },
+        "rpm": {
+          "available": false,
+          "path": null,
+          "version": null
+        }
+      }
+    },
+    {
+      "name": "Linux install and smoke acceptance",
+      "status": "open",
+      "evidence": "No install/smoke command or acceptance record is present in release workflows."
+    },
+    {
+      "name": "macOS signing, notarization, and stapling workflow",
+      "status": "open",
+      "evidence": {
+        "apple_codesign": false,
+        "apple_notarization": false,
+        "apple_stapling": false,
+        "windows_signing": false,
+        "linux_package_signing": false
+      }
+    },
+    {
+      "name": "Windows signing workflow",
+      "status": "open",
+      "evidence": {
+        "apple_codesign": false,
+        "apple_notarization": false,
+        "apple_stapling": false,
+        "windows_signing": false,
+        "linux_package_signing": false
+      }
+    },
+    {
+      "name": "Linux package signing workflow",
+      "status": "open",
+      "evidence": {
+        "apple_codesign": false,
+        "apple_notarization": false,
+        "apple_stapling": false,
+        "windows_signing": false,
+        "linux_package_signing": false
+      }
+    },
+    {
+      "name": "Signing evidence is limited to Android keystore path",
+      "status": "pass",
+      "evidence": {
+        "android_keystore_path": true,
+        "desktop_signing": {
+          "apple_codesign": false,
+          "apple_notarization": false,
+          "apple_stapling": false,
+          "windows_signing": false,
+          "linux_package_signing": false
+        }
+      }
+    }
+  ],
+  "status": "open",
+  "decision": "keep signing/notarization/Linux distribution acceptance open until signed artifacts and install/smoke evidence are supplied"
+}

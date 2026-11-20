@@ -1345,7 +1345,7 @@ const testOnlyStackPipelineFiles = new Set(
 );
 assert.deepEqual(
   [...testOnlyStackPipelineFiles].sort(),
-  ['properties.rs', 'test_support.rs'],
+  ['feature_provider.rs', 'properties.rs', 'station_seam.rs', 'test_support.rs', 'tile_source.rs'],
   'the production hash-order guard must derive the standalone test-only modules from mod.rs',
 );
 const productionStackPipelineFiles = [

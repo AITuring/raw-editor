@@ -1,38 +1,30 @@
 {
-  "schema": 1,
+  "schema": 2,
   "task": "ENG.4",
-  "method": "strict_clippy_debt_inventory_v1",
+  "method": "strict_clippy_debt_inventory_v2",
+  "command": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
   "exit_code": 101,
-  "diagnostic_count": 321,
-  "by_kind": {
-    "general": 316,
-    "E0596": 4,
-    "E0384": 1
+  "diagnostic_count": 505,
+  "target_diagnostics": {
+    "lib": 273,
+    "lib test": 232
   },
   "top_files": [
-    {
-      "path": "src/panorama_stitching/source_raw_direct.rs",
-      "diagnostics": 29
-    },
     {
       "path": "src/panorama_utils/stack_pipeline/feature_provider.rs",
       "diagnostics": 23
     },
     {
-      "path": "src/panorama_stitching/source_raw_layer_diagnostics.rs",
-      "diagnostics": 13
+      "path": "src/panorama_stitching/stitch_images.rs",
+      "diagnostics": 14
+    },
+    {
+      "path": "src/panorama_utils/stack_pipeline/station_seam.rs",
+      "diagnostics": 14
     },
     {
       "path": "src/panorama_utils/stitching.rs",
       "diagnostics": 13
-    },
-    {
-      "path": "src/panorama_utils/stack_pipeline/station_seam.rs",
-      "diagnostics": 12
-    },
-    {
-      "path": "src/panorama_stitching/stitch_images.rs",
-      "diagnostics": 11
     },
     {
       "path": "src/panorama_utils/stack_pipeline/tile_source.rs",
@@ -44,15 +36,27 @@
     },
     {
       "path": "src/panorama_station_closure_refine.rs",
-      "diagnostics": 8
+      "diagnostics": 9
     },
     {
       "path": "src/panorama_utils/stack_pipeline/focus_pyramid.rs",
-      "diagnostics": 8
+      "diagnostics": 9
     },
     {
       "path": "src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
       "diagnostics": 8
+    },
+    {
+      "path": "src/panorama_stitching.rs",
+      "diagnostics": 7
+    },
+    {
+      "path": "src/panorama_utils/stack_pipeline/quality_gate_runner/source_sampling.rs",
+      "diagnostics": 7
+    },
+    {
+      "path": "src/panorama_utils/stitching/focus_alignment.rs",
+      "diagnostics": 6
     },
     {
       "path": "src/panorama_station_closure.rs",
@@ -63,15 +67,7 @@
       "diagnostics": 6
     },
     {
-      "path": "src/panorama_stitching/source_raw_direct_basin.rs",
-      "diagnostics": 6
-    },
-    {
-      "path": "src/panorama_utils/stack_pipeline/quality_gate_runner/source_sampling.rs",
-      "diagnostics": 6
-    },
-    {
-      "path": "src/panorama_utils/stitching/focus_alignment.rs",
+      "path": "src/panorama_utils/mosaic/tests/streaming_tiles.rs",
       "diagnostics": 6
     },
     {
@@ -79,12 +75,16 @@
       "diagnostics": 5
     },
     {
-      "path": "src/panorama_stitching/source_raw_direct_pairs.rs",
+      "path": "src/panorama_utils/stack_pipeline/joint_warp.rs",
       "diagnostics": 5
     },
     {
-      "path": "src/panorama_utils/stack_pipeline/joint_warp.rs",
+      "path": "src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
       "diagnostics": 5
+    },
+    {
+      "path": "src/panorama_stitching/focus_component_recovery.rs",
+      "diagnostics": 4
     },
     {
       "path": "src/panorama_stitching/capture_sequence_bridges.rs",
@@ -95,11 +95,7 @@
       "diagnostics": 4
     },
     {
-      "path": "src/panorama_stitching/focus_component_recovery.rs",
-      "diagnostics": 4
-    },
-    {
-      "path": "src/panorama_utils/mosaic/layer_refine.rs",
+      "path": "src/panorama_stitching/virtual_tile_pyramid_match.rs",
       "diagnostics": 4
     },
     {
@@ -107,69 +103,14 @@
       "diagnostics": 4
     },
     {
-      "path": "src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
+      "path": "src/panorama_utils/stitching/station_seam_plan.rs",
       "diagnostics": 4
     },
     {
       "path": "src/panorama_utils/stitching/focus_color.rs",
       "diagnostics": 4
-    },
-    {
-      "path": "src/panorama_utils/stitching/focus_tone.rs",
-      "diagnostics": 4
-    },
-    {
-      "path": "src/panorama_utils/stitching/progressive_seam.rs",
-      "diagnostics": 4
-    },
-    {
-      "path": "src/panorama_stitching/virtual_tile_pyramid_match.rs",
-      "diagnostics": 3
-    },
-    {
-      "path": "src/panorama_utils/mosaic/source_ownership.rs",
-      "diagnostics": 3
-    },
-    {
-      "path": "src/panorama_utils/mosaic/streaming_store.rs",
-      "diagnostics": 3
-    },
-    {
-      "path": "src/panorama_utils/stitching/focus_masks.rs",
-      "diagnostics": 3
-    },
-    {
-      "path": "src/panorama_utils/stitching/station_seam_plan.rs",
-      "diagnostics": 3
-    },
-    {
-      "path": "src/panorama_utils/stitching/station_seam_sampling.rs",
-      "diagnostics": 3
-    },
-    {
-      "path": "src/panorama_utils/stitching/virtual_tiles.rs",
-      "diagnostics": 3
-    },
-    {
-      "path": "src/export_processing.rs",
-      "diagnostics": 2
-    },
-    {
-      "path": "src/panorama_match_geometry.rs",
-      "diagnostics": 2
-    },
-    {
-      "path": "src/panorama_stitching/focus_capture_spine.rs",
-      "diagnostics": 2
-    },
-    {
-      "path": "src/panorama_stitching/pair_matching.rs",
-      "diagnostics": 2
-    },
-    {
-      "path": "src/panorama_stitching/virtual_tile_scale_contract.rs",
-      "diagnostics": 2
     }
   ],
-  "decision": "strict clippy remains open; prioritize cfg(test) isolation and intentional dead-code policy before signing/distribution work"
+  "scope_note": "source_raw_direct, source_raw_direct_basin, source_raw_direct_pairs, source_raw_layer_diagnostics, feature_provider, station_seam, and tile_source are cfg(test)-isolated research/test contracts; remaining files are not reclassified by this snapshot",
+  "source_log": "/private/tmp/raw-editor-eng4-clippy-6.log"
 }
