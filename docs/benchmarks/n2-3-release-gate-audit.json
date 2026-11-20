@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "task": "N2.3",
+  "method": "production_research_release_gate_audit_v1",
+  "production_impact": "read_only_source_and_workflow_audit",
+  "status": "open",
+  "checks": [
+    {
+      "name": "pair harness is explicitly research-only in package scripts",
+      "status": "pass",
+      "value": "cargo test --manifest-path src-tauri/Cargo.toml --lib panorama_utils::stack_pipeline::properties::stack_station_pair_evidence_harness -- --exact --ignored --nocapture"
+    },
+    {
+      "name": "release and CI workflows do not invoke pair harness",
+      "status": "pass",
+      "workflow_hits": {}
+    },
+    {
+      "name": "quality contract contains production and research assertions",
+      "status": "open",
+      "research_markers": {
+        "owner Source_RAW oracle": [
+          232
+        ],
+        "final-world Source_RAW optimizer": [
+          439
+        ]
+      },
+      "production_contract_entry": "focus-stack-quality:check"
+    }
+  ],
+  "decision": "pair evidence remains outside release/CI workflows; N2.3 stays open until production and research quality-contract assertions are split",
+  "next_step": "add a production-only contract entry and keep research oracle assertions behind a separate opt-in command"
+}
