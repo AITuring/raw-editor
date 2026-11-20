@@ -28,8 +28,8 @@ def main() -> int:
             "status": "fail",
             "command": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
             "exit_code": 101,
-            "errors": 233,
-            "note": "strict lint is not currently clean; ordinary cargo check remains separate",
+            "diagnostics": 323,
+            "note": "strict lint remains nonzero after the first mechanical cleanup pass; ordinary cargo check remains separate",
         },
         {
             "name": "release workflow publishes artifacts",

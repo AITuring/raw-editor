@@ -200,6 +200,7 @@ pub(super) fn harmonize_after_ownership_with_evidence(
             fidelity_strengths[index] = constrain_source_fidelity(tile, transform);
         }
     }
+    #[cfg_attr(not(test), allow(unused_variables))]
     let (spatial_fields, holdout_gate) = if TONE_SPATIAL_FIELD_ENABLED && local.is_none() {
         let holdout_fields =
             build_spatial_field_iterations(tiles, &solved_relations, &transforms, true);
@@ -556,7 +557,9 @@ pub(super) fn harmonize_after_ownership_with_evidence(
     ) in boundary_windows
     {
         let mean = |sum: [f64; 3]| sum.map(|channel| (channel / count as f64) as f32);
+        #[cfg_attr(not(test), allow(unused_variables))]
         let first_pre = mean(first_pre_sum);
+        #[cfg_attr(not(test), allow(unused_variables))]
         let second_pre = mean(second_pre_sum);
         let first_post = mean(first_sum);
         let second_post = mean(second_sum);

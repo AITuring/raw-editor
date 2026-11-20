@@ -16,6 +16,7 @@ mod report_schema_metrics;
 #[path = "report_schema_solver.rs"]
 mod report_schema_solver;
 
+#[allow(unused_imports)]
 pub(crate) use report_document::{STACK_REPORT_TOP_LEVEL_FIELDS, StackReport};
 pub(crate) use report_io::*;
 pub(crate) use report_recorder::*;

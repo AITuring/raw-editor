@@ -60,6 +60,7 @@ pub(crate) use crate::panorama_utils::shared::{FocusLayerWarp, FocusWarpBand};
 #[path = "panorama_feature_pairs.rs"]
 mod feature_pairs;
 
+#[allow(unused_imports)]
 use feature_pairs::{
     all_image_pairs, natural_path_cmp, pairs_to_match, pairs_to_match_for_images,
     pairs_to_match_for_images_with_plan,

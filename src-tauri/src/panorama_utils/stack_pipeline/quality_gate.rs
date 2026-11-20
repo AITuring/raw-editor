@@ -99,9 +99,11 @@ mod boundary_strokes;
 #[cfg(test)]
 use boundary_strokes::paired_boundary_edge_error;
 #[cfg(test)]
+#[allow(unused_imports)]
 pub(crate) use boundary_strokes::{
     measure_boundary_strokes, paired_boundary_edge_fits_with_coverage,
 };
+#[allow(unused_imports)]
 pub(crate) use boundary_strokes::{
     measure_boundary_strokes_with_coverage, paired_boundary_edge_error_with_coverage,
     touching_region_pairs, trace_moore_boundary, trace_moore_boundary_from,

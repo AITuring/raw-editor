@@ -87,6 +87,7 @@ pub(crate) const OWNERSHIP_DISAGREEMENT_VETO: f64 = 0.2;
 
 mod cell_metrics;
 
+#[allow(unused_imports)]
 pub(crate) use cell_metrics::{
     CellSamplingPlan, cell_disagreement, normalized_sharpness, ownership_cell_size_px,
 };

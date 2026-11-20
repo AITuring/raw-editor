@@ -389,6 +389,7 @@ mod coverage;
 mod criterion_rois;
 mod native_coverage;
 
+#[allow(unused_imports)]
 pub(crate) use coverage::{
     accumulate_confidence_score, select_sparse_rois, select_sparse_rois_with_evidence,
     select_sparse_rois_with_evidence_side,
@@ -409,6 +410,7 @@ pub(crate) use boundary_repair::repair_failed_boundary_samples;
 
 mod run_gate;
 
+#[allow(unused_imports)]
 pub(crate) use run_gate::{run_quality_gate, run_quality_gate_with_cache};
 
 #[cfg(test)]
