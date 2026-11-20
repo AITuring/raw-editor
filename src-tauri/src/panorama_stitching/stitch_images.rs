@@ -291,12 +291,6 @@ fn apply_test_geometry_sensitivity(
 ) {
 }
 
-#[cfg(not(test))]
-fn apply_test_station_jacobian_scale(
-    _tile_infos: &[ImageInfo],
-    _homographies: &mut HashMap<usize, Matrix3<f64>>,
-) {
-}
 const RAW_STACK_DENOMINATOR: usize = 5;
 
 /// The first attempt of a scan that found frames aligning with none of the

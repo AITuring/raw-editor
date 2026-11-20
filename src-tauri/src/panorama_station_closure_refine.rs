@@ -66,6 +66,7 @@ pub(super) fn refine_focus_group_projective_tree_poses(
     )
 }
 
+#[cfg(test)]
 pub(super) fn refine_focus_group_projective_tree_poses_with_report(
     images: &[ImageInfo],
     groups: &[FocusCaptureGroup],

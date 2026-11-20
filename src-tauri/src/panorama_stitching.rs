@@ -301,19 +301,21 @@ mod overlap_quality;
 
 #[cfg(test)]
 use overlap_quality::VIRTUAL_TILE_QUALITY_COVERAGE_RADIUS_PX;
+#[cfg(test)]
+use overlap_quality::focus_overlap_quality_measurements;
 use overlap_quality::{
     FocusOverlapQuality, focus_overlap_is_verified, focus_overlap_quality,
-    focus_overlap_quality_measurements, focus_overlap_quality_measurements_on_coverage,
-    normalized_correlation, panorama_spatial_support, panorama_transform_overlap_support,
+    focus_overlap_quality_measurements_on_coverage, normalized_correlation,
+    panorama_spatial_support, panorama_transform_overlap_support,
     shifted_focus_structure_is_verified, station_relation_overlap_scale,
     virtual_tile_photometric_measurements,
 };
 
 mod pair_matching;
 
-use pair_matching::{
-    estimate_mixed_focal_coarse_registration, match_image_pair, match_image_pair_with_seed,
-};
+#[cfg(test)]
+use pair_matching::match_image_pair_with_seed;
+use pair_matching::{estimate_mixed_focal_coarse_registration, match_image_pair};
 
 mod vertical_edge_bands;
 
@@ -446,12 +448,13 @@ use virtual_tile_structure::{
 
 mod virtual_tile_guided_match;
 
+#[cfg(test)]
+use virtual_tile_guided_match::virtual_tile_descriptor_distance;
 use virtual_tile_guided_match::{
     VIRTUAL_TILE_GUIDED_MAX_DESCRIPTOR_DISTANCE, VIRTUAL_TILE_GUIDED_MAX_LOCAL_ORIENTATION_DEGREES,
     VIRTUAL_TILE_GUIDED_MIN_GRADIENT_NCC, VIRTUAL_TILE_GUIDED_MIN_OCCUPIED_CELLS,
     VIRTUAL_TILE_GUIDED_MIN_PATCH_NCC, VIRTUAL_TILE_GUIDED_MIN_PEAK_MARGIN,
-    VIRTUAL_TILE_GUIDED_PER_CELL_QUOTA, virtual_tile_descriptor_distance,
-    virtual_tile_guided_search_radius,
+    VIRTUAL_TILE_GUIDED_PER_CELL_QUOTA, virtual_tile_guided_search_radius,
 };
 #[cfg(test)]
 use virtual_tile_guided_match::{
@@ -481,9 +484,12 @@ use virtual_tile_direct_match::{
     virtual_tile_round_trip_is_consistent,
 };
 use virtual_tile_direct_match::{
-    VIRTUAL_TILE_DIRECT_PATCH_RADIUS, VIRTUAL_TILE_DIRECT_ROUND_TRIP_TOLERANCE_PX,
-    virtual_tile_coverage_contains_rectangle, virtual_tile_direct_patch_support_is_covered,
+    VIRTUAL_TILE_DIRECT_PATCH_RADIUS, virtual_tile_coverage_contains_rectangle,
     virtual_tile_direct_station_match, virtual_tile_direct_station_match_with_structure,
+};
+#[cfg(test)]
+use virtual_tile_direct_match::{
+    VIRTUAL_TILE_DIRECT_ROUND_TRIP_TOLERANCE_PX, virtual_tile_direct_patch_support_is_covered,
 };
 
 mod virtual_tile_planes;
@@ -510,11 +516,14 @@ use virtual_tile_global_search::{
     VIRTUAL_TILE_GLOBAL_MAX_SAMPLES, VIRTUAL_TILE_GLOBAL_MIN_OVERLAP_SAMPLES,
     virtual_tile_masked_similarity_score, virtual_tile_prior_free_seed_fallback_conditions,
 };
+#[cfg(test)]
 use virtual_tile_global_search::{
-    VIRTUAL_TILE_GLOBAL_TOP_K, VIRTUAL_TILE_SEED_GLOBAL_COVERAGE, VIRTUAL_TILE_SEED_SOURCE_MATCH,
-    VirtualTileGlobalProposal, virtual_tile_global_similarity_proposals,
-    virtual_tile_prior_free_relation, virtual_tile_prior_free_seed_fallback_allowed,
-    virtual_tile_source_match_proposals, virtual_tile_translation,
+    VIRTUAL_TILE_GLOBAL_TOP_K, VirtualTileGlobalProposal, virtual_tile_translation,
+};
+use virtual_tile_global_search::{
+    VIRTUAL_TILE_SEED_GLOBAL_COVERAGE, VIRTUAL_TILE_SEED_SOURCE_MATCH,
+    virtual_tile_global_similarity_proposals, virtual_tile_prior_free_relation,
+    virtual_tile_prior_free_seed_fallback_allowed, virtual_tile_source_match_proposals,
 };
 
 mod virtual_tile_pyramid_match;
@@ -559,13 +568,15 @@ mod virtual_tile_scale_contract;
 use virtual_tile_scale_contract::measure_virtual_tile_scale_evidence;
 
 #[cfg(test)]
+use virtual_tile_hypothesis::virtual_tile_hypothesis_matrix_key;
+#[cfg(test)]
 use virtual_tile_hypothesis::{
     MeasuredVirtualTileHypothesis, VirtualTileHypothesisSelection,
     virtual_tile_hypothesis_holdout_key, virtual_tile_hypothesis_model_rank,
 };
 use virtual_tile_hypothesis::{
     select_virtual_tile_relation_hypotheses, select_virtual_tile_relation_hypothesis,
-    virtual_tile_hypothesis_matrix_key, virtual_tile_provisional_authoritative_candidate,
+    virtual_tile_provisional_authoritative_candidate,
 };
 #[cfg(test)]
 use virtual_tile_relations::virtual_tile_relation_measurements;
