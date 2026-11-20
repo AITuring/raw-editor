@@ -1,0 +1,118 @@
+{
+  "schema": 1,
+  "task": "N1.11",
+  "method": "source_layout_long_declaration_inventory_v1",
+  "production_impact": "read_only_inventory_no_code_change",
+  "source_layout_command": "python3 scripts/source-layout.py",
+  "long_files": [
+    {
+      "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+      "lines": 5047,
+      "long_declarations": [
+        {
+          "name": "stitch_images_attempt",
+          "line": 401,
+          "approx_lines": 4610
+        }
+      ]
+    },
+    {
+      "path": "src/components/panel/Editor.tsx",
+      "lines": 2463,
+      "long_declarations": []
+    },
+    {
+      "path": "src/components/panel/editor/ImageCanvas.tsx",
+      "lines": 2246,
+      "long_declarations": [
+        {
+          "name": "ImageCanvas",
+          "line": 20,
+          "approx_lines": 2224
+        }
+      ]
+    },
+    {
+      "path": "src/components/panel/SettingsPanel.tsx",
+      "lines": 1721,
+      "long_declarations": []
+    },
+    {
+      "path": "tests/focus-stack-quality-contract.mjs",
+      "lines": 1707,
+      "long_declarations": []
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/tile_ownership_stitcher.rs",
+      "lines": 1515,
+      "long_declarations": [
+        {
+          "name": "focus_tile_ownership_stitcher_with_finishing",
+          "line": 57,
+          "approx_lines": 1459
+        }
+      ]
+    },
+    {
+      "path": "src/components/panel/right/CropPanel.tsx",
+      "lines": 1452,
+      "long_declarations": []
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+      "lines": 1389,
+      "long_declarations": [
+        {
+          "name": "detail_preserving_mosaic_streaming",
+          "line": 45,
+          "approx_lines": 1178
+        }
+      ]
+    },
+    {
+      "path": "src/hooks/useAppContextMenus.ts",
+      "lines": 1367,
+      "long_declarations": []
+    },
+    {
+      "path": "src/components/views/BrightnessToolView.tsx",
+      "lines": 1161,
+      "long_declarations": []
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
+      "lines": 1105,
+      "long_declarations": []
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/final_world_owner_runner.rs",
+      "lines": 1067,
+      "long_declarations": [
+        {
+          "name": "run_final_world_owner_oracle",
+          "line": 21,
+          "approx_lines": 1047
+        }
+      ]
+    },
+    {
+      "path": "src/App.tsx",
+      "lines": 1062,
+      "long_declarations": []
+    },
+    {
+      "path": "src/components/panel/MainLibrary.tsx",
+      "lines": 1034,
+      "long_declarations": []
+    }
+  ],
+  "summary": {
+    "long_file_count": 14,
+    "long_declaration_count": 5
+  },
+  "remaining": [
+    "decide individually whether the listed production files are intentional facades/entrypoints or need a bounded split",
+    "add a separate import-direction contract before marking N1.11 complete"
+  ],
+  "decision": "keep N1.11 open; preserve current behavior and use this list for a reviewed follow-up"
+}

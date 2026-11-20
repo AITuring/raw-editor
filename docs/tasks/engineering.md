@@ -35,7 +35,7 @@
 - [x] **N1-1 / N1-2a / N1-2b** 共享类型、坐标、geometry/focus纯helper迁移，facade兼容重导出与回归完成。
 - [x] **N1-3 / N1-4 / N1-5 / N1-6** report schema/recorder、pair候选、feature preparation/matching合同和匹配执行体拆分完成。
 - [x] **N1-7 / N1-8 / N1-9 / N1-10** station solver/topology/closure、grouping、stitching、mosaic、processing和其他长模块迁移完成；模块地图已记录。
-- [ ] **N1.11** 处理仍超1000行的单函数/组件及建立import方向检查；按此前范围决定保留的超长函数，不能因facade拆分完成就宣称全部达标。具体名单由[源码布局](../source-layout.md)生成。
+- [ ] **N1.11** 处理仍超1000行的单函数/组件及建立import方向检查；2026-11-20清单显示14个超1000行源文件、5个启发式识别的超1000行声明，尚未进行算法拆分，也未完成import-direction contract。见[源码布局](../source-layout.md)和[N1.11 audit](../benchmarks/n1-11-layout-audit.json)。
 - [ ] **N1.12** 后续每次职责迁移继续记录定向测试、完整回归和前后输出等价性；只移动代码的变更不得夹带算法调参。
 
 <a id="n2"></a>
