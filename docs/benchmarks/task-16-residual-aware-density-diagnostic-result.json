@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_residual_aware_density_diagnostic_result_v1",
+  "production_impact": "test_only_composed_jacobian_export_no_density_factor_or_tiff_change",
+  "dataset": "mayuan-2",
+  "scale": 1.0,
+  "binary": "task-16-residual-density-diagnostic-r2",
+  "binary_sha256": "c8f8ea45dfd75dff94f942ec01d71572c80ad0773677858330daaadbebb547f5",
+  "commit": "1ad821e48337864220cbf0d84ab26df89dd9e579",
+  "inputs_sha256": "4e39ee193f336801a7918307307f8c9ba7d6c9490fb105678c3b4a112663294f",
+  "manifest_sha256": "449224e8c2726a5c2732375641dd40c190f6e87f593cff2b7797d0b66add482f",
+  "runner_sha256": "443ed48a26ddef9f26f827ea81f27798c2cec50dea55d8ef55310f8ecb780317",
+  "run": {
+    "label": "mayuan-2-s1-task-16-mayuan-2-native-residual-density-diagnostic-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-residual-density-diagnostic-r1",
+    "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-residual-density-diagnostic-r1/analysis.json",
+    "execution": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-residual-density-diagnostic-r1/execution.json",
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-residual-density-diagnostic-r1/run/mayuan-2-s1-task-16-mayuan-2-native-residual-density-diagnostic-r1-stack-reports/stack-report-5506dce6-2088-42b0-8120-1db77d2a4e65.json",
+    "report_sha256": "bbba92621d86a170dbb83521dfab7e193cab78d4f0f883cec1eb0baa4a1987b9",
+    "diagnostics": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-residual-density-diagnostic-r1/diagnostics/residual-density",
+    "summary": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-residual-density-diagnostic-r1/diagnostics/residual-density/summary.json"
+  },
+  "status": "rejected",
+  "exit": {
+    "runner_exit_code": 1,
+    "native_child_exit_code": 101,
+    "runner_failures": [
+      "layered native acceptance failed: native output did not pass the complete quality gate",
+      "the image-stack dialog rejects this result (Stack_Report degradation.result is rejected)"
+    ]
+  },
+  "checks": {
+    "inputs_unchanged": true,
+    "reference_unchanged": true,
+    "binary_unchanged": true,
+    "memory_gate_pass": true,
+    "runner_exit_zero": false,
+    "native_child_exit_zero": false,
+    "runner_summary_present": true,
+    "runner_failures_empty": false,
+    "quality_gate_pass": false,
+    "output_contract": true,
+    "report_source_digests": true
+  },
+  "diagnostic_only": true,
+  "sampling_contract": "residual_forward_world_composed_with_native_source_jacobian; diagnostic_only",
+  "residual": {
+    "identity": false,
+    "region_count": 17,
+    "source_count": 42,
+    "station_count": 18
+  },
+  "composed_jacobian": {
+    "sample_count": 1788082,
+    "minimum_scale": 0.01725085664235415,
+    "p01_scale": 0.8607329844052495,
+    "median_scale": 1.0560081586170793,
+    "worst_station_index": 8,
+    "worst_source_id": 18,
+    "worst_station_point": [
+      8097.0,
+      5409.0
+    ],
+    "invalid_probe_count": 394,
+    "boundary_probe_count": 37446,
+    "residual_invalid_probe_count": 0
+  },
+  "closure_raw": {
+    "direct_pair_p95_px": 2.709115246135124,
+    "residual_median_px": 0.31825474594311276,
+    "max_corner_correction_px": 122.81624766980407
+  },
+  "density_planner_report": {
+    "status": "bypassed",
+    "factor": 1.0,
+    "pixel_count_multiplier": 1.0,
+    "canvas_pixels": 153231600,
+    "output_plane_lower_bound_bytes": 2758168800,
+    "target_minimum_scale": 1.0,
+    "probe_step_px": 32,
+    "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+    "source_count": 42,
+    "sample_count": 0,
+    "invalid_probe_count": 394,
+    "boundary_probe_count": 37446,
+    "worst_station_index": null,
+    "worst_source_id": null,
+    "worst_station_point": null,
+    "direct_pair_p95_output_px": null,
+    "residual_median_output_px": null,
+    "max_corner_correction_output_px": null,
+    "minimum_scale": null,
+    "p01_scale": null,
+    "median_scale": null,
+    "bypass_reason": "nonidentity_world_residual"
+  },
+  "output": {
+    "alpha_preserved": true,
+    "artifact_validation": "pass",
+    "artifact_validation_error": null,
+    "bit_depth": 16,
+    "format": "TIFF",
+    "height": 11019,
+    "icc": "sRGB",
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-residual-density-diagnostic-r1/run/mayuan-2-s1-task-16-mayuan-2-native-residual-density-diagnostic-r1.tiff",
+    "preview": {
+      "path": "",
+      "max_roi_delta_e": 0.0
+    },
+    "result_id": "native-fixture-5506dce6-2088-42b0-8120-1db77d2a4e65",
+    "tiff_extra_samples": [
+      2
+    ],
+    "width": 13299,
+    "written": true
+  },
+  "resources": {
+    "peak_rss_bytes": 13823639552,
+    "memory_gate_pass": true,
+    "wall_seconds": 10012.960834026337
+  },
+  "decision": "residual-aware composition is measurable but materially nonidentity: minimum composed scale 0.01725, p01 0.86073, median 1.05601; worst station8/source18 at [8097,5409]. This supports the safety bypass. No density factor was applied and native acceptance remains rejected for the pre-existing QG boundary/evidence gates.",
+  "next_step": "keep production density bypass; if a future production adapter is proposed, it must define residual Jacobian edge/invalid handling and re-run output-pixel closure before applying any factor."
+}

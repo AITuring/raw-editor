@@ -44,6 +44,7 @@
     ],
     "acceptance": "diagnostic only; no task16 D2/D3 checkmark from export"
   },
-  "decision": "owner/boundary A/B are complete: owner radius2 fixes unresolved=163, boundary repair fixes one local seam but native gate remains rejected; density bypass remains independent and no factor scan is justified",
-  "next_step": "if another code change is authorized, implement a test-only residual-aware composed-Jacobian export without applying density or changing production; otherwise task16 remains open with an explicit density bypass"
+  "decision": "diagnostic result is complete: composed residual-aware scale min=0.0172509, p01=0.8607330, median=1.0560082; this validates the nonidentity residual safety bypass. No density factor or production adapter is justified",
+  "result": "task-16-residual-aware-density-diagnostic-result.json",
+  "next_step": "keep production bypass and task16 open; only a separately specified residual-Jacobian production contract with edge/invalid handling could reopen this path"
 }

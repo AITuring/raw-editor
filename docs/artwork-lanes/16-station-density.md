@@ -97,3 +97,13 @@ test-only `RAW_EDITOR_FOCUS_OWNER_UNRESOLVED_DIR` 导出的 163 点全部是 `ra
 但 boundary seam 仍在 `(699,3621.5)` 为 `3.0px`，`boundary_stroke_alignment=fail`；`effective_pixel_count` 仍 `insufficient_evidence`，`mtf50_normalized` 仍 `not_applicable`，output density 仍 `bypassed/nonidentity_world_residual`。完整 native acceptance 仍拒绝，所以不把 5×5 fallback 推广，也不把它与 boundary repair 叠加再跑。
 
 机器摘要：[task-16-native-owner-stencil5-ab.json](../benchmarks/task-16-native-owner-stencil5-ab.json)。结论：owner fallback 假设已验证为局部有效但不足以完成任务16；保留生产 3×3 合同，后续只处理 boundary 合同和 residual-aware density 诊断。
+
+## residual-aware density 诊断结果
+
+test-only 组成链已完成一次全量 scale=1 诊断：`station pose → ResidualWarp::forward_world_for_station → source_per_station.inverse()`。共 1,788,082 个可测样本、17 个 residual regions；结果只写 JSON，`plan_output_density` 仍 `bypassed`、factor 仍 `1.0`，没有修改 TIFF。
+
+- composed scale minimum `0.0172509`、p01 `0.8607330`、median `1.0560082`；最坏为 station8/source18、station point `[8097,5409]`。
+- 原始 closure 字段保留为 direct P95 `2.709115px`、residual median `0.318255px`、corner `122.816248px`；diagnostic 不把这些字段冒充 output-pixel closure，也没有输出可应用 factor。
+- 这证明 residual bypass 是安全合同：实际残差场会产生强烈局部非恒等 Jacobian，不能把旧的 pose/source-only density factor 直接复用。完整 native acceptance 仍受 boundary/effective-pixel 等原有 gate 拒绝。
+
+机器摘要：[task-16-residual-aware-density-diagnostic-result.json](../benchmarks/task-16-residual-aware-density-diagnostic-result.json)；原始 summary 和 18 个 station JSON 在该 run directory 的 `diagnostics/residual-density/`。任务16保持未验收，不进入生产 adapter。
