@@ -29,22 +29,6 @@
     "passed": 3,
     "failed": 0
   },
-  "validation": [
-    {
-      "command": "cargo check --manifest-path src-tauri/Cargo.toml --lib",
-      "status": "pass",
-      "note": "existing warnings only"
-    },
-    {
-      "command": "cargo test --manifest-path src-tauri/Cargo.toml --lib panorama_stitching:: --no-run",
-      "status": "pass",
-      "note": "test binary compiled"
-    },
-    {
-      "command": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check && git diff --check",
-      "status": "pass"
-    }
-  ],
   "remaining": [
     "RAW_EDITOR_FINAL_PANORAMA_SHARPEN_AMOUNT remains a legacy comparison-path knob",
     "acceptance/diagnostic RAW_EDITOR_* switches remain in test-only modules and need a complete inventory",
