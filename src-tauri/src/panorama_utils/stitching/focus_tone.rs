@@ -463,6 +463,7 @@ pub(super) fn harmonize_focus_background_tone_with_owners(
     );
 }
 
+#[cfg(test)]
 pub(super) fn harmonize_focus_background_with_reference(
     image: &mut Rgb32FImage,
     image_mask: &GrayImage,

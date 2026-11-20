@@ -4,19 +4,15 @@
   "method": "strict_clippy_debt_inventory_v2",
   "command": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
   "exit_code": 101,
-  "diagnostic_count": 448,
+  "diagnostic_count": 431,
   "target_diagnostics": {
-    "lib": 216,
+    "lib": 199,
     "lib test": 232
   },
   "top_files": [
     {
       "path": "src/panorama_stitching/stitch_images.rs",
       "diagnostics": 14
-    },
-    {
-      "path": "src/panorama_utils/stitching.rs",
-      "diagnostics": 13
     },
     {
       "path": "src/panorama_utils/stitching/station_seam_apply.rs",
@@ -37,10 +33,6 @@
     {
       "path": "src/panorama_utils/stack_pipeline/quality_gate_runner/source_sampling.rs",
       "diagnostics": 7
-    },
-    {
-      "path": "src/panorama_utils/stitching/focus_alignment.rs",
-      "diagnostics": 6
     },
     {
       "path": "src/panorama_station_closure.rs",
@@ -64,6 +56,10 @@
     },
     {
       "path": "src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
+      "diagnostics": 5
+    },
+    {
+      "path": "src/panorama_utils/stitching/focus_alignment.rs",
       "diagnostics": 5
     },
     {
@@ -91,15 +87,15 @@
       "diagnostics": 4
     },
     {
-      "path": "src/panorama_utils/stitching/focus_tone.rs",
-      "diagnostics": 4
-    },
-    {
       "path": "src/panorama_utils/mosaic/layer_refine.rs",
       "diagnostics": 4
     },
     {
       "path": "src/panorama_utils/stitching/progressive_seam.rs",
+      "diagnostics": 4
+    },
+    {
+      "path": "src/panorama_utils/stitching/focus_tone.rs",
       "diagnostics": 4
     },
     {
@@ -109,8 +105,12 @@
     {
       "path": "src/panorama_stitching/alignment_tests/virtual_tile_solver_flow.rs",
       "diagnostics": 4
+    },
+    {
+      "path": "src/panorama_utils/stack_pipeline/focus_fuser/tests/region_decisions.rs",
+      "diagnostics": 4
     }
   ],
-  "scope_note": "source_raw_direct, source_raw_direct_basin, source_raw_direct_pairs, source_raw_layer_diagnostics, feature_provider, focus_pyramid, focus_color, station_seam, and tile_source are cfg(test)-isolated research/test contracts; remaining files are not reclassified by this snapshot",
-  "source_log": "/private/tmp/raw-editor-eng4-clippy-post-focus.log"
+  "scope_note": "source_raw_direct, source_raw_direct_basin, source_raw_direct_pairs, source_raw_layer_diagnostics, feature_provider, focus_pyramid, focus_color, and the test-only focus_masks/focus_alignment/focus_tone helpers are cfg(test)-isolated research/test contracts; remaining files are not reclassified by this snapshot",
+  "source_log": "/private/tmp/raw-editor-eng4-clippy-final-current.log"
 }

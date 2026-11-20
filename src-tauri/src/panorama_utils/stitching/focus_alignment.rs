@@ -12,6 +12,7 @@ use image::Rgb32FImage;
 use nalgebra::Matrix3;
 use nalgebra::Point2;
 use nalgebra::Point3;
+#[cfg(test)]
 use rayon::prelude::*;
 
 use super::{
@@ -434,6 +435,7 @@ pub(super) fn register_station_frame_native_layer(
 /// layer at that offset moves its pixels by exactly the accepted correction. A
 /// pixel whose bilinear support is not fully covered loses coverage instead of
 /// borrowing an invented neighbour.
+#[cfg(test)]
 pub(super) fn warp_rendered_focus_layer(
     candidate: RenderedFocusLayer,
     displacement: &crate::panorama_utils::mosaic::NativeResidualDisplacement,

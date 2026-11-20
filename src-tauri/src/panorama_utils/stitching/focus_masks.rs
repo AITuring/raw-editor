@@ -8,9 +8,12 @@ use image::Rgb32FImage;
 use rayon::prelude::*;
 
 use super::{
-    FOCUS_BACKGROUND_TONE_FOREGROUND_RADIUS_RATIO, FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT,
-    RenderedFocusLayer, box_blur_focus_map, focus_stack_pixel_is_tone_foreground, median_f32,
+    FOCUS_BACKGROUND_TONE_FOREGROUND_RADIUS_RATIO, RenderedFocusLayer, box_blur_focus_map,
+    focus_stack_pixel_is_tone_foreground,
 };
+
+#[cfg(test)]
+use super::{FOCUS_BACKGROUND_TONE_MAX_ADJUSTMENT, median_f32};
 
 pub(super) fn resize_binary_mask(mask: &GrayImage, width: u32, height: u32) -> GrayImage {
     image::imageops::resize(
@@ -264,6 +267,7 @@ pub(super) fn build_focus_background_foreground_envelope(
     envelope
 }
 
+#[cfg(test)]
 pub(super) fn build_focus_background_reference_mask(
     analysis_image: &Rgb32FImage,
     analysis_mask: &GrayImage,
@@ -295,6 +299,7 @@ pub(super) fn build_focus_background_reference_mask(
     })
 }
 
+#[cfg(test)]
 pub(super) fn update_focus_background_reference(
     reference_image: &mut Rgb32FImage,
     reference_mask: &mut GrayImage,
@@ -388,6 +393,7 @@ pub(super) fn update_focus_background_reference(
     correction
 }
 
+#[cfg(test)]
 pub(super) fn hard_select_focus_pixels(
     base: &mut Rgb32FImage,
     base_mask: &mut GrayImage,
