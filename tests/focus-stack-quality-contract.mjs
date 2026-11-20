@@ -288,6 +288,7 @@ for (const [source, variable, environment] of [
   [stitching, 'tone_diagnostics', 'RAW_EDITOR_FOCUS_TONE_DIAGNOSTICS'],
   [stitching, 'sharpness_trace', 'RAW_EDITOR_STATION_SHARPNESS_TRACE'],
   [qualityGateRunner, 'debug_local_relation', 'RAW_EDITOR_FOCUS_BOUNDARY_DEBUG'],
+  [mosaic, 'debug_group_gains', 'RAW_EDITOR_DEBUG_GROUP_GAINS'],
 ]) {
   assert.match(
     source,
@@ -342,6 +343,11 @@ assert.ok(mismatchPenalty >= 1, 'misregistered sharp candidates need a non-trivi
 // mosaic::detail_preserving_mosaic. mosaic.rs keeps the primitives (and the
 // legacy reductions) for the comparison path.
 const focusFuser = readModule(`${stackPipelineDir}/focus_fuser.rs`);
+assert.match(
+  focusFuser,
+  /#\[cfg\(test\)\]\s*let debug[\s\S]*?RAW_EDITOR_FOCUS_OWNERSHIP_DEBUG[\s\S]*?#\[cfg\(not\(test\)\)\]\s*let debug/,
+  'ownership scan diagnostics must be test-only and unavailable to shipped rendering',
+);
 const sharpnessHalfScale = numberConstant(focusFuser, 'SHARPNESS_HALF_SCALE');
 const sharpnessWindowPx = numberConstant(focusFuser, 'SHARPNESS_SAMPLE_WINDOW_PX');
 const ownershipCellMin = numberConstant(focusFuser, 'OWNERSHIP_CELL_MIN_PX');

@@ -429,7 +429,11 @@ pub(super) fn streaming_seam_harmonization(
             }))
         }
     });
-    if std::env::var_os("RAW_EDITOR_DEBUG_GROUP_GAINS").is_some() {
+    #[cfg(test)]
+    let debug_group_gains = std::env::var_os("RAW_EDITOR_DEBUG_GROUP_GAINS").is_some();
+    #[cfg(not(test))]
+    let debug_group_gains = false;
+    if debug_group_gains {
         let mut values = Vec::new();
         for id in 1u8..=u8::MAX {
             if owner_pixels[id as usize] == 0 {

@@ -4,11 +4,13 @@
   "method": "raw_editor_environment_inventory_v1",
   "production_impact": "read_only_inventory_no_code_change",
   "summary": {
-    "unique_env_names": 240,
-    "source_occurrences": 368,
+    "unique_env_names": 238,
+    "source_occurrences": 366,
     "known_test_only_names": [
+      "RAW_EDITOR_DEBUG_GROUP_GAINS",
       "RAW_EDITOR_DISABLE_SHARED_RAW_NORMALIZATION",
       "RAW_EDITOR_FOCUS_BOUNDARY_DEBUG",
+      "RAW_EDITOR_FOCUS_OWNERSHIP_DEBUG",
       "RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS",
       "RAW_EDITOR_FOCUS_TONE_DIAGNOSTICS",
       "RAW_EDITOR_FOCUS_TRANSLATION_DIAGNOSTICS",
@@ -20,8 +22,10 @@
       "RAW_EDITOR_TEST_SOURCE_RESAMPLE_DIVISOR",
       "RAW_EDITOR_TEST_SOURCE_RESAMPLE_PATH"
     ],
-    "shared_or_production_review_names": 96,
-    "parent_cfg_test_occurrences": 125
+    "shared_or_production_review_names": 44,
+    "parent_cfg_test_occurrences": 125,
+    "enclosing_test_function_occurrences": 198,
+    "nearby_cfg_test_occurrences": 76
   },
   "variables": {
     "RAW_EDITOR_ACCEPTANCE_DIR": {
@@ -34,7 +38,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/raw_processing.rs",
             "module": "acceptance_tests"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -54,7 +60,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/raw_processing.rs",
             "module": "acceptance_tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -74,7 +82,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/raw_processing.rs",
             "module": "acceptance_tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -94,7 +104,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -111,7 +123,9 @@
           "line": 1149,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -131,7 +145,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/export_processing.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -151,7 +167,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/export_processing.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/export_processing/tests/large_image_harnesses.rs",
@@ -161,7 +179,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/export_processing.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/image_processing/geometry_transform_tests.rs",
@@ -171,7 +191,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_processing.rs",
             "module": "geometry_transform_tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/image_processing/geometry_transform_tests.rs",
@@ -181,7 +203,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_processing.rs",
             "module": "geometry_transform_tests"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
@@ -191,7 +215,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
@@ -201,7 +227,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
@@ -211,7 +239,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
@@ -221,7 +251,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
@@ -231,19 +263,22 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/raw_processing.rs",
           "line": 419,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 10,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": false,
@@ -259,7 +294,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/export_processing.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -279,7 +316,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/export_processing.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -299,7 +338,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/export_processing.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -319,7 +360,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/export_processing.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -339,7 +382,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/export_processing.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/export_processing/tests/large_image_harnesses.rs",
@@ -349,7 +394,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/export_processing.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/image_processing/geometry_transform_tests.rs",
@@ -359,7 +406,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_processing.rs",
             "module": "geometry_transform_tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/image_processing/geometry_transform_tests.rs",
@@ -369,7 +418,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_processing.rs",
             "module": "geometry_transform_tests"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
@@ -379,7 +430,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
@@ -389,7 +442,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
@@ -399,7 +454,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
@@ -409,7 +466,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
@@ -419,19 +478,22 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/raw_processing.rs",
           "line": 415,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 10,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": false,
@@ -444,7 +506,9 @@
           "line": 389,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -461,7 +525,9 @@
           "line": 378,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -478,7 +544,9 @@
           "line": 391,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -495,7 +563,9 @@
           "line": 381,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -512,7 +582,9 @@
           "line": 385,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -526,17 +598,19 @@
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_harmonization.rs",
-          "line": 432,
-          "scope": "shared_or_production_source",
+          "line": 433,
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false,
+      "known_test_only": true,
       "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_DETAIL_DEFICIT": {
@@ -544,9 +618,11 @@
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1208,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
@@ -556,12 +632,13 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": false,
@@ -572,14 +649,16 @@
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 449,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -591,19 +670,22 @@
           "line": 167,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 227,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": true,
@@ -619,7 +701,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
             "module": "research_diagnostics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
@@ -636,14 +720,18 @@
           "line": 994,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1132,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -660,7 +748,9 @@
           "line": 319,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -677,14 +767,18 @@
           "line": 804,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1026,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -701,7 +795,9 @@
           "line": 574,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -718,7 +814,9 @@
           "line": 315,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -735,7 +833,9 @@
           "line": 316,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -752,19 +852,24 @@
           "line": 366,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/frame_exposure.rs",
           "line": 376,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -776,7 +881,9 @@
           "line": 56,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -793,7 +900,9 @@
           "line": 321,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -810,21 +919,27 @@
           "line": 266,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 269,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
           "line": 593,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 3,
@@ -841,7 +956,9 @@
           "line": 315,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -858,14 +975,18 @@
           "line": 123,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_tone.rs",
           "line": 69,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -882,7 +1003,9 @@
           "line": 899,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -899,24 +1022,9 @@
           "line": 829,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
-        }
-      ],
-      "count": 1,
-      "scopes": [
-        "shared_or_production_source"
-      ],
-      "known_test_only": false,
-      "parent_cfg_test_occurrences": 0
-    },
-    "RAW_EDITOR_FOCUS_": {
-      "occurrences": [
-        {
-          "path": "src-tauri/src/panorama_stitching/native_fusion_key.rs",
-          "line": 120,
-          "scope": "shared_or_production_source",
-          "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -931,14 +1039,16 @@
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 133,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -950,14 +1060,18 @@
           "line": 60,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
           "line": 95,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -972,21 +1086,25 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4686,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
           "line": 119,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": true,
       "parent_cfg_test_occurrences": 0
@@ -996,14 +1114,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4697,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -1015,28 +1135,36 @@
           "line": 4787,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
           "line": 76,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
           "line": 85,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
           "line": 874,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 4,
@@ -1056,7 +1184,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
             "module": "focus_candidate_capture"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1076,7 +1206,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
             "module": "focus_candidate_capture"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1091,14 +1223,16 @@
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/station_fusion.rs",
           "line": 290,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -1113,7 +1247,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "score_noise_diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/score_noise_diagnostics.rs",
@@ -1123,7 +1259,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "score_noise_diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -1138,21 +1276,25 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4051,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4295,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -1167,7 +1309,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "score_noise_diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1182,9 +1326,11 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4643,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture.rs",
@@ -1194,7 +1340,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
             "module": "source_visual_capture"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/final_world_owner_runner.rs",
@@ -1204,14 +1352,18 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "final_world_owner_runner"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
           "line": 302,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/score_noise_diagnostics.rs",
@@ -1221,12 +1373,13 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "score_noise_diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 5,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": false,
@@ -1242,7 +1395,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "final_world_owner_runner"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1262,7 +1417,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "final_world_owner_runner"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1282,7 +1439,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
             "module": "research_diagnostics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture.rs",
@@ -1292,7 +1451,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
             "module": "source_visual_capture"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -1312,7 +1473,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
             "module": "research_diagnostics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture.rs",
@@ -1322,7 +1485,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
             "module": "source_visual_capture"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -1336,24 +1501,29 @@
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/decisive_cells.rs",
-          "line": 198,
-          "scope": "shared_or_production_source",
+          "line": 199,
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/station_fusion.rs",
           "line": 343,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false,
+      "known_test_only": true,
       "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS": {
@@ -1361,14 +1531,16 @@
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
           "line": 811,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": true,
       "parent_cfg_test_occurrences": 0
@@ -1383,7 +1555,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "score_noise_probes"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
@@ -1400,7 +1574,9 @@
           "line": 312,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/score_noise_diagnostics.rs",
@@ -1410,7 +1586,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "score_noise_diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -1431,7 +1609,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "score_noise_probes"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
@@ -1446,14 +1626,16 @@
         {
           "path": "src-tauri/src/panorama_utils/stitching/native_owner_geometry.rs",
           "line": 46,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -1463,14 +1645,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4056,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -1482,7 +1666,9 @@
           "line": 417,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1497,16 +1683,20 @@
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
           "line": 300,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
           "line": 313,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/score_noise_diagnostics.rs",
@@ -1516,7 +1706,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "score_noise_diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 3,
@@ -1532,14 +1724,16 @@
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
           "line": 308,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -1551,7 +1745,9 @@
           "line": 313,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1571,7 +1767,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
@@ -1581,7 +1779,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
@@ -1591,42 +1791,54 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 591,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 592,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 2,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 409,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 412,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 8,
@@ -1643,7 +1855,9 @@
           "line": 760,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1660,7 +1874,9 @@
           "line": 312,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1675,14 +1891,16 @@
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_tone.rs",
           "line": 339,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": true,
       "parent_cfg_test_occurrences": 0
@@ -1692,14 +1910,16 @@
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_alignment.rs",
           "line": 612,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": true,
       "parent_cfg_test_occurrences": 0
@@ -1709,14 +1929,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2330,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -1726,14 +1948,16 @@
         {
           "path": "src-tauri/src/panorama_utils/mosaic/in_memory_mosaic.rs",
           "line": 116,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": true,
       "parent_cfg_test_occurrences": 0
@@ -1745,19 +1969,24 @@
           "line": 294,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/frame_exposure.rs",
           "line": 297,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -1772,7 +2001,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_processing.rs",
             "module": "geometry_transform_tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1792,7 +2023,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_processing.rs",
             "module": "geometry_transform_tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1809,7 +2042,9 @@
           "line": 492,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1826,7 +2061,9 @@
           "line": 617,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1846,7 +2083,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1866,7 +2105,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1886,7 +2127,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1906,7 +2149,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1926,7 +2171,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
@@ -1936,7 +2183,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -1953,7 +2202,9 @@
           "line": 758,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1970,7 +2221,9 @@
           "line": 1017,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -1987,7 +2240,9 @@
           "line": 145,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2004,7 +2259,9 @@
           "line": 108,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2021,7 +2278,9 @@
           "line": 124,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2038,7 +2297,9 @@
           "line": 364,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2055,7 +2316,9 @@
           "line": 230,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2072,7 +2335,9 @@
           "line": 237,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2089,7 +2354,9 @@
           "line": 211,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2106,7 +2373,9 @@
           "line": 267,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2126,7 +2395,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2146,7 +2417,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2163,14 +2436,18 @@
           "line": 757,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1131,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -2190,7 +2467,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2210,7 +2489,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/tests/tone_harmonization.rs",
@@ -2220,7 +2501,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -2240,7 +2523,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/tests/tone_harmonization.rs",
@@ -2250,7 +2535,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -2270,7 +2557,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2290,7 +2579,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2310,7 +2601,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2330,7 +2623,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2347,7 +2642,9 @@
           "line": 79,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2364,7 +2661,9 @@
           "line": 55,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2381,7 +2680,9 @@
           "line": 16,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2398,7 +2699,9 @@
           "line": 20,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2418,7 +2721,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "native_point_trace"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2435,7 +2740,9 @@
           "line": 74,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/native_point_trace.rs",
@@ -2445,7 +2752,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "native_point_trace"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -2461,21 +2770,25 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3221,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_geometry_repair.rs",
           "line": 363,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -2487,7 +2800,9 @@
           "line": 150,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2504,7 +2819,9 @@
           "line": 177,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2521,7 +2838,9 @@
           "line": 348,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2538,7 +2857,9 @@
           "line": 153,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2555,14 +2876,18 @@
           "line": 265,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 457,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -2579,7 +2904,9 @@
           "line": 157,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2596,7 +2923,9 @@
           "line": 161,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2613,7 +2942,9 @@
           "line": 534,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2630,7 +2961,9 @@
           "line": 159,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2647,14 +2980,18 @@
           "line": 45,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
           "line": 665,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -2671,14 +3008,18 @@
           "line": 48,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
           "line": 669,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -2695,21 +3036,27 @@
           "line": 7,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
           "line": 9,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 572,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 3,
@@ -2726,7 +3073,9 @@
           "line": 722,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2743,7 +3092,9 @@
           "line": 715,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2760,7 +3111,9 @@
           "line": 30,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2780,7 +3133,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_processing.rs",
             "module": "geometry_transform_tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2797,14 +3152,18 @@
           "line": 815,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/source_ownership.rs",
           "line": 838,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
@@ -2814,7 +3173,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
@@ -2824,7 +3185,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 4,
@@ -2842,21 +3205,27 @@
           "line": 932,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 943,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 944,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 3,
@@ -2873,21 +3242,27 @@
           "line": 929,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 937,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 938,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 3,
@@ -2904,14 +3279,18 @@
           "line": 931,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 946,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -2928,7 +3307,9 @@
           "line": 321,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2948,7 +3329,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_loader.rs",
             "module": "color_profile_tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2968,7 +3351,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
             "module": "source_visual_capture"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -2988,7 +3373,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
             "module": "source_visual_capture"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3008,7 +3395,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
             "module": "source_visual_capture"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3028,7 +3417,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3048,7 +3439,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/mask_generation.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3063,14 +3456,16 @@
         {
           "path": "src-tauri/src/raw_processing.rs",
           "line": 423,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -3085,7 +3480,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
@@ -3095,7 +3492,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
@@ -3105,7 +3504,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
@@ -3115,7 +3516,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 4,
@@ -3135,7 +3538,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3155,7 +3560,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "acceptance_metrics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3175,7 +3582,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "acceptance_metrics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3195,7 +3604,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "acceptance_metrics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3215,7 +3626,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "acceptance_metrics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3235,7 +3648,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
@@ -3245,7 +3660,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
@@ -3255,7 +3672,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
@@ -3265,7 +3684,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 4,
@@ -3285,7 +3706,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
@@ -3295,7 +3718,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -3315,7 +3740,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
@@ -3325,7 +3752,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -3340,9 +3769,11 @@
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1098,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
@@ -3352,12 +3783,13 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/mosaic.rs",
             "module": "diagnostics"
-          }
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": false,
@@ -3368,14 +3800,16 @@
         {
           "path": "src-tauri/src/panorama_utils/scan_mosaic/compositor.rs",
           "line": 352,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -3385,28 +3819,34 @@
         {
           "path": "src-tauri/src/panorama_utils/captures.rs",
           "line": 425,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/captures.rs",
           "line": 429,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/captures.rs",
           "line": 430,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 3,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -3418,7 +3858,9 @@
           "line": 423,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3435,7 +3877,9 @@
           "line": 477,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3452,7 +3896,9 @@
           "line": 575,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3469,7 +3915,9 @@
           "line": 1008,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3486,14 +3934,18 @@
           "line": 750,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 759,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -3510,7 +3962,9 @@
           "line": 314,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3527,7 +3981,9 @@
           "line": 317,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3544,19 +4000,24 @@
           "line": 219,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 222,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -3568,7 +4029,9 @@
           "line": 291,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3585,7 +4048,9 @@
           "line": 343,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3602,7 +4067,9 @@
           "line": 1016,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3619,19 +4086,22 @@
           "line": 165,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 217,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": true,
@@ -3644,7 +4114,9 @@
           "line": 992,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3659,14 +4131,16 @@
         {
           "path": "src-tauri/src/panorama_utils/mosaic/soft_report.rs",
           "line": 365,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -3678,14 +4152,18 @@
           "line": 138,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 601,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -3702,7 +4180,9 @@
           "line": 605,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3719,7 +4199,9 @@
           "line": 643,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3736,7 +4218,9 @@
           "line": 670,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3751,14 +4235,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2069,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -3770,7 +4256,9 @@
           "line": 732,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3787,7 +4275,9 @@
           "line": 736,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3804,7 +4294,9 @@
           "line": 735,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3824,7 +4316,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
@@ -3834,7 +4328,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
@@ -3844,21 +4340,27 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_stitching.rs",
             "module": "reference_acceptance"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/entry_point_fixtures.rs",
           "line": 158,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 634,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 5,
@@ -3875,7 +4377,9 @@
           "line": 652,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3892,7 +4396,9 @@
           "line": 651,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -3907,14 +4413,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2051,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -3924,16 +4432,20 @@
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 233,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 235,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -3943,7 +4455,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -3953,12 +4467,13 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 4,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": false,
@@ -3974,7 +4489,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -3984,7 +4501,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -3994,7 +4513,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -4004,7 +4525,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 4,
@@ -4021,26 +4544,31 @@
           "line": 803,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 805,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2015,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 3,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": false,
@@ -4051,14 +4579,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2030,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4070,33 +4600,42 @@
           "line": 122,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/registration.rs",
           "line": 14,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/registration.rs",
           "line": 20,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/registration.rs",
           "line": 284,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 4,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
       "known_test_only": true,
       "parent_cfg_test_occurrences": 0
@@ -4108,19 +4647,22 @@
           "line": 176,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/native_control_points.rs",
           "line": 340,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": false,
@@ -4136,7 +4678,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_stack/output_encoding.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/image_stack/tests.rs",
@@ -4146,7 +4690,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_stack/output_encoding.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/image_stack/tests.rs",
@@ -4156,7 +4702,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_stack/output_encoding.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 3,
@@ -4176,7 +4724,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_stack/output_encoding.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/image_stack/tests.rs",
@@ -4186,7 +4736,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_stack/output_encoding.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/image_stack/tests.rs",
@@ -4196,7 +4748,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/image_stack/output_encoding.rs",
             "module": "tests"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 3,
@@ -4211,14 +4765,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/focus_stack_order.rs",
           "line": 121,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4228,21 +4784,25 @@
         {
           "path": "src-tauri/src/panorama_station_solver.rs",
           "line": 115,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_station_solver.rs",
           "line": 487,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4254,7 +4814,9 @@
           "line": 38,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -4274,7 +4836,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -4289,16 +4853,20 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 1477,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3475,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -4308,12 +4876,13 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 3,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": false,
@@ -4329,7 +4898,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -4339,7 +4910,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -4356,19 +4929,22 @@
           "line": 166,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 204,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": true,
@@ -4379,23 +4955,29 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2689,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2692,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 272,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -4405,7 +4987,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -4415,7 +4999,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -4425,14 +5011,18 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/report_io.rs",
           "line": 20,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 7,
@@ -4453,7 +5043,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stitching.rs",
             "module": "station_seam_diagnostics"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -4468,14 +5060,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 1116,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4485,9 +5079,11 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 1811,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -4497,12 +5093,13 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": false,
@@ -4518,7 +5115,9 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -4533,9 +5132,11 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 1797,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -4545,12 +5146,13 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": false,
@@ -4563,7 +5165,9 @@
           "line": 199,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -4578,9 +5182,11 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2680,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
@@ -4590,12 +5196,13 @@
           "parent_cfg_test": {
             "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
             "module": "properties"
-          }
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
       "known_test_only": false,
@@ -4606,21 +5213,25 @@
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 228,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 230,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4630,38 +5241,25 @@
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 249,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 250,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
-      ],
-      "known_test_only": false,
-      "parent_cfg_test_occurrences": 0
-    },
-    "RAW_EDITOR_STATION_": {
-      "occurrences": [
-        {
-          "path": "src-tauri/src/panorama_stitching/native_fusion_key.rs",
-          "line": 121,
-          "scope": "shared_or_production_source",
-          "path_heuristic_test": false,
-          "parent_cfg_test": null
-        }
-      ],
-      "count": 1,
-      "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4673,7 +5271,9 @@
           "line": 168,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -4690,21 +5290,27 @@
           "line": 3318,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_sampling.rs",
           "line": 110,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_sampling.rs",
           "line": 136,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 3,
@@ -4719,14 +5325,16 @@
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_apply.rs",
           "line": 31,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4736,14 +5344,16 @@
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_apply.rs",
           "line": 42,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4755,7 +5365,9 @@
           "line": 176,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -4770,14 +5382,16 @@
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_entry.rs",
           "line": 497,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": true,
       "parent_cfg_test_occurrences": 0
@@ -4787,14 +5401,16 @@
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_apply.rs",
           "line": 341,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4804,28 +5420,35 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3539,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3554,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 74,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 3,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4835,14 +5458,16 @@
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 952,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4852,14 +5477,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 152,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4869,14 +5496,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 146,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4886,21 +5515,25 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3536,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3550,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4910,14 +5543,16 @@
         {
           "path": "src-tauri/src/panorama_utils/mosaic/owner_overlap_gain.rs",
           "line": 140,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4927,14 +5562,16 @@
         {
           "path": "src-tauri/src/panorama_utils/mosaic.rs",
           "line": 389,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": true,
       "parent_cfg_test_occurrences": 0
@@ -4944,14 +5581,16 @@
         {
           "path": "src-tauri/src/panorama_utils/mosaic.rs",
           "line": 377,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": true,
       "parent_cfg_test_occurrences": 0
@@ -4961,14 +5600,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 243,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -4980,7 +5621,9 @@
           "line": 35,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -4997,7 +5640,9 @@
           "line": 33,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5014,7 +5659,9 @@
           "line": 43,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5031,7 +5678,9 @@
           "line": 321,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5048,7 +5697,9 @@
           "line": 355,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5065,7 +5716,9 @@
           "line": 11,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5080,14 +5733,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_pyramid_match.rs",
           "line": 483,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -5097,14 +5752,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_pyramid_match.rs",
           "line": 488,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -5116,7 +5773,9 @@
           "line": 219,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5133,7 +5792,9 @@
           "line": 107,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5150,7 +5811,9 @@
           "line": 93,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5165,14 +5828,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_planes.rs",
           "line": 462,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -5184,7 +5849,9 @@
           "line": 113,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5201,7 +5868,9 @@
           "line": 196,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5218,7 +5887,9 @@
           "line": 127,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5235,7 +5906,9 @@
           "line": 134,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5252,7 +5925,9 @@
           "line": 142,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5267,14 +5942,16 @@
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_polish.rs",
           "line": 149,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0
@@ -5286,14 +5963,18 @@
           "line": 589,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/test_support.rs",
           "line": 51,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 2,
@@ -5310,7 +5991,9 @@
           "line": 426,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5327,7 +6010,9 @@
           "line": 56,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5344,7 +6029,9 @@
           "line": 89,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5361,7 +6048,9 @@
           "line": 98,
           "scope": "test_harness_module",
           "path_heuristic_test": true,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
         }
       ],
       "count": 1,
@@ -5376,21 +6065,25 @@
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_geometry_repair.rs",
           "line": 364,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         },
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_planes.rs",
           "line": 663,
-          "scope": "shared_or_production_source",
+          "scope": "test_harness_module",
           "path_heuristic_test": false,
-          "parent_cfg_test": null
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
       "known_test_only": false,
       "parent_cfg_test_occurrences": 0

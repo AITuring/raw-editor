@@ -195,7 +195,10 @@ pub(super) fn quality_region_decisive_cells(
         return vec![false; count];
     }
 
+    #[cfg(test)]
     let debug = std::env::var_os("RAW_EDITOR_FOCUS_OWNERSHIP_DEBUG").is_some();
+    #[cfg(not(test))]
+    let debug = false;
     let mut covered_cells = 0usize;
     let mut shortfall_cells = 0usize;
     let mut mismatch_cells = 0usize;

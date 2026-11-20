@@ -50,6 +50,16 @@ def main() -> int:
             "let",
             "debug_local_relation",
         ),
+        "RAW_EDITOR_DEBUG_GROUP_GAINS": (
+            ROOT / "src-tauri/src/panorama_utils/mosaic/streaming_harmonization.rs",
+            "let",
+            "debug_group_gains",
+        ),
+        "RAW_EDITOR_FOCUS_OWNERSHIP_DEBUG": (
+            ROOT / "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/decisive_cells.rs",
+            "let",
+            "debug",
+        ),
     }
     for env_name, (source_path, mode, symbol) in switches.items():
         source = source_path.read_text(encoding="utf-8")

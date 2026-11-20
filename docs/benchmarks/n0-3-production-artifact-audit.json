@@ -52,11 +52,23 @@
       "status": "pass",
       "source_occurrences": 1,
       "binding": "debug_local_relation"
+    },
+    {
+      "name": "RAW_EDITOR_DEBUG_GROUP_GAINS is test-only",
+      "status": "pass",
+      "source_occurrences": 1,
+      "binding": "debug_group_gains"
+    },
+    {
+      "name": "RAW_EDITOR_FOCUS_OWNERSHIP_DEBUG is test-only",
+      "status": "pass",
+      "source_occurrences": 1,
+      "binding": "debug"
     }
   ],
   "summary": {
-    "total": 8,
-    "passed": 8,
+    "total": 10,
+    "passed": 10,
     "failed": 0
   },
   "remaining": [

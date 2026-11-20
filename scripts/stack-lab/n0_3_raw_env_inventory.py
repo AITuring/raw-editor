@@ -69,15 +69,40 @@ def parent_cfg_test_module(path: Path) -> dict[str, str] | None:
     return None
 
 
+def enclosing_test_function(text: str, line: int) -> bool:
+    """Conservative local check for a #[test]/cfg(test) function owner."""
+    lines = text.splitlines()
+    index = min(line - 1, len(lines) - 1)
+    while index >= 0:
+        if re.search(r"\bfn\s+[A-Za-z0-9_]+", lines[index]):
+            prefix = "\n".join(lines[max(0, index - 6) : index])
+            return "#[test]" in prefix or "#[cfg(test)]" in prefix
+        index -= 1
+    return False
+
+
+def nearby_cfg_test(text: str, line: int) -> bool:
+    lines = text.splitlines()
+    index = min(line - 1, len(lines) - 1)
+    window = lines[max(0, index - 12) : index]
+    last_test = max((i for i, value in enumerate(window) if "#[cfg(test)]" in value), default=-1)
+    last_not_test = max((i for i, value in enumerate(window) if "#[cfg(not(test))]" in value), default=-1)
+    return last_test >= 0 and last_test > last_not_test
+
+
 def main() -> int:
     occurrences: dict[str, list[dict[str, object]]] = defaultdict(list)
     for path in sorted(SOURCE_ROOT.rglob("*.rs")):
         text = path.read_text(encoding="utf-8")
         relative = path.relative_to(ROOT).as_posix()
         parent_cfg = parent_cfg_test_module(path)
-        test_only = is_test_harness(path) or parent_cfg is not None
         for match in ENV_RE.finditer(text):
+            if match.group(0).endswith("_"):
+                continue
             line = text.count("\n", 0, match.start()) + 1
+            local_test = enclosing_test_function(text, line)
+            cfg_test = nearby_cfg_test(text, line)
+            test_only = is_test_harness(path) or parent_cfg is not None or local_test or cfg_test
             occurrences[match.group(0)].append(
                 {
                     "path": relative,
@@ -85,6 +110,8 @@ def main() -> int:
                     "scope": "test_harness_module" if test_only else "shared_or_production_source",
                     "path_heuristic_test": is_test_harness(path),
                     "parent_cfg_test": parent_cfg,
+                    "enclosing_test_function": local_test,
+                    "nearby_cfg_test": cfg_test,
                 }
             )
 
@@ -101,6 +128,8 @@ def main() -> int:
         "RAW_EDITOR_FOCUS_TONE_DIAGNOSTICS",
         "RAW_EDITOR_STATION_SHARPNESS_TRACE",
         "RAW_EDITOR_FOCUS_BOUNDARY_DEBUG",
+        "RAW_EDITOR_DEBUG_GROUP_GAINS",
+        "RAW_EDITOR_FOCUS_OWNERSHIP_DEBUG",
     }
     grouped = {
         name: {
@@ -131,6 +160,14 @@ def main() -> int:
             "shared_or_production_review_names": len(review_names),
             "parent_cfg_test_occurrences": sum(
                 int(value["parent_cfg_test_occurrences"]) for value in grouped.values()
+            ),
+            "enclosing_test_function_occurrences": sum(
+                sum(bool(item["enclosing_test_function"]) for item in value["occurrences"])
+                for value in grouped.values()
+            ),
+            "nearby_cfg_test_occurrences": sum(
+                sum(bool(item["nearby_cfg_test"]) for item in value["occurrences"])
+                for value in grouped.values()
             ),
         },
         "variables": grouped,
