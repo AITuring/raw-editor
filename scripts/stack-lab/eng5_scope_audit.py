@@ -21,7 +21,8 @@ def run(*args: str) -> str:
 def main() -> int:
     head = run("rev-parse", "HEAD")
     remote = run("rev-parse", "origin/v1")
-    status = run("status", "--porcelain")
+    status_lines = run("status", "--porcelain").splitlines()
+    status = [line for line in status_lines if "docs/benchmarks/eng5-scope-audit.json" not in line]
     commits = run("log", "--format=%H%x09%s", f"{BASE}..HEAD").splitlines()
     files = run("diff", "--name-only", f"{BASE}..HEAD").splitlines()
     result = {
