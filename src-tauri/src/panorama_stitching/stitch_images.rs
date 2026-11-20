@@ -352,6 +352,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
     loop {
         let result = stitch_images_attempt(
             image_paths.clone(),
+            &image_paths,
             app_handle.clone(),
             alignment_mode,
             blend_mode,
@@ -394,6 +395,10 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
 /// on the first attempt.
 fn stitch_images_attempt<R: Runtime>(
     image_paths: Vec<String>,
+    // The active solve may be a retry with unaligned/oblique frames removed;
+    // keep the original selection for source/digest accounting while the
+    // filtered paths remain the only inputs to geometry and rendering.
+    report_source_paths: &[String],
     app_handle: AppHandle<R>,
     alignment_mode: AlignmentMode,
     blend_mode: BlendMode,
@@ -538,9 +543,9 @@ fn stitch_images_attempt<R: Runtime>(
                 .collect()
         }));
         recorder.update(|report| {
-            report.input.source_count = image_paths.len();
+            report.input.source_count = report_source_paths.len();
             report.input.max_sources = MAX_STITCH_SOURCE_IMAGES;
-            report.input.sources = image_paths
+            report.input.sources = report_source_paths
                 .iter()
                 .enumerate()
                 .map(|(index, path)| stack_report::SourceRecord {
@@ -623,12 +628,19 @@ fn stitch_images_attempt<R: Runtime>(
     // twice.
     if let Some(preflight) = source_preflight.as_ref() {
         let digests = focus_stack_cache_key_inputs_from_preflight(&image_paths, preflight);
+        let report_preflight = if report_source_paths == image_paths.as_slice() {
+            Arc::clone(preflight)
+        } else {
+            Arc::new(SourcePreflight::collect(report_source_paths))
+        };
+        let report_digests =
+            focus_stack_cache_key_inputs_from_preflight(report_source_paths, &report_preflight);
         determinism::set_run_random_seed(determinism::derive_run_seed_from_cache_key(
             &digests.inputs.digest(),
         ));
-        source_sha256_before = digests.sha256_before;
+        source_sha256_before = report_digests.sha256_before;
         if let Some(recorder) = stack_report.as_ref() {
-            let preflight_for_report = Arc::clone(preflight);
+            let preflight_for_report = report_preflight;
             recorder.install_source_preflight_observation(Box::new(move || {
                 let stats = preflight_for_report.stats();
                 stack_report::SourcePreflightReport {

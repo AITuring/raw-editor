@@ -91,6 +91,27 @@ fn luminance(rgb: [f32; 3]) -> f32 {
 }
 
 const LOCAL_FIT_MAX_TILE_CELLS: usize = 40_000_000;
+const LOCAL_FIT_MAX_STRIDE: u32 = 64;
+
+fn local_fit_grid(
+    output_width: u32,
+    output_height: u32,
+    tile_count: usize,
+) -> Option<(u32, usize, usize, usize)> {
+    let mut stride = tone::TONE_GRID_DIVISOR;
+    loop {
+        let width = output_width.div_ceil(stride) as usize;
+        let height = output_height.div_ceil(stride) as usize;
+        let count = width.checked_mul(height)?;
+        if count.checked_mul(tile_count)? <= LOCAL_FIT_MAX_TILE_CELLS {
+            return Some((stride, width, height, count));
+        }
+        if stride >= LOCAL_FIT_MAX_STRIDE {
+            return None;
+        }
+        stride = stride.saturating_mul(2);
+    }
+}
 
 #[cfg(test)]
 fn record_local_fit_budget_exceeded(
@@ -160,15 +181,19 @@ pub(crate) fn fit_local_tone_with_identity_prior(
     {
         return None;
     }
-    let stride = tone::TONE_GRID_DIVISOR;
-    let width = output_width.div_ceil(stride) as usize;
-    let height = output_height.div_ceil(stride) as usize;
-    let count = width.checked_mul(height)?;
-    // A bounded analysis allocation rather than a second full-resolution RGB canvas.
-    if count.checked_mul(tiles.len())? > LOCAL_FIT_MAX_TILE_CELLS {
+    // Keep the same physical 64px tone support while coarsening the analysis
+    // grid for very large station sets. This preserves the bounded allocation
+    // contract without silently disabling spatial tone fitting at native size.
+    let Some((stride, width, height, count)) =
+        local_fit_grid(output_width, output_height, tiles.len())
+    else {
+        let stride = LOCAL_FIT_MAX_STRIDE;
+        let width = output_width.div_ceil(stride) as usize;
+        let height = output_height.div_ceil(stride) as usize;
+        let count = width.checked_mul(height)?;
         record_local_fit_budget_exceeded(width, height, count, tiles.len());
         return None;
-    }
+    };
     let position = |cell: usize| {
         (
             (cell % width) as f64 * f64::from(stride) + f64::from(stride - 1) * 0.5,
@@ -710,6 +735,19 @@ fn three_box_blur<const N: usize>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn large_native_tone_fits_coarsen_the_grid_before_disabling_spatial_correction() {
+        assert_eq!(
+            super::local_fit_grid(24_681, 13_091, 43),
+            Some((32, 772, 410, 316_520))
+        );
+        assert_eq!(
+            super::local_fit_grid(5_912, 3_235, 43),
+            Some((16, 370, 203, 75_110))
+        );
+        assert_eq!(super::local_fit_grid(1, 1, 1), Some((16, 1, 1, 1)));
+    }
+
     #[test]
     fn covered_analysis_cell_edge_is_kept_when_its_centre_has_no_overlap() {
         use image::{GrayImage, Luma, Rgb, Rgb32FImage};
