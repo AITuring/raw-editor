@@ -3516,6 +3516,23 @@ fn stitch_images_attempt<R: Runtime>(
                             )?;
                         }
                     }
+                    #[cfg(test)]
+                    if std::env::var("RAW_EDITOR_TEST_MODE").as_deref()
+                        == Ok("residual_density_diagnostics")
+                    {
+                        if let Some(directory) =
+                            std::env::var_os("RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR")
+                        {
+                            super::output_density::write_residual_density_diagnostics(
+                                &station_density_samples,
+                                &tile_homographies,
+                                &tile_infos.iter().map(|tile| tile.id).collect::<Vec<_>>(),
+                                &residual_warp::run_model_snapshot(),
+                                &density_closure_evidence,
+                                &Path::new(&directory).join("residual-density"),
+                            )?;
+                        }
+                    }
                     if compositor_choice == StackCompositorChoice::LayeredVirtualTile {
                         let mut density = super::output_density::plan_output_density(
                             &tile_infos.iter().map(|tile| tile.id).collect::<Vec<_>>(),

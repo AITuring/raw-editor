@@ -2,6 +2,8 @@
 //! This changes output sampling density only; pair evidence and station-local
 //! registration retain their original coordinates and thresholds.
 
+#[cfg(test)]
+use super::residual_warp::ResidualWarp;
 use crate::panorama_utils::stack_pipeline::report::{ClosureReport, OutputDensityReport};
 use crate::panorama_utils::stitching::FocusStackTileMasks;
 use nalgebra::{Matrix2, Matrix3, Point2, Point3, Vector2};
@@ -202,6 +204,133 @@ pub(super) fn native_density_samples(
     result
 }
 
+#[cfg(test)]
+fn residual_composed_scale(
+    pose: &Matrix3<f64>,
+    residual: &ResidualWarp,
+    tile_id: usize,
+    sample: &DensitySample,
+) -> Option<f64> {
+    let map = |point: Point2<f64>| {
+        let mapped = pose * Point3::new(point.x, point.y, 1.0);
+        if !mapped.z.is_finite() || mapped.z.abs() <= 1e-10 {
+            return None;
+        }
+        let world = Point2::new(mapped.x / mapped.z, mapped.y / mapped.z);
+        let warped = residual.forward_world_for_station(world, tile_id);
+        (warped.x.is_finite() && warped.y.is_finite()).then_some(warped)
+    };
+    let world_per_station = differential(map, sample.point)?;
+    let inverse = sample.source_per_station.try_inverse()?;
+    let jacobian = world_per_station * inverse;
+    let smallest = jacobian.svd(false, false).singular_values.min();
+    (smallest.is_finite() && smallest > 1e-10).then_some(smallest)
+}
+
+/// Export a residual-aware density diagnostic without changing the output
+/// lattice. This is deliberately test-only: the production planner still
+/// bypasses non-identity residual fields until a full coordinate contract is
+/// established. Existing source-boundary/invalid counts are retained and
+/// residual-composition failures are reported separately.
+#[cfg(test)]
+pub(super) fn write_residual_density_diagnostics(
+    samples: &[StationDensitySamples],
+    station_poses: &HashMap<usize, Matrix3<f64>>,
+    station_ids: &[usize],
+    residual: &ResidualWarp,
+    closure: &ClosureReport,
+    directory: &Path,
+) -> Result<(), String> {
+    std::fs::create_dir_all(directory).map_err(|error| error.to_string())?;
+    let mut scales = Vec::new();
+    let mut worst: Option<(f64, usize, usize, Point2<f64>)> = None;
+    let mut residual_invalid_probe_count = 0usize;
+    let mut per_station = Vec::with_capacity(samples.len());
+    for (station_index, evidence) in samples.iter().enumerate() {
+        let tile_id = station_ids.get(station_index).copied();
+        let pose = tile_id.and_then(|id| station_poses.get(&id));
+        let mut station_scales = Vec::new();
+        let mut sample_records = Vec::with_capacity(evidence.samples.len());
+        for sample in &evidence.samples {
+            let scale = pose.zip(tile_id).and_then(|(pose, tile_id)| {
+                residual_composed_scale(pose, residual, tile_id, sample)
+            });
+            if let Some(scale) = scale {
+                station_scales.push(scale);
+                scales.push(scale);
+                if worst.as_ref().is_none_or(|current| scale < current.0) {
+                    worst = Some((scale, station_index, sample.source_id, sample.point));
+                }
+                sample_records.push(serde_json::json!({
+                    "source_id": sample.source_id,
+                    "point": [sample.point.x, sample.point.y],
+                    "scale": scale,
+                }));
+            } else {
+                residual_invalid_probe_count += 1;
+                sample_records.push(serde_json::json!({
+                    "source_id": sample.source_id,
+                    "point": [sample.point.x, sample.point.y],
+                    "scale": null,
+                }));
+            }
+        }
+        station_scales.sort_by(f64::total_cmp);
+        let station_summary = serde_json::json!({
+            "station": station_index,
+            "tile_id": tile_id,
+            "source_count": evidence.source_count,
+            "sample_count": evidence.samples.len(),
+            "measurable_count": station_scales.len(),
+            "residual_invalid_probe_count": evidence.samples.len().saturating_sub(station_scales.len()),
+            "invalid_probe_count": evidence.invalid_probes,
+            "boundary_probe_count": evidence.boundary_probes,
+            "minimum_scale": station_scales.first().copied(),
+            "p01_scale": (!station_scales.is_empty()).then(|| station_scales[(station_scales.len() - 1) / 100]),
+            "median_scale": (!station_scales.is_empty()).then(|| station_scales[station_scales.len() / 2]),
+        });
+        per_station.push(station_summary);
+        std::fs::write(
+            directory.join(format!("station-{station_index:03}.json")),
+            serde_json::to_vec(&serde_json::json!({
+                "station": station_index,
+                "tile_id": tile_id,
+                "samples": sample_records,
+            }))
+            .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    scales.sort_by(f64::total_cmp);
+    let summary = serde_json::json!({
+        "schema": 1,
+        "sampling_contract": "residual_forward_world_composed_with_native_source_jacobian; diagnostic_only",
+        "residual_identity": residual.identity(),
+        "residual_region_count": residual.regions.len(),
+        "station_count": samples.len(),
+        "source_count": samples.iter().map(|e| e.source_count).sum::<usize>(),
+        "sample_count": scales.len(),
+        "minimum_scale": scales.first().copied(),
+        "p01_scale": (!scales.is_empty()).then(|| scales[(scales.len() - 1) / 100]),
+        "median_scale": (!scales.is_empty()).then(|| scales[scales.len() / 2]),
+        "direct_pair_p95_output_px": closure.max_direct_pair_p95_px,
+        "residual_median_output_px": closure.residual_median_px,
+        "max_corner_correction_output_px": closure.max_corner_correction_px,
+        "invalid_probe_count": samples.iter().map(|e| e.invalid_probes).sum::<usize>(),
+        "boundary_probe_count": samples.iter().map(|e| e.boundary_probes).sum::<usize>(),
+        "residual_invalid_probe_count": residual_invalid_probe_count,
+        "worst_station_index": worst.map(|(_, station, _, _)| station),
+        "worst_source_id": worst.map(|(_, _, source, _)| source),
+        "worst_station_point": worst.map(|(_, _, _, point)| [point.x, point.y]),
+        "per_station": per_station,
+    });
+    std::fs::write(
+        directory.join("summary.json"),
+        serde_json::to_vec_pretty(&summary).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())
+}
+
 pub(super) fn plan_output_density(
     station_ids: &[usize],
     poses: &HashMap<usize, Matrix3<f64>>,
@@ -328,6 +457,7 @@ pub(super) fn validate_output_closure(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::panorama_utils::stack_pipeline::residual_warp::{OverlapResidual, WarpObservation};
     fn evidence(source_per_station: Matrix2<f64>) -> StationDensitySamples {
         StationDensitySamples {
             samples: vec![DensitySample {
@@ -413,6 +543,49 @@ mod tests {
         assert!(differential(|p| Some(Point2::new(-p.x, p.y)), Point2::new(5.0, 5.0)).is_none());
         let poses = HashMap::from([(0, Matrix3::zeros())]);
         assert!(plan_output_density(&[0], &poses, &[evidence(Matrix2::identity())], true).is_err());
+    }
+
+    #[test]
+    fn residual_composed_scale_keeps_constant_field_derivative() {
+        let mut residual = ResidualWarp::new();
+        let observations = (0..8)
+            .flat_map(|row| {
+                (0..8).map(move |column| {
+                    WarpObservation::new(
+                        crate::panorama_utils::stack_pipeline::report::WorldPoint {
+                            x: 100.0 + column as f64 * 64.0,
+                            y: 200.0 + row as f64 * 64.0,
+                        },
+                        [4.0, -3.0],
+                        0.1,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        residual
+            .add_observations(
+                OverlapResidual::new(
+                    0,
+                    0,
+                    crate::panorama_utils::stack_pipeline::report::WorldRect {
+                        left: 100.0,
+                        top: 200.0,
+                        width: 448.0,
+                        height: 448.0,
+                    },
+                    10.0,
+                ),
+                &observations,
+            )
+            .unwrap();
+        residual.register_station_alias(99, 0);
+        let sample = DensitySample {
+            source_id: 7,
+            point: Point2::new(324.0, 424.0),
+            source_per_station: Matrix2::identity(),
+        };
+        let scale = residual_composed_scale(&Matrix3::identity(), &residual, 99, &sample).unwrap();
+        assert!((scale - 1.0).abs() < 1e-8);
     }
 
     #[test]
