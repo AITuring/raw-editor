@@ -4,19 +4,15 @@
   "method": "strict_clippy_debt_inventory_v2",
   "command": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
   "exit_code": 101,
-  "diagnostic_count": 421,
+  "diagnostic_count": 407,
   "target_diagnostics": {
-    "lib": 189,
-    "lib test": 232
+    "lib": 182,
+    "lib test": 225
   },
   "top_files": [
     {
       "path": "src/panorama_stitching/stitch_images.rs",
       "diagnostics": 13
-    },
-    {
-      "path": "src/panorama_utils/stitching/station_seam_apply.rs",
-      "diagnostics": 10
     },
     {
       "path": "src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
@@ -109,8 +105,12 @@
     {
       "path": "src/panorama_utils/mosaic/source_ownership.rs",
       "diagnostics": 3
+    },
+    {
+      "path": "src/panorama_utils/stitching/virtual_tiles.rs",
+      "diagnostics": 3
     }
   ],
   "scope_note": "source_raw_direct, source_raw_direct_basin, source_raw_direct_pairs, source_raw_layer_diagnostics, feature_provider, focus_pyramid, focus_color, test-only focus_masks/focus_alignment/focus_tone helpers, and the test-only closure/Jacobian helpers are cfg(test)-isolated research/test contracts; remaining files are not reclassified by this snapshot",
-  "source_log": "/private/tmp/raw-editor-eng4-clippy-current-final.log"
+  "source_log": "/private/tmp/raw-editor-eng4-clippy-after-seam-cleanup.log"
 }

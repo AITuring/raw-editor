@@ -388,10 +388,11 @@ where
         let first_owner = plan.first_owner;
         let second_owner = plan.second_owner;
         let local_relation = plan.local_relation.as_ref();
-        let local_relation_resample_band_px = local_relation
-            .is_some()
-            .then(|| station_local_relation_resample_band_px(first_owner, second_owner))
-            .unwrap_or(0.0);
+        let local_relation_resample_band_px = if local_relation.is_some() {
+            station_local_relation_resample_band_px(first_owner, second_owner)
+        } else {
+            0.0
+        };
         let (cross_min, cross_max) = match plan.orientation {
             SeamOrientation::Vertical => (plan.min_x, plan.max_x),
             SeamOrientation::Horizontal => (plan.min_y, plan.max_y),
@@ -536,9 +537,7 @@ where
                 let corridor_max = (seam.max(current_seam) + cleanup_radius)
                     .ceil()
                     .min(f64::from(cross_max));
-                if !local_second_band
-                    && (f64::from(cross) < corridor_min || f64::from(cross) > corridor_max)
-                {
+                if !local_second_band && (cross < corridor_min || cross > corridor_max) {
                     continue;
                 }
                 let first_side = if first_on_low_side {
@@ -559,7 +558,7 @@ where
                 let sampled = if desired_owner == first_owner {
                     station_seam_sample(
                         first,
-                        &first_pixels,
+                        first_pixels,
                         &first_inverse,
                         projection,
                         residual,
@@ -571,10 +570,10 @@ where
                 } else if let Some(relation) = local_relation {
                     station_seam_pair_sample(
                         first,
-                        &first_pixels,
+                        first_pixels,
                         &first_inverse,
                         second,
-                        &second_pixels,
+                        second_pixels,
                         &second_inverse,
                         Some(relation),
                         projection,
@@ -588,7 +587,7 @@ where
                 } else {
                     station_seam_sample(
                         second,
-                        &second_pixels,
+                        second_pixels,
                         &second_inverse,
                         projection,
                         residual,
