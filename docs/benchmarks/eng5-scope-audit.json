@@ -4,11 +4,35 @@
   "method": "post_baseline_scope_audit_v1",
   "production_impact": "read_only_commit_scope_audit_no_code_change",
   "baseline": "f582825f",
-  "head": "040288d062d5842fccfd9da3f6c9719fb6e533c6",
-  "remote": "040288d062d5842fccfd9da3f6c9719fb6e533c6",
+  "head": "73647a14d2ee8868b930e57ece425f3dfec2d65d",
+  "remote": "73647a14d2ee8868b930e57ece425f3dfec2d65d",
   "worktree_clean": true,
   "remote_matches_head": true,
   "commits": [
+    {
+      "sha": "73647a14d2ee8868b930e57ece425f3dfec2d65d",
+      "subject": "isolate test-only focus helpers"
+    },
+    {
+      "sha": "7579efcc58b886b45b3f8f446fa685ff65a254ef",
+      "subject": "isolate offline focus research providers"
+    },
+    {
+      "sha": "b91b15fdbb5758b440e622d5e1ad986c616bfbcc",
+      "subject": "isolate research modules and audit desktop distribution"
+    },
+    {
+      "sha": "7f747bd7b628ce93a2d571d50fda87f74a45c708",
+      "subject": "record remaining strict clippy debt"
+    },
+    {
+      "sha": "0d197ea2fc02043a5e9c11ca3cb0220172a75d36",
+      "subject": "apply mechanical strict clippy cleanup"
+    },
+    {
+      "sha": "4371fb16d196617c559b5e77ff1f65ca184ea418",
+      "subject": "record synchronized ENG.5 scope audit"
+    },
     {
       "sha": "040288d062d5842fccfd9da3f6c9719fb6e533c6",
       "subject": "make ENG.5 scope audit self consistent"
@@ -44,6 +68,8 @@
   ],
   "changed_files": [
     "docs/benchmarks/eng3-desktop-acceptance-audit.json",
+    "docs/benchmarks/eng4-clippy-debt-audit.json",
+    "docs/benchmarks/eng4-distribution-acceptance-audit.json",
     "docs/benchmarks/eng4-release-audit.json",
     "docs/benchmarks/eng5-scope-audit.json",
     "docs/benchmarks/n0-3-production-artifact-audit.json",
@@ -55,6 +81,8 @@
     "docs/source-layout.md",
     "docs/tasks/engineering.md",
     "scripts/stack-lab/eng3_desktop_acceptance_audit.py",
+    "scripts/stack-lab/eng4_clippy_debt_audit.py",
+    "scripts/stack-lab/eng4_distribution_acceptance_audit.py",
     "scripts/stack-lab/eng4_release_audit.py",
     "scripts/stack-lab/eng5_scope_audit.py",
     "scripts/stack-lab/n0_3_production_artifact_audit.py",
@@ -62,8 +90,21 @@
     "scripts/stack-lab/n0_3_shared_review_matrix.py",
     "scripts/stack-lab/n1_11_layout_decision_matrix.py",
     "scripts/stack-lab/n1_12_migration_ledger.py",
+    "src-tauri/src/panorama_stitching.rs",
+    "src-tauri/src/panorama_stitching/stitch_images.rs",
     "src-tauri/src/panorama_utils/mosaic/streaming_harmonization.rs",
+    "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser.rs",
     "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/decisive_cells.rs",
+    "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+    "src-tauri/src/panorama_utils/stack_pipeline/quality_gate.rs",
+    "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
+    "src-tauri/src/panorama_utils/stack_pipeline/report.rs",
+    "src-tauri/src/panorama_utils/stack_pipeline/tone/harmonize.rs",
+    "src-tauri/src/panorama_utils/stitching.rs",
+    "src-tauri/src/panorama_utils/stitching/focus_alignment.rs",
+    "src-tauri/src/panorama_utils/stitching/focus_color.rs",
+    "src-tauri/src/panorama_utils/stitching/focus_masks.rs",
+    "src-tauri/src/panorama_utils/stitching/focus_tone.rs",
     "tests/focus-stack-quality-contract.mjs"
   ],
   "decision": "scope is reviewed and remotely synchronized; release publication still requires the separate ENG.4 signing/distribution gates",
