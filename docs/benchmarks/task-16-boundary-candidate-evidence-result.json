@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_boundary_candidate_evidence_result_v1",
+  "production_impact": "test_only_candidate_export_no_threshold_or_tiff_change",
+  "dataset": "mayuan-2",
+  "scale": 1.0,
+  "run": {
+    "label": "mayuan-2-s1-task-16-mayuan-2-native-boundary-candidate-export-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-boundary-candidate-export-r1",
+    "analysis": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-boundary-candidate-export-r1/analysis.json",
+    "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-mayuan-2-native-boundary-candidate-export-r1/run/mayuan-2-s1-task-16-mayuan-2-native-boundary-candidate-export-r1-stack-reports/stack-report-120eaf40-938f-4cc6-a8ee-740ee82fc53c.json",
+    "report_sha256": "90ca4de9c9f3f055932b753baecf58870efe1205c47547182047ffcd95659fbd",
+    "candidate_export": "/Users/dp/Desktop/raw-editor/output/acceptance/task-16/mayuan-2-native-boundary-candidate-export-r1/boundary-candidates/boundary-candidates.json"
+  },
+  "status": "rejected",
+  "checks": {
+    "inputs_unchanged": true,
+    "reference_unchanged": true,
+    "binary_unchanged": true,
+    "memory_gate_pass": true,
+    "runner_exit_zero": false,
+    "native_child_exit_zero": false,
+    "runner_summary_present": true,
+    "runner_failures_empty": false,
+    "quality_gate_pass": false,
+    "output_contract": true,
+    "report_source_digests": true
+  },
+  "candidate_export": {
+    "record_count": 50000,
+    "truncated": true,
+    "limit": 50000,
+    "reason_counts": {
+      "boundary_candidate_coverage_and_owner_rejected": 34,
+      "boundary_candidate_low_strength": 46533,
+      "boundary_candidate_owner_rejected": 3433
+    },
+    "coverage_owner_counts": {
+      "(False, False)": 34,
+      "(True, True)": 46533,
+      "(True, False)": 3433
+    },
+    "accepted_count": 0,
+    "selected_count": 0,
+    "strength_count": 46533,
+    "strength_min": 0.00010647957388583979,
+    "strength_median": 0.014524924092242375,
+    "strength_max": 0.06728228018700258,
+    "all_captured_rejections": true
+  },
+  "contract": {
+    "minimum_gradient_strength": 0.15,
+    "quality_min_measurable": 8,
+    "boundary_p95_max_px": 1.5,
+    "boundary_max_px": 3.0
+  },
+  "interpretation": "The captured 50k records contain no accepted candidate; 46,533 fail low strength and 3,433 fail owner stencil. Captured median gradient strength is 0.01452, far below 0.15. The sink is truncated, so this is strong evidence for a low-content boundary but not a complete census of all candidate attempts.",
+  "decision": "Do not relabel low-contrast candidates or lower thresholds. The remaining boundary blocker is content evidence, not a proven pixel repair defect; no further full A/B without a product/content hypothesis."
+}
