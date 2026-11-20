@@ -1,6 +1,6 @@
 # 任务16：马远2 / 睡觉输出密度与闭环诊断
 
-- 更新：2026-11-20；状态：**scale=1 native control 已完成但 native acceptance 仍拒绝；尚未启动新的 Jacobian 实验**。
+- 更新：2026-11-20；状态：**scale=1、boundary、owner fallback 与 residual density 诊断已完成；native acceptance 仍拒绝，生产路径不变**。
 - 范围：马远2 47 张、睡觉 45 张，沿用 `base-2026-11-12`、scale=0.25 的任务5诊断；不改 pose、density 公式、3px 门限、输入 manifest 或历史基线。
 - 依赖：任务5.1、5.2；与任务13/14/15冲突。任务15未触发，因为两套运行均正常结束且峰值约12–13GiB，低于24GiB内存门。
 
@@ -107,3 +107,9 @@ test-only 组成链已完成一次全量 scale=1 诊断：`station pose → Resi
 - 这证明 residual bypass 是安全合同：实际残差场会产生强烈局部非恒等 Jacobian，不能把旧的 pose/source-only density factor 直接复用。完整 native acceptance 仍受 boundary/effective-pixel 等原有 gate 拒绝。
 
 机器摘要：[task-16-residual-aware-density-diagnostic-result.json](../benchmarks/task-16-residual-aware-density-diagnostic-result.json)；原始 summary 和 18 个 station JSON 在该 run directory 的 `diagnostics/residual-density/`。任务16保持未验收，不进入生产 adapter。
+
+## 任务16最终 bounded 决策
+
+owner radius2 只在 test-only 路径把 unresolved `163→0`；生产仍保持 3×3。boundary repair 只把一个具体 seam 的局部误差 `3.000→0.000px`，但可测候选仍不足以让 native criterion 通过；residual-aware density 诊断证明 nonidentity residual 的 composed scale 最低 `0.0172509`，不能复用旧 factor。任务16仍不勾选、不推广生产、不继续 factor 扫描。
+
+最终机器决策：[task-16-final-decision.json](../benchmarks/task-16-final-decision.json)。若继续，只能另写 boundary candidate-measurability 或产品合同；没有新的可证伪假设，不再启动全量 A/B。

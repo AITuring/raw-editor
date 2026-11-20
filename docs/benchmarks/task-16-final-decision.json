@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_final_bounded_decision_v1",
+  "dataset": "mayuan-2",
+  "scope": [
+    "scale1_native_control",
+    "boundary_repair_ab",
+    "owner_stencil5_ab",
+    "residual_aware_density_diagnostic"
+  ],
+  "production_impact": "no_production_change",
+  "accepted_improvements": {
+    "local_scale": "scale1 measurable/pass",
+    "owner_reverse_lookup": "163 unresolved -> 0 with test-only radius2; production remains radius1",
+    "boundary_local_repair": "single seam 3.000px -> 0.000px under strict test-only repair",
+    "density_observability": "residual-aware composed Jacobian exported; bypass safety validated"
+  },
+  "remaining_blockers": {
+    "boundary_stroke_alignment": "3.0px fail at world (699,3621.5) with only 2 measurable candidates; repair makes criterion not_applicable, native contract still rejects",
+    "effective_pixel_count": "insufficient_evidence",
+    "mtf50_normalized": "not_applicable",
+    "density": "production planner bypassed nonidentity_world_residual; residual-aware diagnostic min 0.0172509/p01 0.8607330/median 1.0560082; no factor applied"
+  },
+  "runs": {
+    "control": "task-16-native-scale1-control.json",
+    "boundary_owner": "task-16-native-boundary-repair-owner-export-ab.json",
+    "owner_stencil5": "task-16-native-owner-stencil5-ab.json",
+    "residual_density": "task-16-residual-aware-density-diagnostic-result.json"
+  },
+  "decision": "task16 remains unaccepted and production unchanged. Owner radius2 is locally effective but remains test-only; boundary repair is diagnostic only; density bypass is retained. Stop factor scans and variable stacking.",
+  "next_step": "If continuing, write a separate boundary candidate-measurability contract or product decision; do not run another full image A/B without a new falsifiable hypothesis."
+}
