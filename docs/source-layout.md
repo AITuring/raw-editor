@@ -126,26 +126,27 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 | `sidecar.rs`         |  233 |        | Image sidecar documents on disk.                 |
 | `tests.rs`           |  132 |   ✓    | 单元测试（原内联 `mod tests`）                   |
 
-#### `export_processing.rs`（facade 872 行，16 个子模块）
+#### `export_processing.rs`（facade 872 行，17 个子模块）
 
-| 子模块                            | 行数 | 仅测试 | 说明                                                                |
-| --------------------------------- | ---: | :----: | ------------------------------------------------------------------- |
-| `batch_export.rs`                 |  648 |        | The batch export loop and the headless export entry.                |
-| `batch_geometry.rs`               |  201 |        | Batch geometry correction: result types, lens data and adjustments. |
-| `batch_geometry_preview.rs`       |  205 |        | Batch geometry review previews.                                     |
-| `content_orientation.rs`          |  156 |        | Content orientation analysis for batch geometry review.             |
-| `encode_bytes.rs`                 |  294 |        | In-memory export encoders.                                          |
-| `export_render.rs`                |  477 |        | Rendering one export source.                                        |
-| `file_output.rs`                  |  142 |        | Writing encoded exports to disk.                                    |
-| `masks_and_lut.rs`                |  241 |        | Mask and LUT exports that accompany an exported image.              |
-| `settings.rs`                     |  147 |        | Export settings and their defaults.                                 |
-| `streaming_encoders.rs`           |  380 |        | Row-streaming export encoders.                                      |
-| `tasks.rs`                        |  184 |        | Export task registration, cancellation and progress events.         |
-| `tests.rs（另见下方同名 facade）` |  122 |   ✓    | 单元测试（原内联 `mod tests`）                                      |
-| `tiff_streaming.rs`               |  366 |        | Row-streaming TIFF and BigTIFF encoders.                            |
-| `tiff_writers.rs`                 |  374 |        | Whole-image TIFF and BigTIFF writers with metadata.                 |
-| `watermark.rs`                    |  323 |        | Watermarks: library import, preparation and compositing.            |
-| `webp_output.rs`                  |  503 |        | Bounded-memory WebP output.                                         |
+| 子模块                            | 行数 | 仅测试 | 说明                                                                      |
+| --------------------------------- | ---: | :----: | ------------------------------------------------------------------------- |
+| `batch_export.rs`                 |  648 |        | The batch export loop and the headless export entry.                      |
+| `batch_geometry.rs`               |  201 |        | Batch geometry correction: result types, lens data and adjustments.       |
+| `batch_geometry_preview.rs`       |  205 |        | Batch geometry review previews.                                           |
+| `content_orientation.rs`          |  156 |        | Content orientation analysis for batch geometry review.                   |
+| `encode_bytes.rs`                 |  294 |        | In-memory export encoders.                                                |
+| `export_render.rs`                |  477 |        | Rendering one export source.                                              |
+| `file_output.rs`                  |  142 |        | Writing encoded exports to disk.                                          |
+| `masks_and_lut.rs`                |  241 |        | Mask and LUT exports that accompany an exported image.                    |
+| `settings.rs`                     |  147 |        | Export settings and their defaults.                                       |
+| `streaming_encoders.rs`           |  380 |        | Row-streaming export encoders.                                            |
+| `tasks.rs`                        |  184 |        | Export task registration, cancellation and progress events.               |
+| `tests.rs（另见下方同名 facade）` |  122 |   ✓    | 单元测试（原内联 `mod tests`）                                            |
+| `tiff_streaming.rs`               |  366 |        | Row-streaming TIFF and BigTIFF encoders.                                  |
+| `tiff_writers.rs`                 |  393 |        | Whole-image TIFF and BigTIFF writers with metadata.                       |
+| `tiff_writers_tests.rs`           |  173 |        | Inspect the real IFD and pixels for both production TIFF container kinds. |
+| `watermark.rs`                    |  323 |        | Watermarks: library import, preparation and compositing.                  |
+| `webp_output.rs`                  |  503 |        | Bounded-memory WebP output.                                               |
 
 #### `export_processing/tests.rs`（facade 122 行，仅测试，7 个子模块）
 
@@ -223,17 +224,19 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 | `scopes.rs`                   |  458 |        | Histogram and waveform scopes.                                |
 | `sidecar.rs`                  |  113 |        | Sidecar metadata and the edited-state check.                  |
 
-#### `image_stack.rs`（facade 373 行，7 个子模块）
+#### `image_stack.rs`（facade 447 行，9 个子模块）
 
-| 子模块                 | 行数 | 仅测试 | 说明                                                            |
-| ---------------------- | ---: | :----: | --------------------------------------------------------------- |
-| `output_encoding.rs`   |  278 |        | Encoding the canonical image-stack result.                      |
-| `output_format.rs`     |  144 |        | Image-stack output formats and the fidelity notices they imply. |
-| `output_validation.rs` |  198 |        | Read-back validation of written image-stack files.              |
-| `output_writer.rs`     |  236 |        | Publishing image-stack outputs.                                 |
-| `preview_files.rs`     |  183 |        | UI preview files for a finished image stack.                    |
-| `test_output.rs`       |   87 |   ✓    | Test-only image-stack output helpers.                           |
-| `tests.rs`             |  875 |   ✓    | 单元测试（原内联 `mod tests`）                                  |
+| 子模块                       | 行数 | 仅测试 | 说明                                                            |
+| ---------------------------- | ---: | :----: | --------------------------------------------------------------- |
+| `output_encoding.rs`         |  349 |        | Encoding the canonical image-stack result.                      |
+| `output_encoding_tests.rs`   |   82 |   ✓    | 单元测试（原内联 `mod output_encoding_tests`）                  |
+| `output_format.rs`           |  144 |        | Image-stack output formats and the fidelity notices they imply. |
+| `output_validation.rs`       |  264 |        | Read-back validation of written image-stack files.              |
+| `output_validation_tests.rs` |  159 |   ✓    | 单元测试（原内联 `mod output_validation_tests`）                |
+| `output_writer.rs`           |  238 |        | Publishing image-stack outputs.                                 |
+| `preview_files.rs`           |  183 |        | UI preview files for a finished image stack.                    |
+| `test_output.rs`             |  152 |   ✓    | Test-only image-stack output helpers.                           |
+| `tests.rs`                   |  886 |   ✓    | 单元测试（原内联 `mod tests`）                                  |
 
 #### `lens_blur.rs`（facade 83 行，3 个子模块）
 
@@ -288,89 +291,106 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 | `scratch_bounds.rs`        |   85 |   ✓    | Scratch-memory bounds for 60 MP masks.               |
 | `tiled_parity.rs`          |  497 |   ✓    | Tiled mask generation against full-frame generation. |
 
-#### `panorama_stitching.rs`（facade 936 行，43 个子模块）
+#### `panorama_acceptance_metrics.rs`（facade 816 行，仅测试，1 个子模块）
 
-| 子模块                                       |  行数 | 仅测试 | 说明                                                                    |
-| -------------------------------------------- | ----: | :----: | ----------------------------------------------------------------------- |
-| `acceptance_tests.rs（另见下方同名 facade）` |    14 |   ✓    | 单元测试（原内联 `mod acceptance_tests`）                               |
-| `alignment_cache.rs`                         |   236 |   ✓    | Test-only alignment cache writer.                                       |
-| `alignment_tests.rs（另见下方同名 facade）`  |   167 |   ✓    | 单元测试（原内联 `mod alignment_tests`）                                |
-| `capture_sequence_bridges.rs`                |   696 |        | Capture-sequence and overview-gap bridges in the focus match graph.     |
-| `determinism_test_access.rs`                 |   116 |   ✓    | 测试访问入口（原内联 `mod determinism_test_access`）                    |
-| `flat_artwork.rs`                            |   428 |        | Flat-artwork render order, tree-pose refinement and the blur filter.    |
-| `focus_auto_order.rs`                        |   516 |        | Automatic focus-stack ordering.                                         |
-| `focus_capture_geometry.rs`                  |   660 |        | Capture geometry checks and compositor order for focus stacks.          |
-| `focus_capture_spine.rs`                     |   410 |        | Focus capture stations and the spine of the focus match graph.          |
-| `focus_component_recovery.rs`                |   555 |        | Recovery of disconnected focus match components.                        |
-| `focus_global_observations.rs`               |   548 |        | Pose parametrisation and observations of the global focus solve.        |
-| `focus_global_solver.rs`                     |   454 |        | Global focus-stack homography optimisation.                             |
-| `focus_layer_warp.rs`                        |   522 |        | Focus layer warps, band constraints and foreground edge alignment.      |
-| `focus_stack_order.rs`                       |   393 |        | The focus-stack stitching order and its report.                         |
-| `grouping_test_access.rs`                    |   136 |   ✓    | 测试访问入口（原内联 `mod grouping_test_access`）                       |
-| `horizontal_edge_bands.rs`                   |   631 |        | Horizontal edge lines and the focus warp bands derived from them.       |
-| `options.rs`                                 |    69 |        | Stitching modes and the outcome of a stitch run.                        |
-| `overlap_quality.rs`                         |   560 |        | Overlap quality and spatial support of a pair transform.                |
-| `pair_matching.rs`                           |   590 |        | Pairwise image matching.                                                |
-| `patch_refine.rs`                            |   759 |        | Patch-level match refinement and dense point sampling.                  |
-| `run_control.rs`                             |   277 |        | Run-scoped resource guards, progress events and focus-stack cache keys. |
-| `source_prep.rs`                             |   585 |        | Input preflight and source preparation.                                 |
-| `source_raw_direct.rs`                       |   664 |        | Direct photometric refinement for Source_RAW layer pairs.               |
-| `source_raw_direct_basin.rs`                 |   466 |        | Basin selection of the direct Source_RAW refinement.                    |
-| `source_raw_direct_pairs.rs`                 |   416 |        | Direct Source_RAW pair observations and their consensus.                |
-| `source_raw_layer_diagnostics.rs`            |   782 |        | Source_RAW layer-pair diagnostics.                                      |
-| `station_relation_test_access.rs`            |   424 |   ✓    | 测试访问入口（原内联 `mod station_relation_test_access`）               |
-| `stitch_images.rs`                           | 3,926 |        | The stitching pipeline body, `stitch_images_with_options`.              |
-| `stitching_order.rs`                         |   342 |        | Panorama stitching order.                                               |
-| `transform_math.rs`                          |   577 |        | Transform estimation and robust-fit primitives.                         |
-| `transform_selection.rs`                     |   507 |        | Model selection for panorama and focus-stack pair transforms.           |
-| `vertical_edge_bands.rs`                     |   626 |        | Vertical edge lines and the focus warp bands derived from them.         |
-| `virtual_tile_direct_match.rs`               |   691 |        | Bounded direct probes between Virtual_Tile stations.                    |
-| `virtual_tile_geometry_repair.rs`            |   489 |        | Rendering-prior repair and joint geometry refinement of Virtual_Tiles.  |
-| `virtual_tile_global_search.rs`              |   491 |        | Prior-free and source-match proposals for Virtual_Tile relations.       |
-| `virtual_tile_guided_match.rs`               |   604 |        | Descriptor-guided Virtual_Tile station matching.                        |
-| `virtual_tile_hypothesis.rs`                 |   419 |        | Selection among Virtual_Tile relation hypotheses.                       |
-| `virtual_tile_planes.rs`                     |   656 |        | Virtual_Tile match planes and pyramids.                                 |
-| `virtual_tile_polish.rs`                     |   613 |        | Finest-octave polish of a Virtual_Tile relation.                        |
-| `virtual_tile_pyramid_match.rs`              |   489 |        | Coarse-to-fine Virtual_Tile station matching.                           |
-| `virtual_tile_relations.rs`                  |   460 |        | Virtual_Tile relation measurement and candidate records.                |
-| `virtual_tile_residual.rs`                   |   647 |        | Measured residual models of a Virtual_Tile station relation.            |
-| `virtual_tile_structure.rs`                  |   311 |        | Structural scores and coverage geometry of Virtual_Tile overlaps.       |
+| 子模块                     | 行数 | 仅测试 | 说明                                                                         |
+| -------------------------- | ---: | :----: | ---------------------------------------------------------------------------- |
+| `registration_fallback.rs` |  424 |   ✓    | Test-only partial-output/full-reference registration. Reference pixels never |
+
+#### `panorama_stitching.rs`（facade 974 行，53 个子模块）
+
+| 子模块                                       |  行数 | 仅测试 | 说明                                                                            |
+| -------------------------------------------- | ----: | :----: | ------------------------------------------------------------------------------- |
+| `acceptance_tests.rs（另见下方同名 facade）` |    14 |   ✓    | 单元测试（原内联 `mod acceptance_tests`）                                       |
+| `alignment_cache.rs`                         |   236 |   ✓    | Test-only alignment cache writer.                                               |
+| `alignment_tests.rs（另见下方同名 facade）`  |   168 |   ✓    | 单元测试（原内联 `mod alignment_tests`）                                        |
+| `capture_gauge.rs`                           |   256 |        | The canvas gauge of a focus stack that combines several captures.               |
+| `capture_sequence_bridges.rs`                |   696 |        | Capture-sequence and overview-gap bridges in the focus match graph.             |
+| `determinism_test_access.rs`                 |   116 |   ✓    | 测试访问入口（原内联 `mod determinism_test_access`）                            |
+| `flat_artwork.rs`                            |   428 |        | Flat-artwork render order, tree-pose refinement and the blur filter.            |
+| `focus_auto_order.rs`                        |   516 |        | Automatic focus-stack ordering.                                                 |
+| `focus_capture_geometry.rs`                  |   660 |        | Capture geometry checks and compositor order for focus stacks.                  |
+| `focus_capture_spine.rs`                     |   410 |        | Focus capture stations and the spine of the focus match graph.                  |
+| `focus_component_recovery.rs`                |   555 |        | Recovery of disconnected focus match components.                                |
+| `focus_global_observations.rs`               |   548 |        | Pose parametrisation and observations of the global focus solve.                |
+| `focus_global_solver.rs`                     |   454 |        | Global focus-stack homography optimisation.                                     |
+| `focus_layer_warp.rs`                        |   522 |        | Focus layer warps, band constraints and foreground edge alignment.              |
+| `focus_stack_order.rs`                       |   393 |        | The focus-stack stitching order and its report.                                 |
+| `grouping_test_access.rs`                    |   136 |   ✓    | 测试访问入口（原内联 `mod grouping_test_access`）                               |
+| `horizontal_edge_bands.rs`                   |   631 |        | Horizontal edge lines and the focus warp bands derived from them.               |
+| `native_fusion_cache.rs`                     |   831 |        | Byte-bounded, run-local reuse of complete station fusion results.               |
+| `native_fusion_key.rs`                       |   411 |        | Identity of a run-local native station fusion, including its source evidence.   |
+| `options.rs`                                 |    69 |        | Stitching modes and the outcome of a stitch run.                                |
+| `output_density.rs`                          |   616 |        | Choose the output lattice before composition from the actual native source map. |
+| `overlap_quality.rs`                         |   634 |        | Overlap quality and spatial support of a pair transform.                        |
+| `pair_matching.rs`                           |   590 |        | Pairwise image matching.                                                        |
+| `patch_refine.rs`                            |   759 |        | Patch-level match refinement and dense point sampling.                          |
+| `pose_guided_pairs.rs`                       |   323 |        | Pairs the solved poses say overlap but the candidate search never compared.     |
+| `run_control.rs`                             |   305 |        | Run-scoped resource guards, progress events and focus-stack cache keys.         |
+| `source_preflight.rs`                        |   271 |        | Run-scoped Source_RAW preflight.                                                |
+| `source_prep.rs`                             |   695 |        | Input preflight and source preparation.                                         |
+| `source_raw_direct.rs`                       |   664 |        | Direct photometric refinement for Source_RAW layer pairs.                       |
+| `source_raw_direct_basin.rs`                 |   466 |        | Basin selection of the direct Source_RAW refinement.                            |
+| `source_raw_direct_pairs.rs`                 |   414 |        | Direct Source_RAW pair observations and their consensus.                        |
+| `source_raw_layer_diagnostics.rs`            |   782 |        | Source_RAW layer-pair diagnostics.                                              |
+| `source_render_cache.rs`                     |   388 |        | Byte-bounded source reuse with a separate, run-local lossless disk budget.      |
+| `station_relation_test_access.rs`            |   426 |   ✓    | 测试访问入口（原内联 `mod station_relation_test_access`）                       |
+| `stitch_images.rs`                           | 5,047 |        | The stitching pipeline body, `stitch_images_with_options`.                      |
+| `stitching_order.rs`                         |   342 |        | Panorama stitching order.                                                       |
+| `tile_payload.rs`                            |   180 |        | Build the original-source payload only for consumers that sample owners.        |
+| `tile_payload_tests.rs`                      |   538 |   ✓    | 单元测试（原内联 `mod tile_payload_tests`）                                     |
+| `transform_math.rs`                          |   577 |        | Transform estimation and robust-fit primitives.                                 |
+| `transform_selection.rs`                     |   507 |        | Model selection for panorama and focus-stack pair transforms.                   |
+| `vertical_edge_bands.rs`                     |   626 |        | Vertical edge lines and the focus warp bands derived from them.                 |
+| `virtual_tile_direct_match.rs`               |   692 |        | Bounded direct probes between Virtual_Tile stations.                            |
+| `virtual_tile_geometry_repair.rs`            |   569 |        | Rendering-prior repair and joint geometry refinement of Virtual_Tiles.          |
+| `virtual_tile_global_search.rs`              |   492 |        | Prior-free and source-match proposals for Virtual_Tile relations.               |
+| `virtual_tile_guided_match.rs`               |   605 |        | Descriptor-guided Virtual_Tile station matching.                                |
+| `virtual_tile_hypothesis.rs`                 |   427 |        | Selection among Virtual_Tile relation hypotheses.                               |
+| `virtual_tile_planes.rs`                     |   689 |        | Virtual_Tile match planes and pyramids.                                         |
+| `virtual_tile_polish.rs`                     |   613 |        | Finest-octave polish of a Virtual_Tile relation.                                |
+| `virtual_tile_pyramid_match.rs`              |   687 |        | Coarse-to-fine Virtual_Tile station matching.                                   |
+| `virtual_tile_relations.rs`                  |   476 |        | Virtual_Tile relation measurement and candidate records.                        |
+| `virtual_tile_residual.rs`                   |   647 |        | Measured residual models of a Virtual_Tile station relation.                    |
+| `virtual_tile_scale_contract.rs`             |   347 |        | Bounded native magnification evidence. Only Virtual_Tile callers may attach     |
+| `virtual_tile_structure.rs`                  |   311 |        | Structural scores and coverage geometry of Virtual_Tile overlaps.               |
 
 #### `panorama_stitching/acceptance_tests.rs`（facade 14 行，仅测试，6 个子模块）
 
 | 子模块                    | 行数 | 仅测试 | 说明                                                                                       |
 | ------------------------- | ---: | :----: | ------------------------------------------------------------------------------------------ |
 | `entry_point_fixtures.rs` |  181 |   ✓    | Whole entry-point runs on small fixtures: an undecodable source, the synthetic 200-image   |
-| `focus_stack_fixture.rs`  |  701 |   ✓    | The real focus-stack fixture harness run by tests/focus-stack-regression.mjs, its layered  |
+| `focus_stack_fixture.rs`  |  976 |   ✓    | The real focus-stack fixture harness run by tests/focus-stack-regression.mjs, its layered  |
 | `native_capture.rs`       |  112 |   ✓    | Diagnostic captures that production code calls in test builds (quality_gate_runner and     |
 | `ordered_panorama.rs`     |  742 |   ✓    | Ordered panorama fixture diagnostics: pairwise matching and the full render of an external |
-| `pair_diagnostics.rs`     |  707 |   ✓    | Pair diagnostics on real inputs: saved Virtual_Tile planes, focus pairs from               |
-| `saved_native_replays.rs` |  623 |   ✓    | Replays of saved native diagnostics named by environment variables: contour views, tone    |
+| `pair_diagnostics.rs`     |  708 |   ✓    | Pair diagnostics on real inputs: saved Virtual_Tile planes, focus pairs from               |
+| `saved_native_replays.rs` |  625 |   ✓    | Replays of saved native diagnostics named by environment variables: contour views, tone    |
 
-#### `panorama_stitching/alignment_tests.rs`（facade 167 行，仅测试，14 个子模块）
+#### `panorama_stitching/alignment_tests.rs`（facade 168 行，仅测试，15 个子模块）
 
 | 子模块                           | 行数 | 仅测试 | 说明                                                                                         |
 | -------------------------------- | ---: | :----: | -------------------------------------------------------------------------------------------- |
 | `capture_grouping.rs`            |  480 |   ✓    | Capture_Station grouping: the four pieces of link evidence, sequence and motion boundaries,  |
-| `closure_optimizer.rs`           |  404 |   ✓    | Station closure: projective tree closure and its seed, relation sample points, the robust    |
+| `closure_optimizer.rs`           |  600 |   ✓    | Station closure: projective tree closure and its seed, relation sample points, the robust    |
 | `edge_bands.rs`                  |  174 |   ✓    | Long horizontal and vertical edge lines behind the focus warp bands: consensus across        |
 | `focus_scan_order.rs`            |  433 |   ✓    | Focus-stack scan geometry and stitching order: geometry guards, shifted-structure and        |
 | `group_pose_solver.rs`           |  366 |   ✓    | Capture-group pose solving: disconnected station graphs, coarse consensus and its conflicts, |
-| `match_pairs.rs`                 |  205 |   ✓    | Pair matching contracts: candidate pairs for large and medium stacks, natural filename       |
-| `relation_acceptance.rs`         |  268 |   ✓    | Station_Relation acceptance: the literal gate boundaries and one identifier per failed       |
+| `match_pairs.rs`                 |  217 |   ✓    | Pair matching contracts: candidate pairs for large and medium stacks, natural filename       |
+| `relation_acceptance.rs`         |  274 |   ✓    | Station_Relation acceptance: the literal gate boundaries and one identifier per failed       |
 | `render_ordering.rs`             |  271 |   ✓    | Render and stitching order: the flat-artwork overlap walk, compositor order over the station |
-| `source_preparation.rs`          |  158 |   ✓    | Source preparation and run budgets: RAW display gain and exposure normalisation,             |
+| `source_preparation.rs`          |  190 |   ✓    | Source preparation and run budgets: RAW display gain and exposure normalisation,             |
 | `transform_models.rs`            |  404 |   ✓    | Transform estimation and model selection: native and robust affine fits, panorama and        |
 | `virtual_tile_matching.rs`       |  779 |   ✓    | Virtual_Tile station matching: descriptor-guided and direct grids, polished and              |
-| `virtual_tile_measurements.rs`   |  235 |   ✓    | Virtual_Tile coverage and measurements: covered features, exposure compensation and gradient |
+| `virtual_tile_measurements.rs`   |  259 |   ✓    | Virtual_Tile coverage and measurements: covered features, exposure compensation and gradient |
 | `virtual_tile_residual_model.rs` |  180 |   ✓    | Measured residual models of Virtual_Tile relations: translation first, bounded affine        |
-| `virtual_tile_solver_flow.rs`    |  276 |   ✓    | The Virtual_Tile station solver end to end: key-direction relations in either content        |
+| `virtual_tile_solver_flow.rs`    |  326 |   ✓    | The Virtual_Tile station solver end to end: key-direction relations in either content        |
+| `virtual_tile_source_seeds.rs`   |  192 |   ✓    |                                                                                              |
 
 #### `panorama_structural_oracle.rs`（facade 166 行，仅测试，4 个子模块）
 
 | 子模块                     | 行数 | 仅测试 | 说明                                                                                       |
 | -------------------------- | ---: | :----: | ------------------------------------------------------------------------------------------ |
-| `direction_solver.rs`      |  407 |   ✓    | One solve direction: mutual descriptor matches, geometric-hash similarity proposals, model |
+| `direction_solver.rs`      |  406 |   ✓    | One solve direction: mutual descriptor matches, geometric-hash similarity proposals, model |
 | `edge_chains.rs`           |  179 |   ✓    | Coverage-safe edge planes and the edge chains traced through them.                         |
 | `structural_primitives.rs` |  323 |   ✓    | Structural primitives (line endpoints, line intersections and high-curvature points) and   |
 | `tests.rs`                 |  249 |   ✓    | Independent synthetic tests of the structural oracle: auditable primitives, uncovered      |
@@ -386,34 +406,54 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 | `tests.rs`         |  487 |   ✓    | 单元测试（原内联 `mod tests`）                              |
 | `world_cells.rs`   |  178 |   ✓    | Final-world cells composed from station candidates.         |
 
-#### `panorama_utils/mosaic.rs`（facade 277 行，15 个子模块）
+#### `panorama_utils/mosaic.rs`（facade 549 行，32 个子模块）
 
-| 子模块                            | 行数 | 仅测试 | 说明                                                                       |
-| --------------------------------- | ---: | :----: | -------------------------------------------------------------------------- |
-| `focus_measure.rs`                |  342 |        | Focus measures shared by the mosaic and the Focus_Fuser.                   |
-| `in_memory_mosaic.rs`             |  466 |        | In-memory detail-preserving focus mosaic.                                  |
-| `intra_station_test_access.rs`    |  232 |   ✓    | 测试访问入口（原内联 `mod intra_station_test_access`）                     |
-| `layer_refine.rs`                 |  234 |        | Analysis-scale residual refinement of one source layer.                    |
-| `layer_tone.rs`                   |  313 |        | Per-layer tone fields.                                                     |
-| `native_control_points.rs`        |  553 |        | Native control-point measurement of the Intra_Station_Registrar.           |
-| `native_refine.rs`                |  624 |        | Native-resolution residual refinement passes (需求 2.3–2.9).               |
-| `sampling.rs`                     |  161 |        | Layer sampling primitives shared by both focus mosaic compositors.         |
-| `source_ownership.rs`             |  545 |        | Source ownership decisions.                                                |
-| `station_registration.rs`         |  151 |        | Intra_Station_Registrar entry for the default station path (需求 2.2–2.9). |
-| `streaming_harmonization.rs`      |  551 |        | Overlap-based exposure harmonization of the streaming focus mosaic.        |
-| `streaming_illumination.rs`       |  495 |        | Low-frequency illumination correction of a materialised mosaic.            |
-| `streaming_mosaic.rs`             |  458 |        | Streaming (tiled) detail-preserving focus mosaic.                          |
-| `streaming_store.rs`              |  593 |        | Tiled on-disk canvas of the streaming focus mosaic and its tile writes.    |
-| `tests.rs（另见下方同名 facade）` |   27 |   ✓    | 单元测试（原内联 `mod tests`）                                             |
+| 子模块                             |  行数 | 仅测试 | 说明                                                                           |
+| ---------------------------------- | ----: | :----: | ------------------------------------------------------------------------------ |
+| `artwork_tone.rs`                  |   395 |        | Local, overlap-supported photometry for flat artwork. No affine extrapolation. |
+| `cell_neighbourhood.rs`            |   116 |        | What the canvas reaches around a cell of a detail grid, on like material,      |
+| `dense_align.rs`                   |   638 |        | Dense local alignment of a donor view onto the composed canvas.                |
+| `detail_repair.rs`                 |   996 |        | Detail repair of a composed focus scan.                                        |
+| `focus_band.rs`                    |   158 |        | The detail band a focus scan compares frames in.                               |
+| `focus_measure.rs`                 |   342 |        | Focus measures shared by the mosaic and the Focus_Fuser.                       |
+| `frame_exposure.rs`                |   433 |        | Exposure of every frame of a focus scan, solved jointly before composing.      |
+| `frame_survey.rs`                  |   116 |        | The survey of every frame a focus scan takes before composing.                 |
+| `in_memory_mosaic.rs`              |   501 |        | In-memory detail-preserving focus mosaic.                                      |
+| `intra_station_test_access.rs`     |   232 |   ✓    | 测试访问入口（原内联 `mod intra_station_test_access`）                         |
+| `layer_refine.rs`                  |   234 |        | Analysis-scale residual refinement of one source layer.                        |
+| `layer_tone.rs`                    |   355 |        | Per-layer tone fields.                                                         |
+| `legacy_quality.rs`                |   786 |        | Observation-only native evidence for the source-scan compositor.               |
+| `legacy_reference.rs`              |   175 |        | Radiometric provenance for direct legacy source references. These fields       |
+| `native_control_points.rs`         |   893 |        | Native control-point measurement of the Intra_Station_Registrar.               |
+| `native_control_points_tests.rs`   |   187 |   ✓    | Diagnostic accounting must distinguish unmeasured reverse matches from a       |
+| `native_prefilter_oracle_tests.rs` |   417 |        | Frozen scalar v20 sampling oracle. Keep the duplicate mapping and repeated     |
+| `native_prefilter_tests.rs`        |   251 |   ✓    | Native coarse prefilter geometry, support and measured correspondence.         |
+| `native_refine.rs`                 |   628 |        | Native-resolution residual refinement passes (需求 2.3–2.9).                   |
+| `output_focus.rs`                  |   238 |        | Output-resolution focus evidence for focus-scan ownership.                     |
+| `owner_overlap_gain.rs`            |   586 |        | Spatially bounded residual exposure correction from independent overlap.       |
+| `sampling.rs`                      |   194 |        | Layer sampling primitives shared by both focus mosaic compositors.             |
+| `soft_frames.rs`                   |   467 |        | Mostly soft frames of a focus scan.                                            |
+| `soft_report.rs`                   |   392 |        | Soft regions of a finished focus scan, reported to the user.                   |
+| `source_ownership.rs`              |   848 |        | Source ownership decisions.                                                    |
+| `station_registration.rs`          |   160 |        | Intra_Station_Registrar entry for the default station path (需求 2.2–2.9).     |
+| `streaming_harmonization.rs`       |   555 |        | Overlap-based exposure harmonization of the streaming focus mosaic.            |
+| `streaming_illumination.rs`        |   659 |        | Low-frequency illumination correction of a materialised mosaic.                |
+| `streaming_mosaic.rs`              | 1,389 |        | Streaming (tiled) detail-preserving focus mosaic.                              |
+| `streaming_store.rs`               |   808 |        | Tiled on-disk canvas of the streaming focus mosaic and its tile writes.        |
+| `tests.rs（另见下方同名 facade）`  |    30 |   ✓    | 单元测试（原内联 `mod tests`）                                                 |
+| `transition_gate.rs`               |   251 |        | The low-pass gate of a focus-scan transition seam.                             |
 
-#### `panorama_utils/mosaic/tests.rs`（facade 27 行，仅测试，4 个子模块）
+#### `panorama_utils/mosaic/tests.rs`（facade 30 行，仅测试，7 个子模块）
 
 | 子模块                  | 行数 | 仅测试 | 说明                                                                          |
 | ----------------------- | ---: | :----: | ----------------------------------------------------------------------------- |
-| `focus_ownership.rs`    |  574 |   ✓    | Source ownership tests: sharpness and sensor noise, disagreement, group       |
-| `native_refinement.rs`  |  337 |   ✓    | Native-resolution sampling, control point and intra-station refinement tests. |
-| `streaming_tiles.rs`    |  160 |   ✓    | Streaming tile store, coverage bounds and materialisation tests.              |
-| `tone_harmonization.rs` |  366 |   ✓    | Low-frequency exposure harmonization, source-owner correction and consensus   |
+| `focus_ownership.rs`    |  832 |   ✓    | Source ownership tests: sharpness and sensor noise, disagreement, group       |
+| `native_refinement.rs`  |  359 |   ✓    | Native-resolution sampling, control point and intra-station refinement tests. |
+| `output_focus.rs`       |  154 |   ✓    | Output-resolution focus evidence for focus-scan ownership.                    |
+| `repair_and_report.rs`  |  248 |   ✓    | Detail repair of a composed focus scan, its dense alignment and the           |
+| `source_prefilter.rs`   |   94 |   ✓    | Exact-density source prefilter used before a layer is warped and minified.    |
+| `streaming_tiles.rs`    |  194 |   ✓    | Streaming tile store, coverage bounds and materialisation tests.              |
+| `tone_harmonization.rs` |  429 |   ✓    | Low-frequency exposure harmonization, source-owner correction and consensus   |
 
 #### `panorama_utils/processing.rs`（facade 98 行，3 个子模块）
 
@@ -439,22 +479,22 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 
 | 子模块     | 行数 | 仅测试 | 说明                           |
 | ---------- | ---: | :----: | ------------------------------ |
-| `tests.rs` |  724 |   ✓    | 单元测试（原内联 `mod tests`） |
+| `tests.rs` |  751 |   ✓    | 单元测试（原内联 `mod tests`） |
 
-#### `panorama_utils/stack_pipeline/degradation.rs`（facade 865 行，1 个子模块）
+#### `panorama_utils/stack_pipeline/degradation.rs`（facade 896 行，1 个子模块）
 
 | 子模块     | 行数 | 仅测试 | 说明                           |
 | ---------- | ---: | :----: | ------------------------------ |
 | `tests.rs` |  510 |   ✓    | 单元测试（原内联 `mod tests`） |
 
-#### `panorama_utils/stack_pipeline/focus_fuser.rs`（facade 197 行，7 个子模块）
+#### `panorama_utils/stack_pipeline/focus_fuser.rs`（facade 198 行，7 个子模块）
 
 | 子模块                            | 行数 | 仅测试 | 说明                                                                        |
 | --------------------------------- | ---: | :----: | --------------------------------------------------------------------------- |
 | `cell_metrics.rs`                 |  315 |        | Ownership-cell metrics and grid geometry (需求 3.1, 3.2, 3.3, 3.9).         |
-| `confidence.rs`                   |  244 |        | Sharpness_Confidence and low sharpness regions (需求 3.8, 3.9).             |
+| `confidence.rs`                   |  252 |        | Sharpness_Confidence and low sharpness regions (需求 3.8, 3.9).             |
 | `content_regions.rs`              |  319 |   ✓    | Test-only content-region ownership diagnostics.                             |
-| `decisive_cells.rs`               |  415 |        | Decisive-cell rules of the station fusion.                                  |
+| `decisive_cells.rs`               |  418 |        | Decisive-cell rules of the station fusion.                                  |
 | `ownership_solver.rs`             |  863 |        | Candidate order and the multi-label ownership solver (需求 3.4, 3.5, 3.10). |
 | `station_fusion.rs`               |  504 |        | The station fusion driver (需求 3.4, 3.5, 3.6, 3.8, 3.9, 3.10).             |
 | `tests.rs（另见下方同名 facade）` |    6 |   ✓    | 单元测试（原内联 `mod tests`）                                              |
@@ -468,32 +508,32 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 | `sharpness_cells.rs`   |  174 |   ✓    | Sharpness_Score and the ownership cell metrics (需求 3.1, 3.2, 3.3, 3.9). |
 | `station_ownership.rs` |  346 |   ✓    | `StationFusion`, the per-station fold the focus renderer drives.          |
 
-#### `panorama_utils/stack_pipeline/intra_station.rs`（facade 917 行，1 个子模块）
+#### `panorama_utils/stack_pipeline/intra_station.rs`（facade 922 行，1 个子模块）
 
 | 子模块     | 行数 | 仅测试 | 说明                           |
 | ---------- | ---: | :----: | ------------------------------ |
-| `tests.rs` |  389 |   ✓    | 单元测试（原内联 `mod tests`） |
+| `tests.rs` |  624 |   ✓    | 单元测试（原内联 `mod tests`） |
 
-#### `panorama_utils/stack_pipeline/joint_warp.rs`（facade 739 行，2 个子模块）
+#### `panorama_utils/stack_pipeline/joint_warp.rs`（facade 801 行，2 个子模块）
 
 | 子模块             | 行数 | 仅测试 | 说明                                                        |
 | ------------------ | ---: | :----: | ----------------------------------------------------------- |
-| `decomposition.rs` |  483 |        | Projective/local decomposition of the joint station fields. |
-| `tests.rs`         |  474 |   ✓    | 单元测试（原内联 `mod tests`）                              |
+| `decomposition.rs` |  500 |        | Projective/local decomposition of the joint station fields. |
+| `tests.rs`         |  610 |   ✓    | 单元测试（原内联 `mod tests`）                              |
 
 #### `panorama_utils/stack_pipeline/properties.rs`（facade 598 行，仅测试，22 个子模块）
 
 | 子模块                          | 行数 | 仅测试 | 说明                                                                           |
 | ------------------------------- | ---: | :----: | ------------------------------------------------------------------------------ |
 | `acceptance_inputs.rs`          |  400 |   ✓    | Acceptance harness inputs: directories, report selection and source snapshots. |
-| `acceptance_verdict.rs`         |  532 |   ✓    | Acceptance_Harness verdict (Property 94).                                      |
+| `acceptance_verdict.rs`         |  533 |   ✓    | Acceptance_Harness verdict (Property 94).                                      |
 | `capture_topology.rs`           |  690 |   ✓    | Capture_Topology_Model and Station_Relation properties (25-29).                |
 | `closure.rs`                    |  768 |   ✓    | Closure_Optimizer properties (35-40, 77).                                      |
 | `graph_cut.rs`                  |  329 |   ✓    | Property 12: the multi-label ownership graph cut.                              |
 | `grouping_invariance.rs`        |  509 |   ✓    | Property 2: station membership and the station level topology are invariant    |
-| `intra_station_registration.rs` |  757 |   ✓    | Intra_Station_Registrar properties (6, 7, 8).                                  |
+| `intra_station_registration.rs` |  750 |   ✓    | Intra_Station_Registrar properties (6, 7, 8).                                  |
 | `ownership_cells.rs`            |  607 |   ✓    | Focus_Fuser ownership cell properties (9, 10, 11).                             |
-| `quality_gate_checks.rs`        |  870 |   ✓    | Quality_Gate properties (61-74).                                               |
+| `quality_gate_checks.rs`        |  881 |   ✓    | Quality_Gate properties (61-74).                                               |
 | `reproducibility.rs`            |  674 |   ✓    | Property 90: the reachable determinism-critical subset of a run is byte for    |
 | `run_outcome.rs`                |  823 |   ✓    | Run outcome and resource properties.                                           |
 | `single_frame.rs`               |  813 |   ✓    | Single-frame station properties (16, 75).                                      |
@@ -508,55 +548,63 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 | `tile_structure.rs`             |  609 |   ✓    | Virtual_Tile structure properties (13, 18, 23).                                |
 | `warp_tone.rs`                  |  726 |   ✓    | Residual_Warp and Tone_Harmonizer properties (41-52).                          |
 
-#### `panorama_utils/stack_pipeline/quality_gate.rs`（facade 113 行，5 个子模块）
+#### `panorama_utils/stack_pipeline/quality_gate.rs`（facade 114 行，5 个子模块）
 
 | 子模块                   | 行数 | 仅测试 | 说明                                                                  |
 | ------------------------ | ---: | :----: | --------------------------------------------------------------------- |
 | `boundary_edge_tests.rs` |  125 |   ✓    | 单元测试（原内联 `mod boundary_edge_tests`）                          |
-| `boundary_strokes.rs`    |  462 |        | Boundary stroke alignment across Owner_Region boundaries (task 15.6). |
+| `boundary_strokes.rs`    |  588 |        | Boundary stroke alignment across Owner_Region boundaries (task 15.6). |
 | `gradient_tests.rs`      |   32 |   ✓    | 单元测试（原内联 `mod gradient_tests`）                               |
 | `pixel_metrics.rs`       |  664 |        | Pure Quality_Gate pixel measurements on one ROI (tasks 15.3 to 15.5). |
-| `roi_geometry.rs`        |  502 |        | Deterministic Quality_Gate ROI geometry (tasks 15.1 and 15.2).        |
+| `roi_geometry.rs`        |  537 |        | Deterministic Quality_Gate ROI geometry (tasks 15.1 and 15.2).        |
 
-#### `panorama_utils/stack_pipeline/quality_gate_runner.rs`（facade 427 行，9 个子模块）
+#### `panorama_utils/stack_pipeline/quality_gate_runner.rs`（facade 731 行，16 个子模块）
 
-| 子模块                            | 行数 | 仅测试 | 说明                                                                   |
-| --------------------------------- | ---: | :----: | ---------------------------------------------------------------------- |
-| `boundary_pairs.rs`               |  660 |        | Boundary stroke pairing and large-boundary measurement.                |
-| `boundary_repair.rs`              |  879 |        | Repair of failed boundary samples.                                     |
-| `coverage.rs`                     |  343 |        | Sparse ROI selection and confidence / effective-pixel coverage.        |
-| `criteria.rs`                     |  527 |        | Quality_Gate criteria and verdict rules.                               |
-| `research_diagnostics.rs`         |  285 |   ✓    | Test-only gradient-source and effective-coverage research diagnostics. |
-| `run_gate.rs`                     |  631 |        | The Quality_Gate run over the final output.                            |
-| `source_sampling.rs`              |  508 |        | Source_RAW reference sampling for Quality_Gate ROIs.                   |
-| `tests.rs（另见下方同名 facade）` |    8 |   ✓    | 单元测试（原内联 `mod tests`）                                         |
-| `tone_owner_oracle.rs`            |  349 |   ✓    | Test-only evidence helpers of the tone owner-fidelity oracle.          |
+| 子模块                                  |  行数 | 仅测试 | 说明                                                                           |
+| --------------------------------------- | ----: | :----: | ------------------------------------------------------------------------------ |
+| `boundary_pairs.rs`                     | 1,105 |        | Boundary stroke pairing and large-boundary measurement.                        |
+| `boundary_repair.rs`                    |   882 |        | Repair of failed boundary samples.                                             |
+| `coverage.rs`                           |   413 |        | Sparse ROI selection and confidence / effective-pixel coverage.                |
+| `criteria.rs`                           |   599 |        | Quality_Gate criteria and verdict rules.                                       |
+| `criterion_rois.rs`                     |   333 |        | Independent, bounded searches for the content required by sparse metrics.      |
+| `focus_candidate_capture.rs`            |   191 |   ✓    | Explicit, bounded test-only all-source focus comparison. Never selects owners. |
+| `native_coverage.rs`                    |   260 |        | Exact effective coverage in the physical Source_RAW domain.                    |
+| `research_diagnostics.rs`               |   285 |   ✓    | Test-only gradient-source and effective-coverage research diagnostics.         |
+| `run_gate.rs`                           |   924 |        | The Quality_Gate run over the final output.                                    |
+| `source_sampling.rs`                    |   801 |        | Source_RAW reference sampling for Quality_Gate ROIs.                           |
+| `source_visual_capture.rs`              |   558 |   ✓    | Opt-in, test-only evidence from existing QG ROIs. Never receives a loader.     |
+| `source_visual_capture_tests.rs`        |   440 |        | 单元测试（原内联 `mod source_visual_capture_tests`）                           |
+| `source_visual_point_evidence.rs`       |   320 |        | Bounded, test-only observations of the final RAW owner plane received by QG.   |
+| `source_visual_point_evidence_tests.rs` |   399 |        | 单元测试（原内联 `mod source_visual_point_evidence_tests`）                    |
+| `tests.rs（另见下方同名 facade）`       |   166 |   ✓    | 单元测试（原内联 `mod tests`）                                                 |
+| `tone_owner_oracle.rs`                  |   349 |   ✓    | Test-only evidence helpers of the tone owner-fidelity oracle.                  |
 
-#### `panorama_utils/stack_pipeline/quality_gate_runner/tests.rs`（facade 8 行，仅测试，5 个子模块）
+#### `panorama_utils/stack_pipeline/quality_gate_runner/tests.rs`（facade 166 行，仅测试，6 个子模块）
 
 | 子模块                   | 行数 | 仅测试 | 说明                                                                         |
 | ------------------------ | ---: | :----: | ---------------------------------------------------------------------------- |
-| `boundary_alignment.rs`  |  249 |   ✓    | Boundary stroke alignment across accepted cross-station seams: the synthetic |
-| `coverage_evidence.rs`   |   98 |   ✓    | Confidence and texture evidence over covered pixels, and the sparse ROI      |
-| `gate_outcomes.rs`       |  344 |   ✓    | Criterion boundaries and whole-gate outcomes: owner shortfall quantisation,  |
-| `reference_sampling.rs`  |  305 |   ✓    | Source_RAW reference ROIs: provenance, the world-to-source mapping and the   |
+| `boundary_alignment.rs`  |  387 |   ✓    | Boundary stroke alignment across accepted cross-station seams: the synthetic |
+| `coverage_evidence.rs`   |  140 |   ✓    | Confidence and texture evidence over covered pixels, and the sparse ROI      |
+| `criterion_rois.rs`      |  190 |   ✓    |                                                                              |
+| `gate_outcomes.rs`       |  419 |   ✓    | Criterion boundaries and whole-gate outcomes: owner shortfall quantisation,  |
+| `reference_sampling.rs`  |  545 |   ✓    | Source_RAW reference ROIs: provenance, the world-to-source mapping and the   |
 | `tone_owner_fidelity.rs` |  150 |   ✓    | The tone owner fidelity oracle: owner distribution feasibility, the joint    |
 
-#### `panorama_utils/stack_pipeline/residual_warp.rs`（facade 446 行，2 个子模块）
+#### `panorama_utils/stack_pipeline/residual_warp.rs`（facade 549 行，2 个子模块）
 
 | 子模块           | 行数 | 仅测试 | 说明                                              |
 | ---------------- | ---: | :----: | ------------------------------------------------- |
-| `tests.rs`       |  156 |   ✓    | 单元测试（原内联 `mod tests`）                    |
+| `tests.rs`       |  227 |   ✓    | 单元测试（原内联 `mod tests`）                    |
 | `warp_region.rs` |  712 |        | One overlap's bounded residual field: WarpRegion. |
 
-#### `panorama_utils/stack_pipeline/test_support.rs`（facade 78 行，仅测试，5 个子模块）
+#### `panorama_utils/stack_pipeline/test_support.rs`（facade 79 行，仅测试，5 个子模块）
 
 | 子模块               | 行数 | 仅测试 | 说明                                                                 |
 | -------------------- | ---: | :----: | -------------------------------------------------------------------- |
 | `artwork.rs`         |  139 |   ✓    | The synthetic artwork plane every scan generator crops from.         |
-| `capture_station.rs` |  501 |   ✓    | Fixtures inside one Capture_Station.                                 |
+| `capture_station.rs` |  541 |   ✓    | Fixtures inside one Capture_Station.                                 |
 | `scan_grid.rs`       |  797 |   ✓    | Synthetic serpentine scans and focus brackets over an artwork plane. |
-| `stack_report.rs`    |  315 |   ✓    | Stack_Report generators.                                             |
+| `stack_report.rs`    |  316 |   ✓    | Stack_Report generators.                                             |
 | `virtual_tiles.rs`   |  426 |   ✓    | Coverage_Mask shapes and Virtual_Tile generators.                    |
 
 #### `panorama_utils/stack_pipeline/tone.rs`（facade 309 行，8 个子模块）
@@ -584,29 +632,34 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 | `test_access.rs` |   30 |   ✓    | 测试访问入口（原内联 `mod test_access`）                                    |
 | `tests.rs`       |  914 |   ✓    | 单元测试（原内联 `mod tests`）                                              |
 
-#### `panorama_utils/stitching.rs`（facade 574 行，34 个子模块）
+#### `panorama_utils/stitching.rs`（facade 585 行，39 个子模块）
 
 | 子模块                                          |  行数 | 仅测试 | 说明                                                                       |
 | ----------------------------------------------- | ----: | :----: | -------------------------------------------------------------------------- |
 | `canvas_fill.rs`                                |   441 |        | Canvas cropping and invalid-margin filling.                                |
-| `canvas_maps.rs`                                |   345 |        | Canvas ownership, coverage and confidence maps shared by every compositor. |
+| `canvas_maps.rs`                                |   379 |        | Canvas ownership, coverage and confidence maps shared by every compositor. |
 | `exposure.rs`                                   |   431 |        | Overlap exposure compensation for progressive and focus compositing.       |
-| `filters.rs`                                    |   511 |        | Resampling and filtering primitives.                                       |
+| `filters.rs`                                    |   603 |        | Resampling and filtering primitives.                                       |
 | `final_world_owner_runner.rs`                   | 1,067 |   ✓    | Test-only final-world owner oracle runner.                                 |
-| `focus_alignment.rs`                            |   909 |        | Full-resolution focus-layer alignment.                                     |
+| `focus_alignment.rs`                            |   914 |        | Full-resolution focus-layer alignment.                                     |
 | `focus_analysis.rs`                             |   429 |        | Analysis-scale focus layers and cell measurements.                         |
 | `focus_color.rs`                                |   639 |        | Focus-stack colour correction between layers.                              |
 | `focus_decision.rs`                             |   304 |        | Focus score maps and per-pixel focus decisions.                            |
 | `focus_foreground.rs`                           |   533 |        | Foreground ownership for focus stacks.                                     |
 | `focus_fusion_test_access.rs`                   |    15 |   ✓    | 测试访问入口（原内联 `mod focus_fusion_test_access`）                      |
-| `focus_layers.rs`                               |   496 |        | Rendered focus layers and Source_RAW sampling for focus stacks.            |
+| `focus_layers.rs`                               |   600 |        | Rendered focus layers and Source_RAW sampling for focus stacks.            |
 | `focus_masks.rs`                                |   492 |        | Binary masks for focus foreground, background references and placement.    |
 | `focus_seam_blend.rs`                           |   489 |        | Focus seam-band blending.                                                  |
-| `focus_stack_entry.rs`                          |   415 |        | Focus-stack stitcher entry points and tile render records.                 |
-| `focus_stack_stitcher.rs`                       |   972 |        | The global focus-stack compositor body.                                    |
-| `focus_tone.rs`                                 |   717 |        | Background tone harmonisation for focus stacks.                            |
+| `focus_stack_backing.rs`                        |   107 |        | Lossless plane backing with the complete sampling/owner metadata retained. |
+| `focus_stack_entry.rs`                          |   651 |        | Focus-stack stitcher entry points and tile render records.                 |
+| `focus_stack_stitcher.rs`                       |   989 |        | The global focus-stack compositor body.                                    |
+| `focus_tone.rs`                                 |   721 |        | Background tone harmonisation for focus stacks.                            |
 | `interpolation_tests.rs（另见下方同名 facade）` |    27 |   ✓    | 单元测试（原内联 `mod interpolation_tests`）                               |
-| `layered_compositor.rs`                         |   444 |        | Layered Virtual_Tile compositor entry points and finishing switches.       |
+| `layered_compositor.rs`                         |   451 |        | Layered Virtual_Tile compositor entry points and finishing switches.       |
+| `native_owner_geometry.rs`                      |   174 |        | Shared geometric owner selection for native RGB sampling and RAW evidence. |
+| `native_owner_geometry_tests.rs`                |   462 |   ✓    | 单元测试（原内联 `mod native_owner_geometry_tests`）                       |
+| `native_point_trace.rs`                         |   575 |   ✓    | Bounded, opt-in observations of the existing native compositor writes.     |
+| `native_point_trace_tests.rs`                   |   341 |   ✓    | 单元测试（原内联 `mod native_point_trace_tests`）                          |
 | `panorama_seam_band.rs`                         |   337 |        | Seam-band blending for the progressive panorama stitcher.                  |
 | `progressive_seam.rs`                           |   680 |        | Progressive optimal-seam panorama stitcher.                                |
 | `sampling.rs`                                   |   161 |        | Homography warping and high-quality source sampling.                       |
@@ -620,7 +673,7 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 | `station_seam_sampling.rs`                      |   539 |        | Final-world sampling for station seams.                                    |
 | `station_stroke_match.rs`                       |   491 |   ✓    | Test-only closed-stroke correspondence between station pairs.              |
 | `test_tone_capture.rs`                          |   144 |   ✓    | Test-only capture of tone tiles, contour probes and seam grids.            |
-| `tile_ownership_stitcher.rs`                    | 1,363 |        | The tile-ownership compositor body shared by every Virtual_Tile path.      |
+| `tile_ownership_stitcher.rs`                    | 1,515 |        | The tile-ownership compositor body shared by every Virtual_Tile path.      |
 | `virtual_tiles.rs`                              |   350 |        | Virtual_Tile records and their station geometry.                           |
 
 #### `panorama_utils/stitching/interpolation_tests.rs`（facade 27 行，仅测试，4 个子模块）
@@ -628,20 +681,20 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 | 子模块                 | 行数 | 仅测试 | 说明                                                                       |
 | ---------------------- | ---: | :----: | -------------------------------------------------------------------------- |
 | `focus_fusion.rs`      |  496 |   ✓    | Focus score, decision, alignment, selection, colour and tone tests for the |
-| `geometry_sampling.rs` |  396 |   ✓    | Virtual_Tile geometry, source sampling, focus-layer rendering and          |
+| `geometry_sampling.rs` |  398 |   ✓    | Virtual_Tile geometry, source sampling, focus-layer rendering and          |
 | `panorama_blending.rs` |  230 |   ✓    | Overlap exposure, seam-band and pyramid blending tests for the progressive |
 | `station_seams.rs`     |  351 |   ✓    | Station stroke matching and station seam planning tests.                   |
 
-#### `panorama_virtual_tile_tests.rs`（facade 310 行，仅测试，12 个子模块）
+#### `panorama_virtual_tile_tests.rs`（facade 311 行，仅测试，12 个子模块）
 
 | 子模块                       | 行数 | 仅测试 | 说明                                                                                           |
 | ---------------------------- | ---: | :----: | ---------------------------------------------------------------------------------------------- |
 | `coverage_measurements.rs`   |  428 |   ✓    | Coverage-aware measurements: requirement 6.8 on covered pixels, directly and through the       |
 | `fine_polish.rs`             |  358 |   ✓    | The fine polish stage: NCC and best window offsets, low-texture templates, projective polish   |
-| `global_search.rs`           |  455 |   ✓    | Prior-free global search: similarity proposals against an independent brute-force oracle,      |
-| `hypothesis_selection.rs`    |  358 |   ✓    | Multi-hypothesis Station_Relation selection: a compliant model when the projective one fails   |
+| `global_search.rs`           |  485 |   ✓    | Prior-free global search: similarity proposals against an independent brute-force oracle,      |
+| `hypothesis_selection.rs`    |  720 |   ✓    | Multi-hypothesis Station_Relation selection: a compliant model when the projective one fails   |
 | `match_pyramid.rs`           |  392 |   ✓    | Match planes and the pyramid: pyramid factors, block-mean match planes without uncovered       |
-| `prior_repair_planning.rs`   |  639 |   ✓    | Rendering-prior repair planning and the authoritative relation pairs it starts from: seed      |
+| `prior_repair_planning.rs`   |  746 |   ✓    | Rendering-prior repair planning and the authoritative relation pairs it starts from: seed      |
 | `raw_correlation.rs`         |  137 |   ✓    | Source_RAW correlation proposals: large translations, repeated-texture peaks, uncovered        |
 | `raw_direct_refinement.rs`   |  486 |   ✓    | Source_RAW direct photometric refinement: reciprocal multi-peak pairing, a brute-force oracle, |
 | `raw_independent_support.rs` |  217 |   ✓    | Source_RAW independent support: per-pair spatial proposals with match provenance, proposal     |
@@ -669,7 +722,7 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 
 ### 前端：文件与同名目录下的 parts
 
-#### `src/App.tsx`（983 行，1 个 part）
+#### `src/App.tsx`（1,062 行，1 个 part）
 
 | part            | 行数 | 导出                     |
 | --------------- | ---: | ------------------------ |
@@ -794,7 +847,7 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 | `sections.ts`    |  278 | `AdjustmentGroup`, `ADJUSTMENT_GROUPS`, `COPYABLE_ADJUSTMENT_KEYS`, `ADJUSTMENT_SECTIONS`, `CAMERA_RAW_ADJUSTMENT_SECTIONS`                                                                                                               |
 | `types.ts`       |  260 | `CopyPasteSettings`, `ColorCalibration`, `ParametricCurveSettings`, `ParametricCurve`, `Adjustments`, `AiPatch`, `ColorGradingProps`, `Coord`, `Curves`, `HueSatLum`, `MaskAdjustments`, `MaskContainer`, `Sections`, `SectionVisibility` |
 
-#### `src/styles.css`（27 行，按顺序 `@import` 13 个文件）
+#### `src/styles.css`（29 行，按顺序 `@import` 14 个文件）
 
 | 文件                                     | 行数 |
 | ---------------------------------------- | ---: |
@@ -807,24 +860,30 @@ TypeScript 读 `Name.tsx` 加 `Name/` 下的 parts，CSS 把相对 `@import` 就
 | `src/styles/app/editor-chrome.css`       |  797 |
 | `src/styles/app/controls.css`            |  402 |
 | `src/styles/app/style-transfer.css`      |  913 |
+| `src/styles/app/brightness-tool.css`     |  598 |
 | `src/styles/app/modals.css`              |  756 |
 | `src/styles/app/editor-popovers.css`     |  290 |
-| `src/styles/app/app-surfaces.css`        |  391 |
+| `src/styles/app/app-surfaces.css`        |  397 |
 | `src/styles/app/develop-controls.css`    |  514 |
 
 ### 仍超过 1000 行的源文件
 
-| 文件                                                                 |  行数 |
-| -------------------------------------------------------------------- | ----: |
-| `src-tauri/src/panorama_stitching/stitch_images.rs`                  | 3,926 |
-| `src/components/panel/Editor.tsx`                                    | 2,463 |
-| `src/components/panel/editor/ImageCanvas.tsx`                        | 2,246 |
-| `src/components/panel/SettingsPanel.tsx`                             | 1,721 |
-| `tests/focus-stack-quality-contract.mjs`                             | 1,691 |
-| `src/components/panel/right/CropPanel.tsx`                           | 1,452 |
-| `src/hooks/useAppContextMenus.ts`                                    | 1,366 |
-| `src-tauri/src/panorama_utils/stitching/tile_ownership_stitcher.rs`  | 1,363 |
-| `src-tauri/src/panorama_utils/stitching/final_world_owner_runner.rs` | 1,067 |
+| 文件                                                                                |  行数 |
+| ----------------------------------------------------------------------------------- | ----: |
+| `src-tauri/src/panorama_stitching/stitch_images.rs`                                 | 5,047 |
+| `src/components/panel/Editor.tsx`                                                   | 2,463 |
+| `src/components/panel/editor/ImageCanvas.tsx`                                       | 2,246 |
+| `tests/focus-stack-quality-contract.mjs`                                            | 1,732 |
+| `src/components/panel/SettingsPanel.tsx`                                            | 1,721 |
+| `src-tauri/src/panorama_utils/stitching/tile_ownership_stitcher.rs`                 | 1,515 |
+| `src/components/panel/right/CropPanel.tsx`                                          | 1,452 |
+| `src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs`                           | 1,389 |
+| `src/hooks/useAppContextMenus.ts`                                                   | 1,367 |
+| `src/components/views/BrightnessToolView.tsx`                                       | 1,161 |
+| `src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs` | 1,105 |
+| `src-tauri/src/panorama_utils/stitching/final_world_owner_runner.rs`                | 1,067 |
+| `src/App.tsx`                                                                       | 1,062 |
+| `src/components/panel/MainLibrary.tsx`                                              | 1,034 |
 
 <!-- source-layout:end -->
 

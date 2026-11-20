@@ -1,0 +1,253 @@
+{
+  "schema": 1,
+  "task": "N1.11",
+  "method": "long_declaration_import_decision_matrix_v1",
+  "production_impact": "read_only_review_matrix_no_algorithm_change",
+  "status": "pass",
+  "long_declarations": [
+    {
+      "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+      "name": "stitch_images_attempt",
+      "line": 401,
+      "approx_lines": 4610,
+      "category": "intentional_entrypoint",
+      "decision": "production orchestration entrypoint; split only with a reviewed behavior-preserving migration"
+    },
+    {
+      "path": "src/components/panel/editor/ImageCanvas.tsx",
+      "name": "ImageCanvas",
+      "line": 20,
+      "approx_lines": 2224,
+      "category": "intentional_component_entrypoint",
+      "decision": "UI canvas component owns hook/render ordering; no mechanical split is justified by line count alone"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/tile_ownership_stitcher.rs",
+      "name": "focus_tile_ownership_stitcher_with_finishing",
+      "line": 57,
+      "approx_lines": 1459,
+      "category": "intentional_compositor_entrypoint",
+      "decision": "source-owner compositor entrypoint keeps ownership, finish mode and pixel contract together"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+      "name": "detail_preserving_mosaic_streaming",
+      "line": 45,
+      "approx_lines": 1178,
+      "category": "intentional_streaming_entrypoint",
+      "decision": "streaming compositor entrypoint owns bounded tile lifetime and output ordering"
+    },
+    {
+      "path": "src-tauri/src/panorama_utils/stitching/final_world_owner_runner.rs",
+      "name": "run_final_world_owner_oracle",
+      "line": 21,
+      "approx_lines": 1047,
+      "category": "test_only_research_runner",
+      "decision": "test-only research runner; keep isolated until a real dataset justifies redesign"
+    }
+  ],
+  "import_direction": [
+    {
+      "facade": "src-tauri/src/file_management.rs",
+      "child": "src-tauri/src/file_management/albums.rs",
+      "line": 255,
+      "module": "crate::file_management",
+      "scope": "production_or_shared_review",
+      "text": ".is_some_and(|p| crate::file_management::is_cloud_placeholder(&p));",
+      "category": "shared_helper_dependency",
+      "decision": "cloud-placeholder helper is a facade-owned compatibility helper used by listing/albums"
+    },
+    {
+      "facade": "src-tauri/src/file_management.rs",
+      "child": "src-tauri/src/file_management/albums.rs",
+      "line": 257,
+      "module": "crate::file_management",
+      "scope": "production_or_shared_review",
+      "text": "let metadata = if crate::file_management::is_cloud_placeholder(&sidecar_path)",
+      "category": "shared_helper_dependency",
+      "decision": "cloud-placeholder helper is a facade-owned compatibility helper used by listing/albums"
+    },
+    {
+      "facade": "src-tauri/src/file_management.rs",
+      "child": "src-tauri/src/file_management/listing.rs",
+      "line": 297,
+      "module": "crate::file_management",
+      "scope": "production_or_shared_review",
+      "text": ".is_some_and(|p| crate::file_management::is_cloud_placeholder(&p));",
+      "category": "shared_helper_dependency",
+      "decision": "cloud-placeholder helper is a facade-owned compatibility helper used by listing/albums"
+    },
+    {
+      "facade": "src-tauri/src/file_management.rs",
+      "child": "src-tauri/src/file_management/listing.rs",
+      "line": 299,
+      "module": "crate::file_management",
+      "scope": "production_or_shared_review",
+      "text": "let metadata = if crate::file_management::is_cloud_placeholder(&sidecar_path)",
+      "category": "shared_helper_dependency",
+      "decision": "cloud-placeholder helper is a facade-owned compatibility helper used by listing/albums"
+    },
+    {
+      "facade": "src-tauri/src/file_management.rs",
+      "child": "src-tauri/src/file_management/listing.rs",
+      "line": 403,
+      "module": "crate::file_management",
+      "scope": "production_or_shared_review",
+      "text": ".is_some_and(|p| crate::file_management::is_cloud_placeholder(&p));",
+      "category": "shared_helper_dependency",
+      "decision": "cloud-placeholder helper is a facade-owned compatibility helper used by listing/albums"
+    },
+    {
+      "facade": "src-tauri/src/file_management.rs",
+      "child": "src-tauri/src/file_management/listing.rs",
+      "line": 405,
+      "module": "crate::file_management",
+      "scope": "production_or_shared_review",
+      "text": "let metadata = if crate::file_management::is_cloud_placeholder(&sidecar_path)",
+      "category": "shared_helper_dependency",
+      "decision": "cloud-placeholder helper is a facade-owned compatibility helper used by listing/albums"
+    },
+    {
+      "facade": "src-tauri/src/gpu_processing.rs",
+      "child": "src-tauri/src/gpu_processing/processor/tiled_run.rs",
+      "line": 7,
+      "module": "crate::gpu_processing",
+      "scope": "production_or_shared_review",
+      "text": "use crate::gpu_processing::{GpuRenderOutput, RenderRequest, Roi, read_texture_data_roi};",
+      "category": "facade_type_reexport_dependency",
+      "decision": "GPU tiled runner consumes facade-owned render request/output types"
+    },
+    {
+      "facade": "src-tauri/src/gpu_processing.rs",
+      "child": "src-tauri/src/gpu_processing/processor/tiled_run.rs",
+      "line": 21,
+      "module": "crate::gpu_processing",
+      "scope": "production_or_shared_review",
+      "text": "pub(in crate::gpu_processing) fn run(",
+      "category": "facade_type_reexport_dependency",
+      "decision": "GPU tiled runner consumes facade-owned render request/output types"
+    },
+    {
+      "facade": "src-tauri/src/image_processing.rs",
+      "child": "src-tauri/src/image_processing/geometry_ops.rs",
+      "line": 173,
+      "module": "crate::image_processing",
+      "scope": "production_or_shared_review",
+      "text": "crate::image_processing::apply_rotation(mask_dyn, -rotation_degrees).into_owned()",
+      "category": "facade_compatibility_dependency",
+      "decision": "geometry helper preserves the public image_processing facade path"
+    },
+    {
+      "facade": "src-tauri/src/panorama_stitching.rs",
+      "child": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
+      "line": 739,
+      "module": "crate::panorama_stitching",
+      "scope": "test_path_heuristic",
+      "text": "let metrics = crate::panorama_stitching::acceptance_metrics::write_acceptance_metrics(",
+      "category": "test_access_dependency",
+      "decision": "test/acceptance access path; not a production import cycle"
+    },
+    {
+      "facade": "src-tauri/src/panorama_stitching.rs",
+      "child": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
+      "line": 740,
+      "module": "crate::panorama_stitching",
+      "scope": "test_path_heuristic",
+      "text": "&crate::panorama_stitching::acceptance_metrics::AcceptanceMetricsRequest {",
+      "category": "test_access_dependency",
+      "decision": "test/acceptance access path; not a production import cycle"
+    },
+    {
+      "facade": "src-tauri/src/panorama_stitching.rs",
+      "child": "src-tauri/src/panorama_stitching/acceptance_tests/native_capture.rs",
+      "line": 51,
+      "module": "crate::panorama_stitching",
+      "scope": "test_path_heuristic",
+      "text": "pub(in crate::panorama_stitching) fn capture_failed_native_boundaries(",
+      "category": "test_access_dependency",
+      "decision": "test/acceptance access path; not a production import cycle"
+    },
+    {
+      "facade": "src-tauri/src/panorama_utils/mosaic.rs",
+      "child": "src-tauri/src/panorama_utils/mosaic/native_prefilter_oracle_tests.rs",
+      "line": 6,
+      "module": "crate::panorama_utils::mosaic",
+      "scope": "test_path_heuristic",
+      "text": "use crate::panorama_utils::mosaic::{rgb_at, sampling};",
+      "category": "test_access_dependency",
+      "decision": "test/acceptance access path; not a production import cycle"
+    },
+    {
+      "facade": "src-tauri/src/panorama_utils/mosaic.rs",
+      "child": "src-tauri/src/panorama_utils/mosaic/native_prefilter_tests.rs",
+      "line": 4,
+      "module": "crate::panorama_utils::mosaic",
+      "scope": "test_path_heuristic",
+      "text": "use crate::panorama_utils::mosaic::Field;",
+      "category": "test_access_dependency",
+      "decision": "test/acceptance access path; not a production import cycle"
+    },
+    {
+      "facade": "src-tauri/src/panorama_utils/processing.rs",
+      "child": "src-tauri/src/panorama_utils/processing/tests.rs",
+      "line": 81,
+      "module": "crate::panorama_utils::processing",
+      "scope": "test_path_heuristic",
+      "text": "let pairs = crate::panorama_utils::processing::generate_brief_pairs();",
+      "category": "test_access_dependency",
+      "decision": "test/acceptance access path; not a production import cycle"
+    },
+    {
+      "facade": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
+      "child": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture_tests.rs",
+      "line": 5,
+      "module": "crate::panorama_utils::stack_pipeline::quality_gate_runner",
+      "scope": "test_path_heuristic",
+      "text": "use crate::panorama_utils::stack_pipeline::quality_gate_runner::{",
+      "category": "test_access_dependency",
+      "decision": "test/acceptance access path; not a production import cycle"
+    },
+    {
+      "facade": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
+      "child": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_point_evidence_tests.rs",
+      "line": 6,
+      "module": "crate::panorama_utils::stack_pipeline::quality_gate_runner",
+      "scope": "test_path_heuristic",
+      "text": "use crate::panorama_utils::stack_pipeline::quality_gate_runner::{",
+      "category": "test_access_dependency",
+      "decision": "test/acceptance access path; not a production import cycle"
+    },
+    {
+      "facade": "src-tauri/src/panorama_utils/stitching.rs",
+      "child": "src-tauri/src/panorama_utils/stitching/native_owner_geometry_tests.rs",
+      "line": 4,
+      "module": "crate::panorama_utils::stitching",
+      "scope": "test_path_heuristic",
+      "text": "use crate::panorama_utils::stitching::{",
+      "category": "test_access_dependency",
+      "decision": "test/acceptance access path; not a production import cycle"
+    },
+    {
+      "facade": "src-tauri/src/panorama_utils/stitching.rs",
+      "child": "src-tauri/src/panorama_utils/stitching/native_point_trace_tests.rs",
+      "line": 4,
+      "module": "crate::panorama_utils::stitching",
+      "scope": "test_path_heuristic",
+      "text": "use crate::panorama_utils::stitching::{",
+      "category": "test_access_dependency",
+      "decision": "test/acceptance access path; not a production import cycle"
+    }
+  ],
+  "summary": {
+    "long_declarations": 5,
+    "long_declarations_decided": 5,
+    "import_hits": 19,
+    "import_hits_decided": 19,
+    "stale_source_layout_files": 0
+  },
+  "remaining": [
+    "intentional long entrypoints still need a behavior-preserving refactor only when a concrete owner boundary is identified",
+    "test-only research runner remains isolated from release paths"
+  ],
+  "decision": "close the N1.11 inventory contract while preserving intentional entrypoints and compatibility imports"
+}
