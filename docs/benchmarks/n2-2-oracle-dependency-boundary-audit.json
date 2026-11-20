@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "task": "N2.2",
+  "method": "oracle_dependency_boundary_contract_audit_v1",
+  "production_impact": "read_only_contract_check_no_code_change",
+  "checks": [
+    {
+      "command": "node tests/focus-stack-quality-contract.mjs",
+      "status": "pass",
+      "scope": "512-cell ownership grid, owner Source_RAW oracle test-only, final-world oracle test-only, quality guard contracts",
+      "result": "validated focus-stack quality guards"
+    },
+    {
+      "command": "rg source audit",
+      "status": "pass",
+      "scope": "owner_quality_oracle.rs and final_world_owner_oracle.rs are cfg(test) path modules; production stitching facade only exposes test-only runners",
+      "result": "no release-path oracle promotion found"
+    }
+  ],
+  "remaining": [
+    "N2.2 is not marked complete: a full dependency-direction audit across all structural/owner/final-world oracle imports remains open",
+    "N2.3 production invariant vs research oracle contract remains open"
+  ],
+  "decision": "record the contract check but do not check N2.2; no production code or material run is justified by this audit",
+  "next_step": "continue with a dependency-direction inventory or wait for a new material/task17 input"
+}
