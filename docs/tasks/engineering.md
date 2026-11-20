@@ -43,5 +43,5 @@
 ### 3.4 N2：测试支持与研究隔离
 
 - [x] **N2.1** fixture/test_support、alignment、Virtual_Tile、acceptance、interpolation及properties按领域拆分；保留测试名、过滤路径、生成器和失败种子，历史迁移检查通过。
-- [ ] **N2.2** structural/owner/final-world oracle的依赖方向彻底收口；已拆短不等于生产/test-only边界完成，继续处理`cfg(test)`调用方向。2026-11-20只读合同核对通过：质量合同测试通过，owner/final-world oracle 仍挂在 test-only 路径；但完整依赖方向清单尚未收口，不能勾选。见 [N2.2 audit](../benchmarks/n2-2-oracle-dependency-boundary-audit.json)。
+- [x] **N2.2** structural/owner/final-world oracle的依赖方向彻底收口；2026-11-20质量合同测试通过，静态依赖方向清单17/17通过，声明、导入及 facade 调用均保持在`cfg(test)`边界内；未将任何 oracle 提升为 release gate。见 [N2.2 audit](../benchmarks/n2-2-oracle-dependency-boundary-audit.json) 和 [dependency inventory](../benchmarks/n2-2-oracle-dependency-inventory.json)。
 - [ ] **N2.3** 将production invariant与research oracle契约分离；`stack-pair-evidence:check`维持研究用途，未重新定义及验收前不能充当release gate。

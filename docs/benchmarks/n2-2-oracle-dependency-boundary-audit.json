@@ -2,7 +2,7 @@
   "schema": 1,
   "task": "N2.2",
   "method": "oracle_dependency_boundary_contract_audit_v1",
-  "production_impact": "read_only_contract_check_no_code_change",
+  "production_impact": "read_only_contract_and_static_dependency_audit_no_code_change",
   "checks": [
     {
       "command": "node tests/focus-stack-quality-contract.mjs",
@@ -15,12 +15,18 @@
       "status": "pass",
       "scope": "owner_quality_oracle.rs and final_world_owner_oracle.rs are cfg(test) path modules; production stitching facade only exposes test-only runners",
       "result": "no release-path oracle promotion found"
+    },
+    {
+      "command": "python3 scripts/stack-lab/n2_2_oracle_dependency_audit.py",
+      "status": "pass",
+      "scope": "17/17 structural, owner, final-world and related tone-owner module/import/call boundaries",
+      "result": "all audited oracle declarations, imports and facade calls remain behind cfg(test); see dependency inventory"
     }
   ],
   "remaining": [
-    "N2.2 is not marked complete: a full dependency-direction audit across all structural/owner/final-world oracle imports remains open",
     "N2.3 production invariant vs research oracle contract remains open"
   ],
-  "decision": "record the contract check but do not check N2.2; no production code or material run is justified by this audit",
-  "next_step": "continue with a dependency-direction inventory or wait for a new material/task17 input"
+  "decision": "N2.2 dependency direction is closed for the audited structural/owner/final-world paths; keep N2.3 open and do not promote any oracle into a release gate",
+  "inventory": "../benchmarks/n2-2-oracle-dependency-inventory.json",
+  "next_step": "address N2.3 production-invariant versus research-oracle separation"
 }

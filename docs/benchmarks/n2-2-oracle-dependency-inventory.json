@@ -1,0 +1,206 @@
+{
+  "schema": 1,
+  "task": "N2.2",
+  "method": "oracle_dependency_direction_inventory_v1",
+  "production_impact": "read_only_static_source_audit",
+  "status": "pass",
+  "checks": [
+    {
+      "name": "structural module declaration",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_stitching.rs",
+      "needle": "#[path = \"panorama_structural_oracle.rs\"]",
+      "lines": [
+        973
+      ],
+      "guard": "direct_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "structural facade import",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+      "needle": "structural_oracle,",
+      "lines": [
+        104
+      ],
+      "guard": "nearby_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "structural harness call",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+      "needle": "structural_oracle::run_structural_oracle",
+      "lines": [
+        2658
+      ],
+      "guard": "nearby_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "owner module declaration",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_utils/stitching.rs",
+      "needle": "#[path = \"owner_quality_oracle.rs\"]",
+      "lines": [
+        37
+      ],
+      "guard": "direct_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "owner probe module declaration",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_utils/stitching.rs",
+      "needle": "mod score_noise_probes;",
+      "lines": [
+        536
+      ],
+      "guard": "direct_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "owner probe import",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_utils/stitching/score_noise_probes.rs",
+      "needle": "use super::owner_quality_oracle;",
+      "lines": [
+        18
+      ],
+      "guard": "direct_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "owner probe references",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_utils/stitching/score_noise_probes.rs",
+      "needle": "owner_quality_oracle::",
+      "lines": [
+        468,
+        542
+      ],
+      "guard": "function_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "final-world oracle module declaration",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_utils/stitching.rs",
+      "needle": "#[path = \"final_world_owner_oracle.rs\"]",
+      "lines": [
+        34
+      ],
+      "guard": "direct_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "final-world runner module declaration",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_utils/stitching.rs",
+      "needle": "mod final_world_owner_runner;",
+      "lines": [
+        151
+      ],
+      "guard": "direct_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "final-world runner export",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_utils/stitching.rs",
+      "needle": "run_final_world_owner_oracle;",
+      "lines": [
+        154
+      ],
+      "guard": "direct_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "final-world facade call",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+      "needle": "stitching::run_final_world_owner_oracle(",
+      "lines": [
+        4622
+      ],
+      "guard": "nearby_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "final-world run reset",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+      "needle": "stitching::reset_final_world_owner_oracle();",
+      "lines": [
+        466
+      ],
+      "guard": "nearby_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "tone owner oracle module declaration",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone.rs",
+      "needle": "mod owner_oracle;",
+      "lines": [
+        246
+      ],
+      "guard": "direct_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "quality-gate tone owner oracle module declaration",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
+      "needle": "mod tone_owner_oracle;",
+      "lines": [
+        415
+      ],
+      "guard": "direct_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "tone owner field capture",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone/harmonize.rs",
+      "needle": "let owner_oracle_fields =",
+      "lines": [
+        216
+      ],
+      "guard": "nearby_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "tone owner snapshot publication",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/tone/harmonize.rs",
+      "needle": "if let Some(fields) = owner_oracle_fields",
+      "lines": [
+        510,
+        624
+      ],
+      "guard": "nearby_cfg_test",
+      "failed_lines": []
+    },
+    {
+      "name": "tone owner quality-gate import",
+      "status": "pass",
+      "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
+      "needle": "write_tone_owner_fidelity_oracle,",
+      "lines": [
+        34
+      ],
+      "guard": "nearby_cfg_test",
+      "failed_lines": []
+    }
+  ],
+  "summary": {
+    "total": 17,
+    "passed": 17,
+    "failed": 0
+  },
+  "remaining": [
+    "N2.3 production invariant vs research oracle contract remains open"
+  ]
+}
