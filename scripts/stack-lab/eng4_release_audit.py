@@ -28,8 +28,8 @@ def main() -> int:
             "status": "fail",
             "command": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
             "exit_code": 101,
-            "diagnostics": 344,
-            "target_diagnostics": {"lib": 148, "lib test": 196},
+            "diagnostics": 326,
+            "target_diagnostics": {"lib": 141, "lib test": 185},
             "note": "strict lint remains nonzero; the current all-targets snapshot reports separate lib and lib test totals after cfg(test) isolation. Ordinary cargo check remains separate.",
         },
         {

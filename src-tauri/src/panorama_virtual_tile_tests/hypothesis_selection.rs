@@ -175,7 +175,7 @@ fn multi_hypothesis_holdout_key_prefers_measured_independent_support() {
     assert!(better_key.0 && worse_key.0);
     assert!(better_key.1 < worse_key.1);
     assert!(!unusable_key.0);
-    assert!(better_key.0 > unusable_key.0);
+    assert!(better_key.0 && !unusable_key.0);
     assert!(!virtual_tile_hypothesis_holdout_key(&low_support).0);
     assert!(!virtual_tile_hypothesis_holdout_key(&high_error).0);
 }

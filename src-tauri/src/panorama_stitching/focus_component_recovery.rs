@@ -10,12 +10,15 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use super::{
-    Dsu, FOCUS_BRACKET_MAX_CAPTURE_GAP, FOCUS_MODEL_MIN_INLIERS, ImageInfo,
-    MIXED_FOCAL_SCALE_MAX_RATIO, MIXED_FOCAL_SCALE_MIN_RATIO, MatchInfo, canonical_match_direction,
+    Dsu, FOCUS_MODEL_MIN_INLIERS, ImageInfo, MIXED_FOCAL_SCALE_MAX_RATIO,
+    MIXED_FOCAL_SCALE_MIN_RATIO, MatchInfo, canonical_match_direction,
     estimate_mixed_focal_coarse_registration, focus_alignment_support, focus_capture_number_gap,
-    focus_match_center_motion_ratio, focus_overlap_quality, focus_position_recovery_accepts,
-    focus_transform_disagreement_px, natural_path_cmp, panorama_transform_overlap_support,
-    trailing_capture_number,
+    focus_match_center_motion_ratio, focus_overlap_quality, focus_transform_disagreement_px,
+    natural_path_cmp, panorama_transform_overlap_support,
+};
+#[cfg(test)]
+use super::{
+    FOCUS_BRACKET_MAX_CAPTURE_GAP, focus_position_recovery_accepts, trailing_capture_number,
 };
 
 pub(super) fn focus_rescue_match_is_verified(
@@ -49,6 +52,7 @@ pub(super) fn focus_rescue_match_is_verified(
         && edge_orientation >= -0.05
 }
 
+#[cfg(test)]
 pub(super) fn focus_indices_share_component(
     left: usize,
     right: usize,
@@ -59,6 +63,7 @@ pub(super) fn focus_indices_share_component(
         .any(|component| component.contains(&left) && component.contains(&right))
 }
 
+#[cfg(test)]
 pub(super) fn insert_recovered_focus_match(
     images: &[ImageInfo],
     left_index: usize,
@@ -96,6 +101,7 @@ pub(super) fn insert_recovered_focus_match(
     ))
 }
 
+#[cfg(test)]
 pub(super) fn attach_focus_orphan_components(
     images: &[ImageInfo],
     matches: &mut HashMap<(usize, usize), MatchInfo>,
@@ -157,6 +163,7 @@ pub(super) fn attach_focus_orphan_components(
     added
 }
 
+#[cfg(test)]
 pub(super) fn recover_adjacent_focus_position_match(
     source: &ImageInfo,
     target: &ImageInfo,

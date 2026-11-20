@@ -166,21 +166,21 @@ fn decisive_sharpness_requires_a_coherent_non_vetoed_component() {
         candidate.sharpness[cell] = 0.9;
     }
     candidate.sharpness[7] = 0.9;
-    let decisive = coherent_decisive_cells(geometry, &vec![0.5; 8], &candidate);
+    let decisive = coherent_decisive_cells(geometry, &[0.5; 8], &candidate);
     assert_eq!(
         decisive,
         vec![true, true, false, false, true, true, false, false]
     );
 
     candidate.disagreement[0] = OWNERSHIP_DISAGREEMENT_VETO + 0.01;
-    let vetoed = coherent_decisive_cells(geometry, &vec![0.5; 8], &candidate);
+    let vetoed = coherent_decisive_cells(geometry, &[0.5; 8], &candidate);
     assert!(vetoed.iter().all(|&value| !value));
 
     candidate.sharpness.fill(0.1);
-    let base = coherent_base_cells(geometry, &vec![0.5; 8], &candidate);
+    let base = coherent_base_cells(geometry, &[0.5; 8], &candidate);
     assert!(base.iter().all(|&value| value));
     candidate.sharpness[7] = 0.49;
-    let still_coherent = coherent_base_cells(geometry, &vec![0.5; 8], &candidate);
+    let still_coherent = coherent_base_cells(geometry, &[0.5; 8], &candidate);
     assert!(!still_coherent[7]);
     assert!(still_coherent[..7].iter().all(|&value| value));
 }

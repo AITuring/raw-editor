@@ -249,6 +249,7 @@ pub(super) fn virtual_tile_pyramid_station_match(
 /// Coarse pixels establish a search model. Final camera geometry is measured
 /// on native pixels: a one-level-pixel reverse check at factor four otherwise
 /// admits four-native-pixel errors and biases long projective tree chains.
+#[cfg(test)]
 pub(super) fn native_station_affine_candidate(
     points: &[(Point2<f64>, Point2<f64>)],
     source_dimensions: (u32, u32),

@@ -342,10 +342,12 @@ use horizontal_edge_bands::{
 mod focus_capture_spine;
 
 #[cfg(test)]
+use focus_capture_spine::focus_position_recovery_accepts;
+#[cfg(test)]
 use focus_capture_spine::{FOCUS_CAPTURE_SEQUENCE_GRAPH_WEIGHT_BOOST, focus_capture_stations};
 use focus_capture_spine::{
     attach_focus_bracket_orphans_to_pose_graph, focus_alignment_support,
-    focus_graph_capture_sequence_boost, focus_position_recovery_accepts, focus_stack_spine_matches,
+    focus_graph_capture_sequence_boost, focus_stack_spine_matches,
     focus_unstitched_sources_are_redundant,
 };
 

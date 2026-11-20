@@ -745,6 +745,7 @@ pub(super) fn station_transition_first_on_low_side(
 /// do not erase the second owner's local evidence.  Only accept a clear
 /// majority in the bounded relation band; an ambiguous island must remain
 /// untouched rather than becoming a reason to rewrite both sides.
+#[cfg(test)]
 pub(super) fn station_current_second_on_low_side(
     plan: &StationSeamPlan,
     source_owner_ids: &[u16],

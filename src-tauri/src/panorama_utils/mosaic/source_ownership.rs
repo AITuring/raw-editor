@@ -666,6 +666,7 @@ pub(super) fn ownership_with_long_side(
     ownership_grid(base, base_mask, sampler, tone, width, height, size, false)
 }
 
+#[cfg(test)]
 pub(super) fn streaming_ownership_with_long_side(
     base: &Rgb32FImage,
     base_mask: &GrayImage,

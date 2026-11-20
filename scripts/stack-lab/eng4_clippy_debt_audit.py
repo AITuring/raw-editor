@@ -55,7 +55,7 @@ def main() -> int:
         "diagnostic_count": total,
         "target_diagnostics": targets,
         "top_files": top_files,
-        "scope_note": "source_raw_direct, source_raw_direct_basin, source_raw_direct_pairs, source_raw_layer_diagnostics, feature_provider, focus_pyramid, focus_color, test-only focus_masks/focus_alignment/focus_tone helpers, and the test-only closure/Jacobian helpers are cfg(test)-isolated research/test contracts; remaining files are not reclassified by this snapshot",
+        "scope_note": "source_raw_direct, source_raw_direct_basin, source_raw_direct_pairs, source_raw_layer_diagnostics, feature_provider, focus_pyramid, focus_color, test-only focus_masks/focus_alignment/focus_tone helpers, closure/Jacobian helpers, focus component recovery helpers, native affine candidate, streaming ownership, and station seam helper are cfg(test)-isolated research/test contracts; remaining files are not reclassified by this snapshot",
         "source_log": str(args.log),
     }
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

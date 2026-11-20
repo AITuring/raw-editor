@@ -31,9 +31,13 @@ fn streaming_store_round_trips_across_tile_boundaries() {
 
 #[test]
 fn covered_bounds_preserve_non_rectangular_source_edges() {
-    let mask = GrayImage::from_fn(8, 6, |x, y| {
-        Luma([u8::from((x == 1 && y == 3) || (x >= 3 && x <= 6 && y >= 1 && y <= 4)) * 255])
-    });
+    let mask =
+        GrayImage::from_fn(8, 6, |x, y| {
+            Luma([
+                u8::from((x == 1 && y == 3) || ((3..=6).contains(&x) && (1..=4).contains(&y)))
+                    * 255,
+            ])
+        });
     assert_eq!(mask_covered_bounds(&mask), Some((1, 1, 6, 4)));
 }
 
@@ -42,14 +46,16 @@ fn streaming_covered_bounds_do_not_reduce_to_largest_rectangle() {
     let store = StreamingMosaicStore::new(12, 8).expect("tile store should initialize");
     let rgb = Rgb32FImage::new(12, 8);
     let mask = GrayImage::from_fn(12, 8, |x, y| {
-        Luma([u8::from((x == 1 && y == 6) || (x >= 4 && x <= 10 && y >= 1 && y <= 5)) * 255])
+        Luma([
+            u8::from((x == 1 && y == 6) || ((4..=10).contains(&x) && (1..=5).contains(&y))) * 255,
+        ])
     });
     store
         .save_tile(0, 0, &rgb, &mask)
         .expect("tile should be writable");
     let owner = GrayImage::from_fn(12, 8, |x, y| {
         Luma([u8::from(
-            (x == 1 && y == 6) || (x >= 4 && x <= 10 && y >= 1 && y <= 4),
+            (x == 1 && y == 6) || ((4..=10).contains(&x) && (1..=4).contains(&y)),
         )])
     });
     store.save_owner_tile(0, 0, &owner).unwrap();

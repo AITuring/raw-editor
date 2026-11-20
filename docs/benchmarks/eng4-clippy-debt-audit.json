@@ -4,10 +4,10 @@
   "method": "strict_clippy_debt_inventory_v2",
   "command": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
   "exit_code": 101,
-  "diagnostic_count": 344,
+  "diagnostic_count": 326,
   "target_diagnostics": {
-    "lib": 148,
-    "lib test": 196
+    "lib": 141,
+    "lib test": 185
   },
   "top_files": [
     {
@@ -23,16 +23,8 @@
       "diagnostics": 6
     },
     {
-      "path": "src/panorama_utils/mosaic/tests/streaming_tiles.rs",
-      "diagnostics": 6
-    },
-    {
       "path": "src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
       "diagnostics": 5
-    },
-    {
-      "path": "src/panorama_stitching/focus_component_recovery.rs",
-      "diagnostics": 4
     },
     {
       "path": "src/panorama_stitching/capture_sequence_bridges.rs",
@@ -43,19 +35,15 @@
       "diagnostics": 4
     },
     {
-      "path": "src/panorama_stitching/virtual_tile_pyramid_match.rs",
-      "diagnostics": 4
-    },
-    {
       "path": "src/panorama_utils/stack_pipeline/intra_station.rs",
       "diagnostics": 4
     },
     {
-      "path": "src/panorama_utils/stitching/station_seam_plan.rs",
+      "path": "src/panorama_utils/mosaic/layer_refine.rs",
       "diagnostics": 4
     },
     {
-      "path": "src/panorama_utils/mosaic/layer_refine.rs",
+      "path": "src/panorama_utils/stitching/station_seam_plan.rs",
       "diagnostics": 4
     },
     {
@@ -67,6 +55,10 @@
       "diagnostics": 4
     },
     {
+      "path": "src/panorama_stitching/focus_component_recovery.rs",
+      "diagnostics": 4
+    },
+    {
       "path": "src/image_stack/output_validation_tests.rs",
       "diagnostics": 4
     },
@@ -75,15 +67,11 @@
       "diagnostics": 4
     },
     {
-      "path": "src/panorama_utils/stack_pipeline/focus_fuser/tests/region_decisions.rs",
-      "diagnostics": 4
-    },
-    {
-      "path": "src/panorama_utils/mosaic/source_ownership.rs",
+      "path": "src/panorama_utils/stitching/virtual_tiles.rs",
       "diagnostics": 3
     },
     {
-      "path": "src/panorama_utils/stitching/virtual_tiles.rs",
+      "path": "src/panorama_stitching/virtual_tile_pyramid_match.rs",
       "diagnostics": 3
     },
     {
@@ -103,14 +91,26 @@
       "diagnostics": 3
     },
     {
-      "path": "src/panorama_virtual_tile_tests/hypothesis_selection.rs",
+      "path": "src/panorama_utils/stack_pipeline/tone/owner_oracle.rs",
       "diagnostics": 3
     },
     {
-      "path": "src/panorama_utils/stack_pipeline/tone/owner_oracle.rs",
-      "diagnostics": 3
+      "path": "src/panorama_station_solve_entry.rs",
+      "diagnostics": 2
+    },
+    {
+      "path": "src/panorama_stitching/focus_capture_spine.rs",
+      "diagnostics": 2
+    },
+    {
+      "path": "src/panorama_utils/mosaic/streaming_harmonization.rs",
+      "diagnostics": 2
+    },
+    {
+      "path": "src/panorama_utils/processing/features.rs",
+      "diagnostics": 2
     }
   ],
-  "scope_note": "source_raw_direct, source_raw_direct_basin, source_raw_direct_pairs, source_raw_layer_diagnostics, feature_provider, focus_pyramid, focus_color, test-only focus_masks/focus_alignment/focus_tone helpers, and the test-only closure/Jacobian helpers are cfg(test)-isolated research/test contracts; remaining files are not reclassified by this snapshot",
-  "source_log": "/private/tmp/raw-editor-eng4-clippy-source-joint-final.log"
+  "scope_note": "source_raw_direct, source_raw_direct_basin, source_raw_direct_pairs, source_raw_layer_diagnostics, feature_provider, focus_pyramid, focus_color, test-only focus_masks/focus_alignment/focus_tone helpers, closure/Jacobian helpers, focus component recovery helpers, native affine candidate, streaming ownership, and station seam helper are cfg(test)-isolated research/test contracts; remaining files are not reclassified by this snapshot",
+  "source_log": "/private/tmp/raw-editor-eng4-clippy-test-boundary-final.log"
 }
