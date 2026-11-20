@@ -31,18 +31,60 @@ def is_test_harness(path: Path) -> bool:
     )
 
 
+def parent_cfg_test_module(path: Path) -> dict[str, str] | None:
+    """Resolve the nearest facade declarations that compile this file."""
+    stem = path.stem
+    for parent in sorted(path.parent.glob("*.rs")):
+        source = parent.read_text(encoding="utf-8")
+        for match in re.finditer(
+            r"#\[cfg\(test\)\]\s*((?:#\[path\s*=\s*\"[^\"]+\"\]\s*)*)"
+            r"mod\s+([A-Za-z0-9_]+)\b",
+            source,
+        ):
+            path_attributes, module = match.groups()
+            target_names = [Path(value).name for value in re.findall(r'\"([^\"]+)\"', path_attributes)]
+            if module == stem or path.name in target_names:
+                return {
+                    "parent": parent.relative_to(ROOT).as_posix(),
+                    "module": module,
+                }
+    relative = path.relative_to(SOURCE_ROOT)
+    parts = relative.parts
+    current = SOURCE_ROOT
+    for index, directory in enumerate(parts[:-1]):
+        parent = current / f"{directory}.rs"
+        child_stem = Path(parts[index + 1]).stem
+        if parent.is_file():
+            source = parent.read_text(encoding="utf-8")
+            pattern = re.compile(
+                rf"#\[cfg\(test\)\]\s*(?:#\[path\s*=\s*\"[^\"]+\"\]\s*)*"
+                rf"mod\s+{re.escape(child_stem)}\b"
+            )
+            if pattern.search(source):
+                return {
+                    "parent": parent.relative_to(ROOT).as_posix(),
+                    "module": child_stem,
+                }
+        current = current / directory
+    return None
+
+
 def main() -> int:
     occurrences: dict[str, list[dict[str, object]]] = defaultdict(list)
     for path in sorted(SOURCE_ROOT.rglob("*.rs")):
         text = path.read_text(encoding="utf-8")
         relative = path.relative_to(ROOT).as_posix()
+        parent_cfg = parent_cfg_test_module(path)
+        test_only = is_test_harness(path) or parent_cfg is not None
         for match in ENV_RE.finditer(text):
             line = text.count("\n", 0, match.start()) + 1
             occurrences[match.group(0)].append(
                 {
                     "path": relative,
                     "line": line,
-                    "scope": "test_harness_module" if is_test_harness(path) else "shared_or_production_source",
+                    "scope": "test_harness_module" if test_only else "shared_or_production_source",
+                    "path_heuristic_test": is_test_harness(path),
+                    "parent_cfg_test": parent_cfg,
                 }
             )
 
@@ -61,6 +103,9 @@ def main() -> int:
             "count": len(values),
             "scopes": sorted({str(value["scope"]) for value in values}),
             "known_test_only": name in test_only_names,
+            "parent_cfg_test_occurrences": sum(
+                value["parent_cfg_test"] is not None for value in values
+            ),
         }
         for name, values in sorted(occurrences.items())
     }
@@ -79,12 +124,15 @@ def main() -> int:
             "source_occurrences": sum(int(value["count"]) for value in grouped.values()),
             "known_test_only_names": sorted(name for name, value in grouped.items() if value["known_test_only"]),
             "shared_or_production_review_names": len(review_names),
+            "parent_cfg_test_occurrences": sum(
+                int(value["parent_cfg_test_occurrences"]) for value in grouped.values()
+            ),
         },
         "variables": grouped,
         "remaining": [
             "review shared_or_production_source names one by one; do not delete preview, Stack_Report, resource-budget or comparison-path contracts by name alone",
             "RAW_EDITOR_FINAL_PANORAMA_SHARPEN_AMOUNT remains an explicit legacy comparison-path decision",
-            "acceptance/diagnostic modules need a parent-module cfg(test) audit beyond path-name heuristics",
+            "shared/production names still need one-by-one ownership review; path and parent cfg(test) classification is evidence, not a release gate",
         ],
         "decision": "inventory only; keep N0.3 open until the review candidates have explicit ownership and build-boundary evidence",
     }

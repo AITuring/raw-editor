@@ -15,7 +15,8 @@
       "RAW_EDITOR_TEST_SOURCE_RESAMPLE_DIVISOR",
       "RAW_EDITOR_TEST_SOURCE_RESAMPLE_PATH"
     ],
-    "shared_or_production_review_names": 147
+    "shared_or_production_review_names": 101,
+    "parent_cfg_test_occurrences": 125
   },
   "variables": {
     "RAW_EDITOR_ACCEPTANCE_DIR": {
@@ -23,136 +24,216 @@
         {
           "path": "src-tauri/src/raw_processing_acceptance.rs",
           "line": 251,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/raw_processing.rs",
+            "module": "acceptance_tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_ACCEPTANCE_OUTPUT_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/raw_processing_acceptance.rs",
           "line": 282,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/raw_processing.rs",
+            "module": "acceptance_tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_ACCEPTANCE_REPORT": {
       "occurrences": [
         {
           "path": "src-tauri/src/raw_processing_acceptance.rs",
           "line": 321,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/raw_processing.rs",
+            "module": "acceptance_tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_AI_MASK_BENCH_MODE": {
       "occurrences": [
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 291,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_ARTWORK_FRAMED_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1149,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_BENCH_FORMAT": {
       "occurrences": [
         {
           "path": "src-tauri/src/export_processing/tests/large_image_harnesses.rs",
           "line": 101,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/export_processing.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_BENCH_HEIGHT": {
       "occurrences": [
         {
           "path": "src-tauri/src/export_processing/tests/large_image_harnesses.rs",
           "line": 15,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/export_processing.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/export_processing/tests/large_image_harnesses.rs",
           "line": 96,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/export_processing.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/image_processing/geometry_transform_tests.rs",
           "line": 452,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_processing.rs",
+            "module": "geometry_transform_tests"
+          }
         },
         {
           "path": "src-tauri/src/image_processing/geometry_transform_tests.rs",
           "line": 582,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_processing.rs",
+            "module": "geometry_transform_tests"
+          }
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 16,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 150,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 286,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 437,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 553,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/raw_processing.rs",
           "line": 419,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 10,
@@ -160,115 +241,187 @@
         "shared_or_production_source",
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 9
     },
     "RAW_EDITOR_BENCH_METADATA": {
       "occurrences": [
         {
           "path": "src-tauri/src/export_processing/tests/large_image_harnesses.rs",
           "line": 117,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/export_processing.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_BENCH_RESIZE_LONG_EDGE": {
       "occurrences": [
         {
           "path": "src-tauri/src/export_processing/tests/large_image_harnesses.rs",
           "line": 102,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/export_processing.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_BENCH_WATERMARK": {
       "occurrences": [
         {
           "path": "src-tauri/src/export_processing/tests/large_image_harnesses.rs",
           "line": 115,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/export_processing.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_BENCH_WEBP_MODE": {
       "occurrences": [
         {
           "path": "src-tauri/src/export_processing/tests/large_image_harnesses.rs",
           "line": 19,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/export_processing.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_BENCH_WIDTH": {
       "occurrences": [
         {
           "path": "src-tauri/src/export_processing/tests/large_image_harnesses.rs",
           "line": 11,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/export_processing.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/export_processing/tests/large_image_harnesses.rs",
           "line": 92,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/export_processing.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/image_processing/geometry_transform_tests.rs",
           "line": 448,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_processing.rs",
+            "module": "geometry_transform_tests"
+          }
         },
         {
           "path": "src-tauri/src/image_processing/geometry_transform_tests.rs",
           "line": 578,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_processing.rs",
+            "module": "geometry_transform_tests"
+          }
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 12,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 146,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 282,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 433,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 549,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/raw_processing.rs",
           "line": 415,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 10,
@@ -276,136 +429,171 @@
         "shared_or_production_source",
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 9
     },
     "RAW_EDITOR_BOUNDARY_COVERAGE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 389,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_BOUNDARY_IMAGE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 378,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_BOUNDARY_VERTICAL_NORMAL": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 391,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_BOUNDARY_X": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 381,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_BOUNDARY_Y": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 385,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_DEBUG_GROUP_GAINS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_harmonization.rs",
           "line": 432,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_DETAIL_DEFICIT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1208,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 600,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_DIAGNOSTIC_NATIVE_NEAREST_ONLY": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 449,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_DISABLE_SHARED_RAW_NORMALIZATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 167,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 227,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
@@ -413,2267 +601,3027 @@
         "shared_or_production_source",
         "test_harness_module"
       ],
-      "known_test_only": true
+      "known_test_only": true,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_EFFECTIVE_COVERAGE_DIAGNOSTICS_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/research_diagnostics.rs",
           "line": 165,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
+            "module": "research_diagnostics"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_ENABLE_ARTWORK_ILLUMINATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 994,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1132,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_ENABLE_FINAL_LOW_FREQUENCY_ILLUMINATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 319,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_ENABLE_FLAT_ARTWORK_CONSENSUS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 804,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1026,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_ENABLE_FLAT_ARTWORK_TONE_HARMONIZATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
           "line": 574,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_ENABLE_FOCUS_TILE_LOW_FREQUENCY_CONSENSUS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 315,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_ENABLE_FOCUS_TILE_OWNER_TONE_HARMONIZATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 316,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_EXPOSURE_TRACE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/frame_exposure.rs",
           "line": 366,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/frame_exposure.rs",
           "line": 376,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FAILED_NATIVE_BOUNDARIES": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/native_capture.rs",
           "line": 56,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FINAL_FOCUS_SHARPEN_AMOUNT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 321,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FINAL_PANORAMA_SHARPEN_AMOUNT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 266,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 269,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
           "line": 593,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 3,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FLAT_ARTWORK_EXPOSURE_STRENGTH": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
           "line": 315,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FLAT_ARTWORK_TONE_MAX_ADJUSTMENT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/native_fusion_key.rs",
           "line": 123,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_tone.rs",
           "line": 69,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FLAT_BLEND_OVERLAPS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 899,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FLAT_OWNERSHIP_FEATHER": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 829,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/native_fusion_key.rs",
           "line": 120,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_BAND": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 133,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_BOUNDARY_CANDIDATE_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
           "line": 60,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
           "line": 95,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_BOUNDARY_DEBUG": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4686,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
           "line": 118,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_BOUNDARY_DEBUG_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4697,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_BOUNDARY_REPAIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4787,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
           "line": 76,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
           "line": 85,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
           "line": 871,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 4,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_CANDIDATE_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/focus_candidate_capture.rs",
           "line": 54,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
+            "module": "focus_candidate_capture"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_FOCUS_CANDIDATE_REQUEST": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/focus_candidate_capture.rs",
           "line": 50,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
+            "module": "focus_candidate_capture"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_FOCUS_DATA_TERM_ONLY": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/station_fusion.rs",
           "line": 290,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_FINAL_ROI_CONSTRAINTS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/score_noise_diagnostics.rs",
           "line": 80,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "score_noise_diagnostics"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/score_noise_diagnostics.rs",
           "line": 291,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "score_noise_diagnostics"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 2
     },
     "RAW_EDITOR_FOCUS_FINAL_ROI_MAPPING_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4051,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4295,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_FINAL_ROI_QUALITY_REPORT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/score_noise_diagnostics.rs",
           "line": 265,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "score_noise_diagnostics"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_FOCUS_FINAL_WORLD_OWNER_ORACLE_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4643,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture.rs",
           "line": 64,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
+            "module": "source_visual_capture"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/final_world_owner_runner.rs",
           "line": 43,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "final_world_owner_runner"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
           "line": 302,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/score_noise_diagnostics.rs",
           "line": 363,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "score_noise_diagnostics"
+          }
         }
       ],
       "count": 5,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 3
     },
     "RAW_EDITOR_FOCUS_FINAL_WORLD_OWNER_REPLAY": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/final_world_owner_runner.rs",
           "line": 864,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "final_world_owner_runner"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_FOCUS_FINAL_WORLD_OWNER_X1": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/final_world_owner_runner.rs",
           "line": 312,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "final_world_owner_runner"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_FOCUS_GRADIENT_ORACLE_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/research_diagnostics.rs",
           "line": 44,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
+            "module": "research_diagnostics"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture.rs",
           "line": 65,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
+            "module": "source_visual_capture"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 2
     },
     "RAW_EDITOR_FOCUS_GRADIENT_ORACLE_REPORT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/research_diagnostics.rs",
           "line": 41,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner.rs",
+            "module": "research_diagnostics"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture.rs",
           "line": 66,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
+            "module": "source_visual_capture"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 2
     },
     "RAW_EDITOR_FOCUS_OWNERSHIP_DEBUG": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/decisive_cells.rs",
           "line": 198,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/station_fusion.rs",
           "line": 343,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
           "line": 809,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_OWNER_QUALITY_LABEL_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/score_noise_probes.rs",
           "line": 443,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "score_noise_probes"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_FOCUS_OWNER_QUALITY_ORACLE_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
           "line": 312,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/score_noise_diagnostics.rs",
           "line": 431,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "score_noise_diagnostics"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_FOCUS_OWNER_QUALITY_PRESERVE_REGIONS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/score_noise_probes.rs",
           "line": 447,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "score_noise_probes"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_FOCUS_OWNER_STENCIL_RADIUS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/native_owner_geometry.rs",
           "line": 46,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_OWNER_UNRESOLVED_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 4056,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_PAIR_DIAGNOSTICS_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 417,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_SCORE_NOISE_DIAGNOSTICS_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
           "line": 300,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
           "line": 313,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/score_noise_diagnostics.rs",
           "line": 432,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "score_noise_diagnostics"
+          }
         }
       ],
       "count": 3,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_FOCUS_SCORE_NOISE_STATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
           "line": 308,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_SOFT_OWNER_BOUNDARY": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 313,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_STACK_PATHS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 201,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 202,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 283,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 591,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 592,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 2,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 409,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 412,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 8,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 3
     },
     "RAW_EDITOR_FOCUS_STACK_REFERENCE_JPEG": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 760,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_TONE_ALL_PIXELS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 312,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_TONE_DIAGNOSTICS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_tone.rs",
           "line": 338,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_TRANSLATION_DIAGNOSTICS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_alignment.rs",
           "line": 610,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FORCE_SOURCE_SCAN": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2330,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FORCE_STREAMING_MOSAIC": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/in_memory_mosaic.rs",
           "line": 116,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": true
+      "known_test_only": true,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FRAME_EXPOSURE_LUMA_ONLY": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/frame_exposure.rs",
           "line": 294,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/frame_exposure.rs",
           "line": 297,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_GEOMETRY_BENCH_MODE": {
       "occurrences": [
         {
           "path": "src-tauri/src/image_processing/geometry_transform_tests.rs",
           "line": 457,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_processing.rs",
+            "module": "geometry_transform_tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_GEOMETRY_OUTPUT_BENCH_MODE": {
       "occurrences": [
         {
           "path": "src-tauri/src/image_processing/geometry_transform_tests.rs",
           "line": 548,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_processing.rs",
+            "module": "geometry_transform_tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_JOINT_PRODUCTION_INPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 492,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_JOINT_PRODUCTION_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 617,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_JOINT_REPLAY_INPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp/tests.rs",
           "line": 6,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_JOINT_WARP_INPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp/tests.rs",
           "line": 384,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_JOINT_WARP_OPTIMIZE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp/tests.rs",
           "line": 425,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_JOINT_WARP_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp/tests.rs",
           "line": 385,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/joint_warp.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_LAYER_PROBE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 494,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 508,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 2
     },
     "RAW_EDITOR_LEGACY_ARTWORK_TONE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 758,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_LEGACY_SOURCE_OWNER_CORRECTION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1017,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_LOCAL_TONE_CANDIDATE_REPORT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 145,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_LOCAL_TONE_FIELDS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 108,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_LOCAL_TONE_NATIVE_PROOF": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 124,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_LOCAL_TONE_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 364,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_LOCAL_TONE_PLANNED_OWNERS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 230,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_LOCAL_TONE_ROI_JSON": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 237,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_LOCAL_TONE_USE_SAVED_OWNERS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 211,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_LOCAL_TONE_WITNESS_WINDOW": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 267,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_MASK_BENCH_MODE": {
       "occurrences": [
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 557,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_MASK_COMPOSITION_BENCH_MODE": {
       "occurrences": [
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 441,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_MATCHED_ARTWORK_TONE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 757,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1131,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_MOSAIC_DIAGNOSTICS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 9,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_MOSAIC_PREVIEW_INPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/tests/tone_harmonization.rs",
           "line": 315,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/tests/tone_harmonization.rs",
           "line": 316,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 2,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 2
     },
     "RAW_EDITOR_MOSAIC_PREVIEW_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/tests/tone_harmonization.rs",
           "line": 317,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/tests/tone_harmonization.rs",
           "line": 318,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 2,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 2
     },
     "RAW_EDITOR_MOSAIC_REPLAY": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 121,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_MOSAIC_REPLAY_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 130,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_MOSAIC_RESELECT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 295,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_MOSAIC_ROI": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 122,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_NATIVE_CONTOUR_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 79,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_CONTOUR_VIEWS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 55,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_GRADIENT_DIAGNOSTICS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/native_capture.rs",
           "line": 16,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_GRADIENT_ROIS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/native_capture.rs",
           "line": 20,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_POINT_TRACE_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/native_point_trace.rs",
           "line": 124,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "native_point_trace"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_NATIVE_POINT_TRACE_INPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_point_evidence.rs",
           "line": 74,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/native_point_trace.rs",
           "line": 123,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "native_point_trace"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_NATIVE_PROOF_DIAGNOSTICS_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3221,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_geometry_repair.rs",
           "line": 363,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_STATION_ALIGNMENT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 150,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_STATION_DIAGNOSTIC_JSON": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 177,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_STATION_EDGE_DIAGNOSTICS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 348,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_STATION_INDEX": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 153,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_STATION_NO_GENERIC_WARP": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 265,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 457,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_STATION_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 157,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_STATION_PRODUCTION_NORMALIZATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 161,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_STATION_ROI": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 534,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_NATIVE_STATION_SKIP_ARTIFACTS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 159,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_ORDERED_PANORAMA_ALIGNMENT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
           "line": 45,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
           "line": 665,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_ORDERED_PANORAMA_BLEND": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
           "line": 48,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
           "line": 669,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_ORDERED_PANORAMA_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
           "line": 7,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
           "line": 9,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 572,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 3,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_ORDERED_PANORAMA_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
           "line": 722,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_ORDERED_PANORAMA_PREVIEW": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
           "line": 715,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_ORDERED_PANORAMA_REVERSE_INPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/ordered_panorama.rs",
           "line": 30,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_ORTHOGONAL_GEOMETRY_OUTPUT_BENCH_MODE": {
       "occurrences": [
         {
           "path": "src-tauri/src/image_processing/geometry_transform_tests.rs",
           "line": 560,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_processing.rs",
+            "module": "geometry_transform_tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_OWNERSHIP_TRACE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/source_ownership.rs",
           "line": 815,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/source_ownership.rs",
           "line": 838,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 397,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 413,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         }
       ],
       "count": 4,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 2
     },
     "RAW_EDITOR_PREPARED_DUMP_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 932,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 943,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 944,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 3,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_PREPARED_DUMP_PATHS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 929,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 937,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 938,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 3,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_PREPARED_DUMP_SCALE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 931,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 946,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_PROGRESSIVE_EXPOSURE_STRENGTH": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
           "line": 321,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_PSD_FIXTURE": {
       "occurrences": [
         {
           "path": "src-tauri/src/image_loader/color_profile_tests.rs",
           "line": 126,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_loader.rs",
+            "module": "color_profile_tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_QG_SOURCE_VISUAL_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture.rs",
           "line": 62,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
+            "module": "source_visual_capture"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_QG_SOURCE_VISUAL_MAX_ROIS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture.rs",
           "line": 77,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
+            "module": "source_visual_capture"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_QG_SOURCE_VISUAL_PROFILE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_capture.rs",
           "line": 75,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
+            "module": "source_visual_capture"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_RANGE_MASK_BENCH_MODE": {
       "occurrences": [
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 21,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_RANGE_SOURCE_BENCH_MODE": {
       "occurrences": [
         {
           "path": "src-tauri/src/mask_generation/tests/large_mask_harnesses.rs",
           "line": 154,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/mask_generation.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_RAW_HANDOFF_BENCH_MODE": {
       "occurrences": [
         {
           "path": "src-tauri/src/raw_processing.rs",
           "line": 423,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_REFERENCE_MANIFEST": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 241,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 242,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 335,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 356,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         }
       ],
       "count": 4,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 4
     },
     "RAW_EDITOR_REFERENCE_RENDER_SCALE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 232,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_REFERENCE_REPLAY_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_acceptance_metrics.rs",
           "line": 787,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "acceptance_metrics"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_REFERENCE_REPLAY_REFERENCE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_acceptance_metrics.rs",
           "line": 788,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "acceptance_metrics"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_REFERENCE_REPLAY_RESULT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_acceptance_metrics.rs",
           "line": 789,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "acceptance_metrics"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_REFERENCE_REPLAY_SCALE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_acceptance_metrics.rs",
           "line": 790,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "acceptance_metrics"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_REFERENCE_WORKDIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 215,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 216,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 283,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 335,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         }
       ],
       "count": 4,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 4
     },
     "RAW_EDITOR_REPAIR_CROPS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 934,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 937,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 2
     },
     "RAW_EDITOR_REPAIR_PROBE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 872,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 885,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 2
     },
     "RAW_EDITOR_REPAIR_TRACE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1098,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
           "line": 777,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_SCAN_MOSAIC_DIAGNOSTICS_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/scan_mosaic/compositor.rs",
           "line": 352,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SCAN_SETTINGS_DIRS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/captures.rs",
           "line": 425,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/captures.rs",
           "line": 429,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/captures.rs",
           "line": 430,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 3,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SEAM_GRID": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 423,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SEAM_REPLAY_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 477,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SKIP_FLAT_ARTWORK_TONE_HARMONIZATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
           "line": 575,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SKIP_FLAT_SEAM_HARMONIZATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1008,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SKIP_FLAT_TONE_CORRECTION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 750,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 759,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SKIP_FOCUS_TILE_EXPOSURE_GAIN": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 314,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SKIP_FOCUS_TONE_HARMONIZATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
           "line": 317,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SKIP_FRAME_EXPOSURE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 219,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 222,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SKIP_PROGRESSIVE_EXPOSURE_GAIN": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
           "line": 291,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SKIP_PROGRESSIVE_SPATIAL_EXPOSURE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
           "line": 343,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SKIP_SOURCE_OWNER_CORRECTION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 1016,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 165,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 217,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
@@ -2681,304 +3629,408 @@
         "shared_or_production_source",
         "test_harness_module"
       ],
-      "known_test_only": true
+      "known_test_only": true,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SKIP_STREAMING_ILLUMINATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 992,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_SOFT_REGIONS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/soft_report.rs",
           "line": 365,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_ALIGNMENT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/entry_point_fixtures.rs",
           "line": 138,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 601,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_BLEND": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 605,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_COVERAGE_ALPHA": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 643,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_CROPS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 670,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_GROUP_REPRESENTATIVES": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2069,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_METRICS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 732,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_METRICS_LONG_SIDE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 736,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_METRICS_REFERENCE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 735,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 356,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 473,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         },
         {
           "path": "src-tauri/src/panorama_reference_acceptance.rs",
           "line": 474,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_stitching.rs",
+            "module": "reference_acceptance"
+          }
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/entry_point_fixtures.rs",
           "line": 158,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 634,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 5,
       "scopes": [
-        "shared_or_production_source",
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 3
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_PREVIEW_EDGE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 652,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_PREVIEW_ONLY": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 651,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_RENDER_SCALE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2051,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_REPORT_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 233,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 235,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 104,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 106,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         }
       ],
       "count": 4,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 2
     },
     "RAW_EDITOR_STACK_ACCEPTANCE_SOURCE_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 101,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 103,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 164,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 166,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         }
       ],
       "count": 4,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 4
     },
     "RAW_EDITOR_STACK_ALIGNMENT_CACHE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 803,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 805,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2015,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 3,
@@ -2986,62 +4038,79 @@
         "shared_or_production_source",
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_ALIGNMENT_ONLY": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2030,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_DISABLE_NATIVE_PATCH_REFINEMENT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/native_fusion_key.rs",
           "line": 122,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/registration.rs",
           "line": 14,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/registration.rs",
           "line": 20,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/registration.rs",
           "line": 284,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 4,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": true
+      "known_test_only": true,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_DISABLE_NATIVE_PREFILTER": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 176,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/native_control_points.rs",
           "line": 340,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
@@ -3049,171 +4118,247 @@
         "shared_or_production_source",
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_EXPORT_OUTPUT_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/image_stack/tests.rs",
           "line": 852,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_stack/output_encoding.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/image_stack/tests.rs",
           "line": 857,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_stack/output_encoding.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/image_stack/tests.rs",
           "line": 859,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_stack/output_encoding.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 3,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 3
     },
     "RAW_EDITOR_STACK_EXPORT_SOURCE": {
       "occurrences": [
         {
           "path": "src-tauri/src/image_stack/tests.rs",
           "line": 852,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_stack/output_encoding.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/image_stack/tests.rs",
           "line": 854,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_stack/output_encoding.rs",
+            "module": "tests"
+          }
         },
         {
           "path": "src-tauri/src/image_stack/tests.rs",
           "line": 856,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/image_stack/output_encoding.rs",
+            "module": "tests"
+          }
         }
       ],
       "count": 3,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 3
     },
     "RAW_EDITOR_STACK_FORCE_SEQUENCE_GEOMETRY": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/focus_stack_order.rs",
           "line": 121,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_GROUP_DIAGNOSTICS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_station_solver.rs",
           "line": 115,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_station_solver.rs",
           "line": 487,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_NATIVE_FUSION_CACHE_MAX_BYTES": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/native_fusion_cache.rs",
           "line": 38,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_PAIR_CASES": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 178,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_STACK_PAIR_HARNESS_STOP_AFTER_RELATIONS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 1477,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3475,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 194,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         }
       ],
       "count": 3,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_STACK_PAIR_REPORT_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 167,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 169,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 2
     },
     "RAW_EDITOR_STACK_RAW_FIXED_GAIN": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 166,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 204,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
@@ -3221,817 +4366,1035 @@
         "shared_or_production_source",
         "test_harness_module"
       ],
-      "known_test_only": true
+      "known_test_only": true,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_REPORT_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2689,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2692,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 272,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 116,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 210,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 340,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/report_io.rs",
           "line": 20,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 7,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 3
     },
     "RAW_EDITOR_STACK_SEAM_DIAGNOSTICS_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_diagnostics.rs",
           "line": 69,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "station_seam_diagnostics"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_STACK_SEQUENCE_ONLY": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 1116,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_SOURCE_RAW_DIRECT_DIAGNOSTICS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 1811,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 202,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_STACK_SOURCE_RAW_DIRECT_STAGE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 170,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         }
       ],
       "count": 1,
       "scopes": [
-        "shared_or_production_source"
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_STACK_SOURCE_RAW_LAYER_DIAGNOSTICS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 1797,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 195,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_STACK_SOURCE_RENDER_CACHE_MAX_BYTES": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/source_render_cache.rs",
           "line": 199,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_STRUCTURAL_ORACLE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 2680,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
           "line": 201,
-          "scope": "shared_or_production_source"
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          }
         }
       ],
       "count": 2,
       "scopes": [
-        "shared_or_production_source"
+        "shared_or_production_source",
+        "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 1
     },
     "RAW_EDITOR_STACK_TARGETED_SOURCE_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 228,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 230,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STACK_TARGETED_SOURCE_NAMES": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 249,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
           "line": 250,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STATION_": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/native_fusion_key.rs",
           "line": 121,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STATION_LOCAL_RELATION_RESAMPLE_BAND_PX": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_sampling.rs",
           "line": 168,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STATION_LOCAL_RELATION_RESAMPLE_PAIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3318,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_sampling.rs",
           "line": 110,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_sampling.rs",
           "line": 136,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 3,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STATION_OWNER_TRACE_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_apply.rs",
           "line": 31,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STATION_OWNER_TRACE_REGION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_apply.rs",
           "line": 42,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STATION_SEAM_EDGE_STRENGTH_WEIGHT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_sampling.rs",
           "line": 176,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STATION_SHARPNESS_TRACE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_entry.rs",
           "line": 496,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STATION_TRANSITION_TRACE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/station_seam_apply.rs",
           "line": 341,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3539,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3554,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 74,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 3,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STREAMING_OWNER_MAP": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
           "line": 952,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TEST_FOCUS_GROUP_SCALE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 152,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TEST_FOCUS_GROUP_SOURCE_ID": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 146,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TEST_MODE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3536,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 3550,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TEST_OWNER_GAIN_DIAGNOSTICS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic/owner_overlap_gain.rs",
           "line": 140,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TEST_SOURCE_RESAMPLE_DIVISOR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic.rs",
           "line": 389,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": true
+      "known_test_only": true,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TEST_SOURCE_RESAMPLE_PATH": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/mosaic.rs",
           "line": 377,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": true
+      "known_test_only": true,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TEST_STATION_JACOBIAN_SCALE": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
           "line": 243,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_COUNT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 35,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 33,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_FACTORS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 43,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_INITIAL_POSES": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 321,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_JOINT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 355,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_MANIFEST": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 11,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_NATIVE_CORRELATION": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_pyramid_match.rs",
           "line": 483,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_NATIVE_PEAK_MARGIN": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_pyramid_match.rs",
           "line": 488,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_NATIVE_ROUND_TRIP": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 219,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_NATIVE_ROUND_TRIP_HALF": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 107,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_NATIVE_ROUND_TRIP_SIGMA": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 93,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_NATIVE_SIGMA": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_planes.rs",
           "line": 462,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_PAIRS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 113,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_POLISH": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 196,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_POLISH_BLUR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 127,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_QUALITY_FACTORS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 134,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_SEED_POSES": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/pair_diagnostics.rs",
           "line": 142,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TILE_REPLAY_TEMPLATE_HALF": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_polish.rs",
           "line": 149,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TONE_DIAGNOSTICS_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs",
           "line": 589,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/test_support.rs",
           "line": 51,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TONE_FIELDS_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 426,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TONE_OWNER_FIDELITY_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/test_support.rs",
           "line": 56,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TONE_PAIR_FIELDS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 89,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_TONE_PAIR_OUTPUT": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/acceptance_tests/saved_native_replays.rs",
           "line": 98,
-          "scope": "test_harness_module"
+          "scope": "test_harness_module",
+          "path_heuristic_test": true,
+          "parent_cfg_test": null
         }
       ],
       "count": 1,
       "scopes": [
         "test_harness_module"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_VIRTUAL_TILE_DIAGNOSTICS_DIR": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_geometry_repair.rs",
           "line": 364,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         },
         {
           "path": "src-tauri/src/panorama_stitching/virtual_tile_planes.rs",
           "line": 663,
-          "scope": "shared_or_production_source"
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null
         }
       ],
       "count": 2,
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false
+      "known_test_only": false,
+      "parent_cfg_test_occurrences": 0
     }
   },
   "remaining": [
     "review shared_or_production_source names one by one; do not delete preview, Stack_Report, resource-budget or comparison-path contracts by name alone",
     "RAW_EDITOR_FINAL_PANORAMA_SHARPEN_AMOUNT remains an explicit legacy comparison-path decision",
-    "acceptance/diagnostic modules need a parent-module cfg(test) audit beyond path-name heuristics"
+    "shared/production names still need one-by-one ownership review; path and parent cfg(test) classification is evidence, not a release gate"
   ],
   "decision": "inventory only; keep N0.3 open until the review candidates have explicit ownership and build-boundary evidence"
 }
