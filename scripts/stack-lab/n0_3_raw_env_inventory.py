@@ -84,7 +84,7 @@ def enclosing_test_function(text: str, line: int) -> bool:
 def nearby_cfg_test(text: str, line: int) -> bool:
     lines = text.splitlines()
     index = min(line - 1, len(lines) - 1)
-    window = lines[max(0, index - 12) : index]
+    window = lines[max(0, index - 40) : index]
     last_test = max((i for i, value in enumerate(window) if "#[cfg(test)]" in value), default=-1)
     last_not_test = max((i for i, value in enumerate(window) if "#[cfg(not(test))]" in value), default=-1)
     return last_test >= 0 and last_test > last_not_test

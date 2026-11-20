@@ -26,7 +26,7 @@
 
 - [x] **N0.1** 建立输入manifest、参考图digest、工作区快照和keep/adapt/test-only/exclude分流；v28已验收源码固定到独立本地分支，未覆盖当前WIP。
 - [x] **N0.2** 恢复并保护兰亭45张legacy成片行为，保留不一致的裁切/质量诊断；2026-11-03完成编译、契约、库测试、Web检查、macOS构建和单图桌面冒烟的范围化集成。
-- [ ] **N0.3** 清理生产源码中的raw/preview/命令报告引用及实验artifact；当前新增WIP也须登记归属。2026-11-20先收口三项 RAW display 开关、五项 focus/station/boundary 诊断及两项 ownership/gain 日志诊断，当前审计10/10通过；环境读取仅在 `cfg(test)` helper/local binding，release 固定为 `None/false`；完整盘点记录238个变量、366处读取，parent/local `cfg(test)` 解析将125处归入测试边界，剩44个变量仍在 shared/production review scope，需逐项核对；preview 与 Stack_Report 字段保留为产品契约，legacy sharpen knob 仍待处理。见 [N0.3 audit](../benchmarks/n0-3-production-artifact-audit.json) 和 [RAW env inventory](../benchmarks/n0-3-raw-env-inventory.json)。清理引用不意味着删除用户素材、其他修改或历史证据。
+- [x] **N0.3** 清理生产源码中的raw/preview/命令报告引用及实验artifact；2026-11-20完成三项 RAW display 开关、五项 focus/station/boundary 诊断、两项 ownership/gain 日志诊断的 test-only 边界收口；238个变量、366处读取经 parent/local `cfg(test)` 解析和逐项 review matrix 归属，41/41 shared/production 名称均明确为产品输出、资源预算、诊断证据或 legacy comparison control。legacy comparison 保持在默认 layered production path 之外，preview/Stack_Report/资源预算保留为产品契约。见 [N0.3 audit](../benchmarks/n0-3-production-artifact-audit.json)、[RAW env inventory](../benchmarks/n0-3-raw-env-inventory.json) 和 [review matrix](../benchmarks/n0-3-shared-review-matrix.json)。
 
 <a id="n1"></a>
 

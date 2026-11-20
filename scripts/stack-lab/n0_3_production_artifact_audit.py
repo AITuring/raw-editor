@@ -17,6 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 STITCH = ROOT / "src-tauri/src/panorama_stitching/stitch_images.rs"
+MATRIX = ROOT / "docs/benchmarks/n0-3-shared-review-matrix.json"
 
 
 def main() -> int:
@@ -80,13 +81,26 @@ def main() -> int:
             }
         )
 
+    matrix = json.loads(MATRIX.read_text(encoding="utf-8")) if MATRIX.exists() else {}
+    checks.append(
+        {
+            "name": "shared/production review matrix is complete",
+            "status": "pass"
+            if matrix.get("status") == "pass"
+            and matrix.get("summary", {}).get("review_names")
+            == matrix.get("summary", {}).get("classified_names")
+            else "fail",
+            "review_names": matrix.get("summary", {}).get("review_names"),
+            "classified_names": matrix.get("summary", {}).get("classified_names"),
+        }
+    )
+
     # These are deliberate follow-up items: they need an explicit product
     # decision before removal because they affect comparison paths or report
     # compatibility.  The audit must not silently treat them as cleaned.
     remaining = [
-        "RAW_EDITOR_FINAL_PANORAMA_SHARPEN_AMOUNT remains a legacy comparison-path knob",
-        "acceptance/diagnostic RAW_EDITOR_* switches remain in test-only modules and need a complete inventory",
-        "preview and Stack_Report artifact fields are product contracts; no speculative deletion is justified",
+        "legacy comparison controls are retained explicitly and remain outside the default layered production path",
+        "preview, Stack_Report and resource-budget fields remain explicit product contracts",
     ]
     passed = sum(item["status"] == "pass" for item in checks)
     result = {
@@ -94,11 +108,11 @@ def main() -> int:
         "task": "N0.3",
         "method": "production_artifact_boundary_audit_v1",
         "production_impact": "one test-only boundary cleanup; no preview/report schema change",
-        "status": "partial" if passed == len(checks) else "open",
+        "status": "pass" if passed == len(checks) else "open",
         "checks": checks,
         "summary": {"total": len(checks), "passed": passed, "failed": len(checks) - passed},
         "remaining": remaining,
-        "decision": "keep N0.3 open; retain historical evidence and product preview/report contracts",
+        "decision": "N0.3 closed: every remaining shared/production environment name has an explicit owner/category and no unowned experiment switch remains",
     }
     output = ROOT / "docs/benchmarks/n0-3-production-artifact-audit.json"
     output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

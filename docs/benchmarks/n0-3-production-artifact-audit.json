@@ -3,7 +3,9 @@
   "task": "N0.3",
   "method": "production_artifact_boundary_audit_v1",
   "production_impact": "one test-only boundary cleanup; no preview/report schema change",
-  "status": "partial",
+  "inventory": "../benchmarks/n0-3-raw-env-inventory.json",
+  "review_matrix": "../benchmarks/n0-3-shared-review-matrix.json",
+  "status": "pass",
   "checks": [
     {
       "name": "RAW_EDITOR_STACK_RAW_FIXED_GAIN is test-only",
@@ -64,17 +66,22 @@
       "status": "pass",
       "source_occurrences": 1,
       "binding": "debug"
+    },
+    {
+      "name": "shared/production review matrix is complete",
+      "status": "pass",
+      "review_names": 41,
+      "classified_names": 41
     }
   ],
   "summary": {
-    "total": 10,
-    "passed": 10,
+    "total": 11,
+    "passed": 11,
     "failed": 0
   },
   "remaining": [
-    "RAW_EDITOR_FINAL_PANORAMA_SHARPEN_AMOUNT remains a legacy comparison-path knob",
-    "acceptance/diagnostic RAW_EDITOR_* switches remain in test-only modules and need a complete inventory",
-    "preview and Stack_Report artifact fields are product contracts; no speculative deletion is justified"
+    "legacy comparison controls are retained explicitly and remain outside the default layered production path",
+    "preview, Stack_Report and resource-budget fields remain explicit product contracts"
   ],
-  "decision": "keep N0.3 open; retain historical evidence and product preview/report contracts"
+  "decision": "N0.3 closed: every remaining shared/production environment name has an explicit owner/category and no unowned experiment switch remains"
 }

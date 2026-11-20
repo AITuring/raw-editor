@@ -1,0 +1,979 @@
+{
+  "schema": 1,
+  "task": "N0.3",
+  "method": "shared_environment_review_matrix_v1",
+  "production_impact": "read_only_ownership_matrix_no_algorithm_change",
+  "status": "pass",
+  "summary": {
+    "review_names": 41,
+    "classified_names": 41,
+    "category_counts": {
+      "product_output_contract": 2,
+      "legacy_comparison_control": 32,
+      "diagnostic_evidence_contract": 5,
+      "resource_budget_contract": 2
+    }
+  },
+  "records": [
+    {
+      "name": "RAW_EDITOR_ARTWORK_FRAMED_OUTPUT",
+      "category": "product_output_contract",
+      "owner": "product output/report path",
+      "decision": "retain as an explicit output/report contract; do not treat it as a research gate",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 1149,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_ENABLE_ARTWORK_ILLUMINATION",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 994,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 1132,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_ENABLE_FINAL_LOW_FREQUENCY_ILLUMINATION",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+          "line": 319,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_ENABLE_FLAT_ARTWORK_CONSENSUS",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 804,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 1026,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_ENABLE_FLAT_ARTWORK_TONE_HARMONIZATION",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
+          "line": 574,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_ENABLE_FOCUS_TILE_LOW_FREQUENCY_CONSENSUS",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+          "line": 315,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_ENABLE_FOCUS_TILE_OWNER_TONE_HARMONIZATION",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+          "line": 316,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_EXPOSURE_TRACE",
+      "category": "diagnostic_evidence_contract",
+      "owner": "test/diagnostic evidence artifact",
+      "decision": "retain only for evidence output; it must not alter production pixels, owners or geometry",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/frame_exposure.rs",
+          "line": 366,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/frame_exposure.rs",
+          "line": 376,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": true
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_FINAL_FOCUS_SHARPEN_AMOUNT",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+          "line": 321,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_FINAL_PANORAMA_SHARPEN_AMOUNT",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+          "line": 266,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+          "line": 269,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
+          "line": 593,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_FLAT_ARTWORK_EXPOSURE_STRENGTH",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
+          "line": 315,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_FLAT_ARTWORK_TONE_MAX_ADJUSTMENT",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_stitching/native_fusion_key.rs",
+          "line": 123,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/focus_tone.rs",
+          "line": 69,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_FLAT_BLEND_OVERLAPS",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 899,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_FLAT_OWNERSHIP_FEATHER",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 829,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_FOCUS_BOUNDARY_CANDIDATE_DIR",
+      "category": "diagnostic_evidence_contract",
+      "owner": "test/diagnostic evidence artifact",
+      "decision": "retain only for evidence output; it must not alter production pixels, owners or geometry",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
+          "line": 60,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_pairs.rs",
+          "line": 95,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_FOCUS_BOUNDARY_REPAIR",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+          "line": 4787,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
+          "line": 76,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
+          "line": 85,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
+          "line": 874,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_FOCUS_SOFT_OWNER_BOUNDARY",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+          "line": 313,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_FOCUS_TONE_ALL_PIXELS",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+          "line": 312,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_FRAME_EXPOSURE_LUMA_ONLY",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/frame_exposure.rs",
+          "line": 294,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/frame_exposure.rs",
+          "line": 297,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_LEGACY_ARTWORK_TONE",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 758,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_LEGACY_SOURCE_OWNER_CORRECTION",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 1017,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_MATCHED_ARTWORK_TONE",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 757,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 1131,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_NATIVE_POINT_TRACE_INPUT",
+      "category": "diagnostic_evidence_contract",
+      "owner": "test/diagnostic evidence artifact",
+      "decision": "retain only for evidence output; it must not alter production pixels, owners or geometry",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/source_visual_point_evidence.rs",
+          "line": 74,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/native_point_trace.rs",
+          "line": 123,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stitching.rs",
+            "module": "native_point_trace"
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_OWNERSHIP_TRACE",
+      "category": "diagnostic_evidence_contract",
+      "owner": "test/diagnostic evidence artifact",
+      "decision": "retain only for evidence output; it must not alter production pixels, owners or geometry",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/source_ownership.rs",
+          "line": 815,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/source_ownership.rs",
+          "line": 838,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
+          "line": 397,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic_diagnostics.rs",
+          "line": 413,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/mosaic.rs",
+            "module": "diagnostics"
+          },
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_PROGRESSIVE_EXPOSURE_STRENGTH",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
+          "line": 321,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_SKIP_FLAT_ARTWORK_TONE_HARMONIZATION",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
+          "line": 575,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_SKIP_FLAT_SEAM_HARMONIZATION",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 1008,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_SKIP_FLAT_TONE_CORRECTION",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 750,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 759,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_SKIP_FOCUS_TILE_EXPOSURE_GAIN",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+          "line": 314,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_SKIP_FOCUS_TONE_HARMONIZATION",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/layered_compositor.rs",
+          "line": 317,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_SKIP_PROGRESSIVE_EXPOSURE_GAIN",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
+          "line": 291,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_SKIP_PROGRESSIVE_SPATIAL_EXPOSURE",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/progressive_seam.rs",
+          "line": 343,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_SKIP_SOURCE_OWNER_CORRECTION",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 1016,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_SKIP_STREAMING_ILLUMINATION",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 992,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_STACK_NATIVE_FUSION_CACHE_MAX_BYTES",
+      "category": "resource_budget_contract",
+      "owner": "production resource budget",
+      "decision": "retain as an explicit bounded cache/input budget; it does not select pixels or owners",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_stitching/native_fusion_cache.rs",
+          "line": 38,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_STACK_REPORT_DIR",
+      "category": "product_output_contract",
+      "owner": "product output/report path",
+      "decision": "retain as an explicit output/report contract; do not treat it as a research gate",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+          "line": 2689,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
+        },
+        {
+          "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+          "line": 2692,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stack_pipeline/properties/acceptance_inputs.rs",
+          "line": 272,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
+          "line": 116,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
+          "line": 210,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stack_pipeline/properties.rs",
+          "line": 340,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": {
+            "parent": "src-tauri/src/panorama_utils/stack_pipeline/mod.rs",
+            "module": "properties"
+          },
+          "enclosing_test_function": true,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stack_pipeline/report_io.rs",
+          "line": 20,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_STACK_SOURCE_RENDER_CACHE_MAX_BYTES",
+      "category": "resource_budget_contract",
+      "owner": "production resource budget",
+      "decision": "retain as an explicit bounded cache/input budget; it does not select pixels or owners",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_stitching/source_render_cache.rs",
+          "line": 199,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_STATION_LOCAL_RELATION_RESAMPLE_BAND_PX",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/station_seam_sampling.rs",
+          "line": 168,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_STATION_LOCAL_RELATION_RESAMPLE_PAIR",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+          "line": 3318,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/station_seam_sampling.rs",
+          "line": 110,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/station_seam_sampling.rs",
+          "line": 136,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_STATION_SEAM_EDGE_STRENGTH_WEIGHT",
+      "category": "legacy_comparison_control",
+      "owner": "explicit legacy/comparison path",
+      "decision": "retain behind the selected comparison path; the default layered production path does not depend on this switch",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_utils/stitching/station_seam_sampling.rs",
+          "line": 176,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    },
+    {
+      "name": "RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR",
+      "category": "diagnostic_evidence_contract",
+      "owner": "test/diagnostic evidence artifact",
+      "decision": "retain only for evidence output; it must not alter production pixels, owners or geometry",
+      "occurrences": [
+        {
+          "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+          "line": 3539,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
+        },
+        {
+          "path": "src-tauri/src/panorama_stitching/stitch_images.rs",
+          "line": 3554,
+          "scope": "test_harness_module",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": true
+        },
+        {
+          "path": "src-tauri/src/panorama_utils/mosaic/streaming_mosaic.rs",
+          "line": 74,
+          "scope": "shared_or_production_source",
+          "path_heuristic_test": false,
+          "parent_cfg_test": null,
+          "enclosing_test_function": false,
+          "nearby_cfg_test": false
+        }
+      ]
+    }
+  ],
+  "decision": "all remaining shared/production environment names have an explicit owner and retention rule; no unowned experiment switch remains",
+  "release_boundary": "legacy comparison controls remain outside the default layered production path; diagnostic contracts do not alter pixels, owners or geometry"
+}
