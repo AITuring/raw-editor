@@ -4,11 +4,19 @@
   "method": "post_baseline_scope_audit_v1",
   "production_impact": "read_only_commit_scope_audit_no_code_change",
   "baseline": "f582825f",
-  "head": "00879de4caef0cff51e70895a469941b431eb47a",
-  "remote": "00879de4caef0cff51e70895a469941b431eb47a",
-  "worktree_clean": false,
+  "head": "040288d062d5842fccfd9da3f6c9719fb6e533c6",
+  "remote": "040288d062d5842fccfd9da3f6c9719fb6e533c6",
+  "worktree_clean": true,
   "remote_matches_head": true,
   "commits": [
+    {
+      "sha": "040288d062d5842fccfd9da3f6c9719fb6e533c6",
+      "subject": "make ENG.5 scope audit self consistent"
+    },
+    {
+      "sha": "e9b850322f1931f46ccbc41d094db7c0a31770bb",
+      "subject": "audit post baseline release scope"
+    },
     {
       "sha": "00879de4caef0cff51e70895a469941b431eb47a",
       "subject": "audit ENG.4 clippy and release signing"
@@ -37,6 +45,7 @@
   "changed_files": [
     "docs/benchmarks/eng3-desktop-acceptance-audit.json",
     "docs/benchmarks/eng4-release-audit.json",
+    "docs/benchmarks/eng5-scope-audit.json",
     "docs/benchmarks/n0-3-production-artifact-audit.json",
     "docs/benchmarks/n0-3-raw-env-inventory.json",
     "docs/benchmarks/n0-3-shared-review-matrix.json",
@@ -47,6 +56,7 @@
     "docs/tasks/engineering.md",
     "scripts/stack-lab/eng3_desktop_acceptance_audit.py",
     "scripts/stack-lab/eng4_release_audit.py",
+    "scripts/stack-lab/eng5_scope_audit.py",
     "scripts/stack-lab/n0_3_production_artifact_audit.py",
     "scripts/stack-lab/n0_3_raw_env_inventory.py",
     "scripts/stack-lab/n0_3_shared_review_matrix.py",
@@ -57,5 +67,5 @@
     "tests/focus-stack-quality-contract.mjs"
   ],
   "decision": "scope is reviewed and remotely synchronized; release publication still requires the separate ENG.4 signing/distribution gates",
-  "status": "open"
+  "status": "pass"
 }
