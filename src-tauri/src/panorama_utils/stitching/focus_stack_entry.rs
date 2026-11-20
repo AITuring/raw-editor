@@ -493,7 +493,11 @@ pub(super) fn order_focus_station_frames<'a>(
     let mut ordered = Vec::with_capacity(images.len());
     ordered.push(anchor);
     ordered.extend(scored.into_iter().map(|(image, _)| image));
-    if std::env::var_os("RAW_EDITOR_STATION_SHARPNESS_TRACE").is_some() {
+    #[cfg(test)]
+    let sharpness_trace = std::env::var_os("RAW_EDITOR_STATION_SHARPNESS_TRACE").is_some();
+    #[cfg(not(test))]
+    let sharpness_trace = false;
+    if sharpness_trace {
         let detail = ordered
             .iter()
             .map(|image| {

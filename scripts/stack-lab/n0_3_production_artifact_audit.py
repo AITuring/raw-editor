@@ -11,6 +11,7 @@ remaining legacy knobs explicit instead of deleting them speculatively.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 
@@ -21,34 +22,51 @@ STITCH = ROOT / "src-tauri/src/panorama_stitching/stitch_images.rs"
 def main() -> int:
     checks = []
     switches = {
-        "RAW_EDITOR_STACK_RAW_FIXED_GAIN": (STITCH, "test_stack_raw_fixed_gain"),
-        "RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION": (STITCH, "test_skip_stack_raw_exposure_normalization"),
-        "RAW_EDITOR_DISABLE_SHARED_RAW_NORMALIZATION": (STITCH, "test_disable_shared_raw_normalization"),
+        "RAW_EDITOR_STACK_RAW_FIXED_GAIN": (STITCH, "fn", "test_stack_raw_fixed_gain"),
+        "RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION": (STITCH, "fn", "test_skip_stack_raw_exposure_normalization"),
+        "RAW_EDITOR_DISABLE_SHARED_RAW_NORMALIZATION": (STITCH, "fn", "test_disable_shared_raw_normalization"),
         "RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS": (
             ROOT / "src-tauri/src/panorama_utils/stitching/focus_stack_stitcher.rs",
+            "let",
             "ownership_diagnostics",
         ),
+        "RAW_EDITOR_FOCUS_TRANSLATION_DIAGNOSTICS": (
+            ROOT / "src-tauri/src/panorama_utils/stitching/focus_alignment.rs",
+            "let",
+            "translation_diagnostics",
+        ),
+        "RAW_EDITOR_FOCUS_TONE_DIAGNOSTICS": (
+            ROOT / "src-tauri/src/panorama_utils/stitching/focus_tone.rs",
+            "let",
+            "tone_diagnostics",
+        ),
+        "RAW_EDITOR_STATION_SHARPNESS_TRACE": (
+            ROOT / "src-tauri/src/panorama_utils/stitching/focus_stack_entry.rs",
+            "let",
+            "sharpness_trace",
+        ),
+        "RAW_EDITOR_FOCUS_BOUNDARY_DEBUG": (
+            ROOT / "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
+            "let",
+            "debug_local_relation",
+        ),
     }
-    for env_name, (source_path, helper) in switches.items():
+    for env_name, (source_path, mode, symbol) in switches.items():
         source = source_path.read_text(encoding="utf-8")
         count = source.count(env_name)
         helper_guarded = (
-            (
-                f"#[cfg(test)]\nfn {helper}" in source
-                and f"#[cfg(not(test))]\nfn {helper}" in source
-            )
-            if helper != "ownership_diagnostics"
-            else (
-                "#[cfg(test)]\n    let ownership_diagnostics" in source
-                and "#[cfg(not(test))]\n    let ownership_diagnostics" in source
-            )
+            f"#[cfg(test)]\nfn {symbol}" in source
+            and f"#[cfg(not(test))]\nfn {symbol}" in source
+            if mode == "fn"
+            else re.search(rf"#\[cfg\(test\)\]\s+let {symbol}\b", source) is not None
+            and re.search(rf"#\[cfg\(not\(test\)\)\]\s+let {symbol}\b", source) is not None
         )
         checks.append(
             {
                 "name": f"{env_name} is test-only",
                 "status": "pass" if count == 1 and helper_guarded else "fail",
                 "source_occurrences": count,
-                "helper": helper,
+                "binding": symbol,
             }
         )
 

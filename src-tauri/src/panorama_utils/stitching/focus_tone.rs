@@ -335,7 +335,11 @@ pub(super) fn harmonize_focus_background_tone_with_owners(
             corrected_owner_count += 1;
         }
     }
-    if std::env::var_os("RAW_EDITOR_FOCUS_TONE_DIAGNOSTICS").is_some() {
+    #[cfg(test)]
+    let tone_diagnostics = std::env::var_os("RAW_EDITOR_FOCUS_TONE_DIAGNOSTICS").is_some();
+    #[cfg(not(test))]
+    let tone_diagnostics = false;
+    if tone_diagnostics {
         let summary = owner_corrections
             .iter()
             .enumerate()

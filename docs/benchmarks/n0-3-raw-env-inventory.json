@@ -8,15 +8,19 @@
     "source_occurrences": 368,
     "known_test_only_names": [
       "RAW_EDITOR_DISABLE_SHARED_RAW_NORMALIZATION",
+      "RAW_EDITOR_FOCUS_BOUNDARY_DEBUG",
       "RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS",
+      "RAW_EDITOR_FOCUS_TONE_DIAGNOSTICS",
+      "RAW_EDITOR_FOCUS_TRANSLATION_DIAGNOSTICS",
       "RAW_EDITOR_FORCE_STREAMING_MOSAIC",
       "RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION",
       "RAW_EDITOR_STACK_DISABLE_NATIVE_PATCH_REFINEMENT",
       "RAW_EDITOR_STACK_RAW_FIXED_GAIN",
+      "RAW_EDITOR_STATION_SHARPNESS_TRACE",
       "RAW_EDITOR_TEST_SOURCE_RESAMPLE_DIVISOR",
       "RAW_EDITOR_TEST_SOURCE_RESAMPLE_PATH"
     ],
-    "shared_or_production_review_names": 100,
+    "shared_or_production_review_names": 96,
     "parent_cfg_test_occurrences": 125
   },
   "variables": {
@@ -974,7 +978,7 @@
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
-          "line": 118,
+          "line": 119,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
           "parent_cfg_test": null
@@ -984,7 +988,7 @@
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false,
+      "known_test_only": true,
       "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_BOUNDARY_DEBUG_DIR": {
@@ -1029,7 +1033,7 @@
         },
         {
           "path": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/boundary_repair.rs",
-          "line": 871,
+          "line": 874,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
           "parent_cfg_test": null
@@ -1670,7 +1674,7 @@
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_tone.rs",
-          "line": 338,
+          "line": 339,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
           "parent_cfg_test": null
@@ -1680,14 +1684,14 @@
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false,
+      "known_test_only": true,
       "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FOCUS_TRANSLATION_DIAGNOSTICS": {
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_alignment.rs",
-          "line": 610,
+          "line": 612,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
           "parent_cfg_test": null
@@ -1697,7 +1701,7 @@
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false,
+      "known_test_only": true,
       "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_FORCE_SOURCE_SCAN": {
@@ -4765,7 +4769,7 @@
       "occurrences": [
         {
           "path": "src-tauri/src/panorama_utils/stitching/focus_stack_entry.rs",
-          "line": 496,
+          "line": 497,
           "scope": "shared_or_production_source",
           "path_heuristic_test": false,
           "parent_cfg_test": null
@@ -4775,7 +4779,7 @@
       "scopes": [
         "shared_or_production_source"
       ],
-      "known_test_only": false,
+      "known_test_only": true,
       "parent_cfg_test_occurrences": 0
     },
     "RAW_EDITOR_STATION_TRANSITION_TRACE": {

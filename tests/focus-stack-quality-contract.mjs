@@ -283,6 +283,20 @@ assert.match(
   /#\[cfg\(test\)\]\s*let ownership_diagnostics[\s\S]*?RAW_EDITOR_FOCUS_OWNERSHIP_DIAGNOSTICS[\s\S]*?#\[cfg\(not\(test\)\)\]\s*let ownership_diagnostics/,
   'ownership diagnostics must be test-only and unavailable to shipped rendering',
 );
+for (const [source, variable, environment] of [
+  [stitching, 'translation_diagnostics', 'RAW_EDITOR_FOCUS_TRANSLATION_DIAGNOSTICS'],
+  [stitching, 'tone_diagnostics', 'RAW_EDITOR_FOCUS_TONE_DIAGNOSTICS'],
+  [stitching, 'sharpness_trace', 'RAW_EDITOR_STATION_SHARPNESS_TRACE'],
+  [qualityGateRunner, 'debug_local_relation', 'RAW_EDITOR_FOCUS_BOUNDARY_DEBUG'],
+]) {
+  assert.match(
+    source,
+    new RegExp(
+      `#\\[cfg\\(test\\)\\]\\s*let ${variable}[\\s\\S]*?${environment}[\\s\\S]*?#\\[cfg\\(not\\(test\\)\\)\\]\\s*let ${variable}`,
+    ),
+    `${environment} must be test-only and unavailable to shipped rendering`,
+  );
+}
 
 // Stage 5 residual geometry keeps its activation and three node gates explicit
 // so a threshold change cannot silently widen the local warp domain.

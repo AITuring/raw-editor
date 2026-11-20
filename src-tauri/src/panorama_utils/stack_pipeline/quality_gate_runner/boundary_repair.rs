@@ -115,7 +115,10 @@ where
         let mut best_owner_patch = Vec::<(usize, Rgb<f32>, u16)>::new();
         let mut best_source_shift = None::<((i32, i32), (i32, i32))>;
         let mut best_local_relation = false;
+        #[cfg(test)]
         let debug_local_relation = std::env::var_os("RAW_EDITOR_FOCUS_BOUNDARY_DEBUG").is_some();
+        #[cfg(not(test))]
+        let debug_local_relation = false;
         let mut debug_local_relation_best = f64::INFINITY;
         let mut debug_local_relation_candidates = 0usize;
         let local_station_pair = parse_boundary_station_pair(&failure.owner_path);

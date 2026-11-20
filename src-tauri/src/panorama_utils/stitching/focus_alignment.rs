@@ -607,7 +607,12 @@ pub(super) fn estimate_focus_layer_translation(
         }
         patch_deltas.push((best_x, best_y, best_score));
     }
-    if std::env::var_os("RAW_EDITOR_FOCUS_TRANSLATION_DIAGNOSTICS").is_some() {
+    #[cfg(test)]
+    let translation_diagnostics =
+        std::env::var_os("RAW_EDITOR_FOCUS_TRANSLATION_DIAGNOSTICS").is_some();
+    #[cfg(not(test))]
+    let translation_diagnostics = false;
+    if translation_diagnostics {
         println!(
             "  - Focus translation diagnostics: candidate={}x{} patches={} accepted={}",
             candidate_width,
