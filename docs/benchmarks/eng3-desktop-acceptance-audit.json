@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "task": "ENG.3",
+  "method": "desktop_acceptance_boundary_audit_v1",
+  "production_impact": "read_only_acceptance_audit_no_code_change",
+  "status": "open",
+  "checks": [
+    {
+      "name": "frontend typecheck entrypoint",
+      "status": "pass",
+      "command": "tsc --noEmit",
+      "observed": "pass"
+    },
+    {
+      "name": "frontend production build entrypoint",
+      "status": "pass",
+      "command": "vite build",
+      "observed": "pass"
+    },
+    {
+      "name": "frontend lint entrypoint",
+      "status": "pass",
+      "command": "eslint . --max-warnings=0",
+      "observed": "pass"
+    },
+    {
+      "name": "desktop CI platform matrix exists",
+      "status": "pass",
+      "evidence": "CI workflow declares Windows and macOS runners; this is build coverage, not interactive acceptance"
+    },
+    {
+      "name": "macOS desktop smoke",
+      "status": "historical_only",
+      "evidence": "ENG.1 records a single NEF import/edit/export smoke; it does not cover the full editor"
+    },
+    {
+      "name": "cancel and failure recovery",
+      "status": "open",
+      "evidence": "source contracts and queue tests exist, but no current end-to-end desktop acceptance record was found"
+    },
+    {
+      "name": "Windows/Linux interactive acceptance",
+      "status": "open",
+      "evidence": "CI build matrix is present; no interactive Windows/Linux acceptance evidence is recorded"
+    },
+    {
+      "name": "different camera/material desktop matrix",
+      "status": "open",
+      "evidence": "historical image regressions exist, but no complete current desktop interaction matrix is recorded"
+    }
+  ],
+  "decision": "keep ENG.3 open; current typecheck/build/lint pass does not replace desktop interaction, cancellation/recovery or Windows/Linux acceptance",
+  "next_step": "run a bounded desktop matrix with real interaction and cancellation/failure recovery on supported platforms"
+}
