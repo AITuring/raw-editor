@@ -196,6 +196,42 @@ fn apply_test_geometry_sensitivity(
     }
 }
 
+// The raw display A/B switches are research harness controls. Keep their
+// environment reads in test builds so the shipped renderer cannot be changed
+// by an experiment artifact left in the parent process environment.
+#[cfg(test)]
+fn test_stack_raw_fixed_gain() -> Option<f32> {
+    std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|value| value.is_finite() && *value > 0.0)
+}
+
+#[cfg(not(test))]
+fn test_stack_raw_fixed_gain() -> Option<f32> {
+    None
+}
+
+#[cfg(test)]
+fn test_skip_stack_raw_exposure_normalization() -> bool {
+    std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION").is_some()
+}
+
+#[cfg(not(test))]
+fn test_skip_stack_raw_exposure_normalization() -> bool {
+    false
+}
+
+#[cfg(test)]
+fn test_disable_shared_raw_normalization() -> bool {
+    std::env::var_os("RAW_EDITOR_DISABLE_SHARED_RAW_NORMALIZATION").is_some()
+}
+
+#[cfg(not(test))]
+fn test_disable_shared_raw_normalization() -> bool {
+    false
+}
+
 /// Test-only shared station Jacobian correction. The syntax is
 /// `station,station,...:factor`; each listed station is scaled around its
 /// tile centre while preserving the centre world position.
@@ -736,8 +772,7 @@ fn stitch_images_attempt<R: Runtime>(
                 let source_footprint = prepared_source.source_footprint;
                 if (focus_stack || alignment_mode == AlignmentMode::FlatArtwork)
                     && is_raw_file(filename)
-                    && std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION")
-                        .is_none()
+                    && !test_skip_stack_raw_exposure_normalization()
                     && let Some(high) = raw_display_channel_percentile(&dynamic_image)
                 {
                     raw_display_highs.lock().unwrap().push(high);
@@ -1021,9 +1056,9 @@ fn stitch_images_attempt<R: Runtime>(
     }
 
     let shared_raw_display_gain = if (focus_stack || alignment_mode == AlignmentMode::FlatArtwork)
-        && std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION").is_none()
-        && std::env::var_os("RAW_EDITOR_STACK_RAW_FIXED_GAIN").is_none()
-        && std::env::var_os("RAW_EDITOR_DISABLE_SHARED_RAW_NORMALIZATION").is_none()
+        && !test_skip_stack_raw_exposure_normalization()
+        && test_stack_raw_fixed_gain().is_none()
+        && !test_disable_shared_raw_normalization()
     {
         shared_stack_raw_display_gain(&raw_display_highs.into_inner().unwrap_or_default())
     } else {
@@ -2072,14 +2107,14 @@ fn stitch_images_attempt<R: Runtime>(
     let mut native_fusion_cache =
         NativeFusionCache::with_backing(native_fusion_cache_max_bytes(), 4 * 1024 * 1024 * 1024);
     let mut tile_payload_stats = stack_report::TilePayloadReport::default();
+    let test_stack_raw_fixed_gain_string =
+        test_stack_raw_fixed_gain().map(|value| value.to_string());
     let render_processing_fingerprint = || {
         processing_fingerprint(
             raw_exposure_reference,
             shared_raw_display_gain,
-            std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
-                .ok()
-                .as_deref(),
-            std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION").is_some(),
+            test_stack_raw_fixed_gain_string.as_deref(),
+            test_skip_stack_raw_exposure_normalization(),
         )
     };
     let source_render_cache_for_render = Arc::clone(&source_render_cache);
@@ -2133,11 +2168,7 @@ fn stitch_images_attempt<R: Runtime>(
             .map(|source| source_to_render_rgb32f(source.image, image.width, image.height))
         }?;
         if is_raw_file(&image.filename) {
-            if let Some(gain) = std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
-                .ok()
-                .and_then(|value| value.parse::<f32>().ok())
-                .filter(|value| value.is_finite() && *value > 0.0)
-            {
+            if let Some(gain) = test_stack_raw_fixed_gain() {
                 rendered
                     .as_mut()
                     .par_iter_mut()
@@ -2147,8 +2178,7 @@ fn stitch_images_attempt<R: Runtime>(
                     .as_mut()
                     .par_iter_mut()
                     .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
-            } else if std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION").is_none()
-            {
+            } else if !test_skip_stack_raw_exposure_normalization() {
                 normalize_stack_raw_display_exposure(&mut rendered);
             }
         }
@@ -4529,10 +4559,8 @@ fn stitch_images_attempt<R: Runtime>(
             let processing_key_fingerprint = processing_fingerprint(
                 raw_exposure_reference,
                 shared_raw_display_gain,
-                std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
-                    .ok()
-                    .as_deref(),
-                std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION").is_some(),
+                test_stack_raw_fixed_gain_string.as_deref(),
+                test_skip_stack_raw_exposure_normalization(),
             );
             let cache_key = SourceRenderCacheKey {
                 path: source.path.clone(),
@@ -4566,11 +4594,7 @@ fn stitch_images_attempt<R: Runtime>(
                     source.dimensions.1,
                 );
                 if is_raw_file(&source.path) {
-                    if let Some(gain) = std::env::var("RAW_EDITOR_STACK_RAW_FIXED_GAIN")
-                        .ok()
-                        .and_then(|value| value.parse::<f32>().ok())
-                        .filter(|value| value.is_finite() && *value > 0.0)
-                    {
+                    if let Some(gain) = test_stack_raw_fixed_gain() {
                         rendered
                             .as_mut()
                             .par_iter_mut()
@@ -4580,9 +4604,7 @@ fn stitch_images_attempt<R: Runtime>(
                             .as_mut()
                             .par_iter_mut()
                             .for_each(|channel| *channel = (*channel * gain).clamp(0.0, 1.0));
-                    } else if std::env::var_os("RAW_EDITOR_SKIP_STACK_RAW_EXPOSURE_NORMALIZATION")
-                        .is_none()
-                    {
+                    } else if !test_skip_stack_raw_exposure_normalization() {
                         normalize_stack_raw_display_exposure(&mut rendered);
                     }
                 }
