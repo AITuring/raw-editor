@@ -1,0 +1,155 @@
+{
+  "schema": 1,
+  "task": "N1.12",
+  "method": "migration_evidence_ledger_v1",
+  "production_impact": "read_only_ledger_generation_no_code_change",
+  "status": "pass",
+  "records": [
+    {
+      "migration": "N1-1",
+      "status": "historical_evidence_recorded",
+      "evidence_mode": "historical_prose",
+      "targeted_tests": true,
+      "full_regression": true,
+      "output_equivalence": true,
+      "machine_replay": false,
+      "current_wip_applies": false,
+      "source_docs": [
+        "docs/focus-stack-architecture.md",
+        "docs/archive/focus-stack-tasks-2026-11-04.md"
+      ]
+    },
+    {
+      "migration": "N1-2",
+      "status": "historical_evidence_recorded",
+      "evidence_mode": "historical_prose",
+      "targeted_tests": true,
+      "full_regression": true,
+      "output_equivalence": true,
+      "machine_replay": false,
+      "current_wip_applies": false,
+      "source_docs": [
+        "docs/focus-stack-architecture.md",
+        "docs/archive/focus-stack-tasks-2026-11-04.md"
+      ]
+    },
+    {
+      "migration": "N1-3",
+      "status": "historical_evidence_recorded",
+      "evidence_mode": "historical_prose",
+      "targeted_tests": true,
+      "full_regression": true,
+      "output_equivalence": true,
+      "machine_replay": false,
+      "current_wip_applies": false,
+      "source_docs": [
+        "docs/focus-stack-architecture.md",
+        "docs/archive/focus-stack-tasks-2026-11-04.md"
+      ]
+    },
+    {
+      "migration": "N1-4",
+      "status": "historical_evidence_recorded",
+      "evidence_mode": "historical_prose",
+      "targeted_tests": true,
+      "full_regression": true,
+      "output_equivalence": true,
+      "machine_replay": false,
+      "current_wip_applies": false,
+      "source_docs": [
+        "docs/focus-stack-architecture.md",
+        "docs/archive/focus-stack-tasks-2026-11-04.md"
+      ]
+    },
+    {
+      "migration": "N1-5",
+      "status": "historical_evidence_recorded",
+      "evidence_mode": "historical_prose",
+      "targeted_tests": true,
+      "full_regression": true,
+      "output_equivalence": true,
+      "machine_replay": false,
+      "current_wip_applies": false,
+      "source_docs": [
+        "docs/focus-stack-architecture.md",
+        "docs/archive/focus-stack-tasks-2026-11-04.md"
+      ]
+    },
+    {
+      "migration": "N1-6",
+      "status": "historical_evidence_recorded",
+      "evidence_mode": "historical_prose",
+      "targeted_tests": true,
+      "full_regression": true,
+      "output_equivalence": true,
+      "machine_replay": false,
+      "current_wip_applies": false,
+      "source_docs": [
+        "docs/focus-stack-architecture.md",
+        "docs/archive/focus-stack-tasks-2026-11-04.md"
+      ]
+    },
+    {
+      "migration": "N1-7",
+      "status": "historical_evidence_recorded",
+      "evidence_mode": "historical_prose",
+      "targeted_tests": true,
+      "full_regression": true,
+      "output_equivalence": true,
+      "machine_replay": false,
+      "current_wip_applies": false,
+      "source_docs": [
+        "docs/focus-stack-architecture.md",
+        "docs/archive/focus-stack-tasks-2026-11-04.md"
+      ]
+    },
+    {
+      "migration": "N1-8",
+      "status": "historical_evidence_recorded",
+      "evidence_mode": "historical_prose",
+      "targeted_tests": true,
+      "full_regression": true,
+      "output_equivalence": true,
+      "machine_replay": false,
+      "current_wip_applies": false,
+      "source_docs": [
+        "docs/focus-stack-architecture.md",
+        "docs/archive/focus-stack-tasks-2026-11-04.md"
+      ]
+    },
+    {
+      "migration": "N1-9",
+      "status": "historical_evidence_recorded",
+      "evidence_mode": "historical_prose",
+      "targeted_tests": true,
+      "full_regression": true,
+      "output_equivalence": true,
+      "machine_replay": false,
+      "current_wip_applies": false,
+      "source_docs": [
+        "docs/focus-stack-architecture.md",
+        "docs/archive/focus-stack-tasks-2026-11-04.md"
+      ]
+    },
+    {
+      "migration": "N1-10",
+      "status": "historical_evidence_recorded",
+      "evidence_mode": "historical_prose",
+      "targeted_tests": true,
+      "full_regression": true,
+      "output_equivalence": true,
+      "machine_replay": false,
+      "current_wip_applies": false,
+      "source_docs": [
+        "docs/focus-stack-architecture.md",
+        "docs/archive/focus-stack-tasks-2026-11-04.md"
+      ]
+    }
+  ],
+  "summary": {
+    "migration_count": 10,
+    "complete_records": 10,
+    "machine_replay_records": 0
+  },
+  "boundary": "historical ledger evidence does not certify later WIP; every future migration needs a new record and rerun"
+}

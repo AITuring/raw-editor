@@ -36,7 +36,7 @@
 - [x] **N1-3 / N1-4 / N1-5 / N1-6** report schema/recorder、pair候选、feature preparation/matching合同和匹配执行体拆分完成。
 - [x] **N1-7 / N1-8 / N1-9 / N1-10** station solver/topology/closure、grouping、stitching、mosaic、processing和其他长模块迁移完成；模块地图已记录。
 - [x] **N1.11** 处理仍超1000行的单函数/组件及建立import方向检查；14个超1000行源文件、5个超长声明和19个 child→facade 引用均完成决策矩阵：超长入口保留为有意职责边界，9个 production/shared import 判定为兼容 helper/facade 类型依赖，source-layout 已刷新且 stale=0。见[源码布局](../source-layout.md)、[N1.11 layout audit](../benchmarks/n1-11-layout-audit.json)、[import-direction audit](../benchmarks/n1-11-import-direction-audit.json)和[decision matrix](../benchmarks/n1-11-layout-decision-matrix.json)。
-- [ ] **N1.12** 后续每次职责迁移继续记录定向测试、完整回归和前后输出等价性；2026-11-20 对 N1-1..N1-10 的历史文档逐项找到三类证据（10/10），但仍是 prose，尚无机器可检 migration ledger/重复对照入口；当前 WIP 不套用历史等价性。见 [N1.12 audit](../benchmarks/n1-12-migration-evidence-audit.json)。
+- [x] **N1.12** 后续每次职责迁移继续记录定向测试、完整回归和前后输出等价性；已建立机器可检 migration ledger，N1-1..N1-10 共10/10条记录具备三类历史证据。ledger 明确 `machine_replay=0` 且 `current_wip_applies=false`，当前或后续WIP不得套用历史等价性。见 [N1.12 audit](../benchmarks/n1-12-migration-evidence-audit.json) 和 [migration ledger](../benchmarks/n1-12-migration-ledger.json)。
 
 <a id="n2"></a>
 
