@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "task": "ENG.5",
+  "method": "post_baseline_scope_audit_v1",
+  "production_impact": "read_only_commit_scope_audit_no_code_change",
+  "baseline": "f582825f",
+  "head": "00879de4caef0cff51e70895a469941b431eb47a",
+  "remote": "00879de4caef0cff51e70895a469941b431eb47a",
+  "worktree_clean": false,
+  "remote_matches_head": true,
+  "commits": [
+    {
+      "sha": "00879de4caef0cff51e70895a469941b431eb47a",
+      "subject": "audit ENG.4 clippy and release signing"
+    },
+    {
+      "sha": "50b8fb92e02197963f7db98b10e8ceb631f98f9d",
+      "subject": "audit ENG.3 desktop acceptance boundary"
+    },
+    {
+      "sha": "12bf24289e5f0a7df61247825316cbc69a2ca802",
+      "subject": "add N1.12 migration evidence ledger"
+    },
+    {
+      "sha": "9cd2c42a2542925ac4b4981396b477b883d02e1a",
+      "subject": "close N1.11 layout decision matrix"
+    },
+    {
+      "sha": "ed9b29b9122f1180f5fb6da9ba2d7fe770cb8628",
+      "subject": "close N0.3 environment boundary review"
+    },
+    {
+      "sha": "e5176e120df87b19f1a047783f346e71cf67247b",
+      "subject": "bound ownership and gain diagnostics to tests"
+    }
+  ],
+  "changed_files": [
+    "docs/benchmarks/eng3-desktop-acceptance-audit.json",
+    "docs/benchmarks/eng4-release-audit.json",
+    "docs/benchmarks/n0-3-production-artifact-audit.json",
+    "docs/benchmarks/n0-3-raw-env-inventory.json",
+    "docs/benchmarks/n0-3-shared-review-matrix.json",
+    "docs/benchmarks/n1-11-layout-audit.json",
+    "docs/benchmarks/n1-11-layout-decision-matrix.json",
+    "docs/benchmarks/n1-12-migration-ledger.json",
+    "docs/source-layout.md",
+    "docs/tasks/engineering.md",
+    "scripts/stack-lab/eng3_desktop_acceptance_audit.py",
+    "scripts/stack-lab/eng4_release_audit.py",
+    "scripts/stack-lab/n0_3_production_artifact_audit.py",
+    "scripts/stack-lab/n0_3_raw_env_inventory.py",
+    "scripts/stack-lab/n0_3_shared_review_matrix.py",
+    "scripts/stack-lab/n1_11_layout_decision_matrix.py",
+    "scripts/stack-lab/n1_12_migration_ledger.py",
+    "src-tauri/src/panorama_utils/mosaic/streaming_harmonization.rs",
+    "src-tauri/src/panorama_utils/stack_pipeline/focus_fuser/decisive_cells.rs",
+    "tests/focus-stack-quality-contract.mjs"
+  ],
+  "decision": "scope is reviewed and remotely synchronized; release publication still requires the separate ENG.4 signing/distribution gates",
+  "status": "open"
+}
