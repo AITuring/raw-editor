@@ -1466,7 +1466,7 @@ fn stitch_images_attempt<R: Runtime>(
         // report that could overwrite the Virtual_Tile result.
         let mut closure = stack_report::ClosureReport::default();
         let mut station_relations = stack_report::StationRelationsReport::default();
-        let stitching_order = build_focus_stack_stitching_order_with_report(
+        let mut stitching_order = build_focus_stack_stitching_order_with_report(
             &image_data,
             &pairwise_matches,
             &mut closure,
@@ -4533,10 +4533,10 @@ fn stitch_images_attempt<R: Runtime>(
     if let Some((
         coverage,
         mut ownership,
-        confidence,
-        textured,
-        owner_shortfall,
-        owner_disagreement,
+        mut confidence,
+        mut textured,
+        mut owner_shortfall,
+        mut owner_disagreement,
         unresolved_pixel_count,
         world_origin,
     )) = quality_planes.take()
