@@ -315,16 +315,15 @@ pub(super) fn solve_robust_closure_projective(
         &affine_observations,
         coordinate_scale,
     ) {
-        for station in 0..station_count {
+        for (station, correction) in corrections.iter_mut().enumerate().take(station_count) {
             if station == reference_station {
                 continue;
             }
-            for parameter in 0..6 {
-                corrections[station][parameter] = affine_seed.corrections[station][parameter]
-                    .clamp(
-                        -projective_delta_parameter_limit(parameter),
-                        projective_delta_parameter_limit(parameter),
-                    );
+            for (parameter, value) in correction.iter_mut().enumerate().take(6) {
+                *value = affine_seed.corrections[station][parameter].clamp(
+                    -projective_delta_parameter_limit(parameter),
+                    projective_delta_parameter_limit(parameter),
+                );
             }
         }
         let seeded_cost = projective_delta_cost(
@@ -443,7 +442,7 @@ pub(super) fn solve_robust_closure_projective(
                 }
             }
         }
-        for station in 0..station_count {
+        for (station, correction) in corrections.iter().enumerate().take(station_count) {
             if station == reference_station {
                 continue;
             }
@@ -455,7 +454,7 @@ pub(super) fn solve_robust_closure_projective(
                     FOCUS_GLOBAL_PRIOR_WEIGHT
                 };
                 normal[(base + parameter, base + parameter)] += prior + FOCUS_GLOBAL_DAMPING;
-                gradient[base + parameter] += prior * corrections[station][parameter];
+                gradient[base + parameter] += prior * correction[parameter];
             }
         }
         let delta = normal.lu().solve(&(-gradient))?;
@@ -592,7 +591,7 @@ pub(super) fn solve_robust_closure_affine(
             let robust = closure_residual_weight(magnitude);
             let weight = observation.weight * robust;
             total += observation.weight * robust * magnitude * magnitude;
-            for axis in 0..2 {
+            for (axis, residual_component) in residual.iter().copied().enumerate() {
                 let mut entries = Vec::with_capacity(12);
                 let left_base = (observation.left != reference_station)
                     .then(|| variable_index(observation.left, axis * 3));
@@ -612,7 +611,6 @@ pub(super) fn solve_robust_closure_affine(
                         (base + 2, -1.0),
                     ]);
                 }
-                let residual_component = residual[axis];
                 for &(column, jacobian) in &entries {
                     rhs[column] -= weight * jacobian * residual_component;
                     for &(row, other) in &entries {
@@ -631,13 +629,13 @@ pub(super) fn solve_robust_closure_affine(
         if delta.iter().any(|value| !value.is_finite()) {
             return None;
         }
-        for station in 0..station_count {
+        for (station, correction) in corrections.iter_mut().enumerate().take(station_count) {
             if station == reference_station {
                 continue;
             }
             let base = variable_index(station, 0);
-            for parameter in 0..6 {
-                corrections[station][parameter] += delta[base + parameter];
+            for (parameter, value) in correction.iter_mut().enumerate().take(6) {
+                *value += delta[base + parameter];
             }
         }
         iterations = iteration;
@@ -688,17 +686,17 @@ pub(super) fn solve_robust_closure_translations(
             ];
             let magnitude = residual[0].hypot(residual[1]);
             let weight = base_weight * closure_residual_weight(magnitude);
-            for axis in 0..2 {
+            for (axis, observed_component) in observed.iter().copied().enumerate() {
                 let left_variable = (left != reference_station).then(|| variable_index(left, axis));
                 let right_variable =
                     (right != reference_station).then(|| variable_index(right, axis));
                 if let Some(variable) = left_variable {
                     normal[(variable, variable)] += weight;
-                    rhs[variable] -= weight * observed[axis];
+                    rhs[variable] -= weight * observed_component;
                 }
                 if let Some(variable) = right_variable {
                     normal[(variable, variable)] += weight;
-                    rhs[variable] += weight * observed[axis];
+                    rhs[variable] += weight * observed_component;
                 }
                 if let (Some(left_variable), Some(right_variable)) = (left_variable, right_variable)
                 {

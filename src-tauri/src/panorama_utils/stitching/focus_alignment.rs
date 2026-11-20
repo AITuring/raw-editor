@@ -201,8 +201,8 @@ pub(super) fn focus_alignment_patch_pyramid(
     let mut pyramid = vec![first];
     for _ in 0..levels {
         let previous = pyramid.last().unwrap();
-        let width = (previous.image.width() + 1) / 2;
-        let height = (previous.image.height() + 1) / 2;
+        let width = previous.image.width().div_ceil(2);
+        let height = previous.image.height().div_ceil(2);
         let mut next = RenderedFocusLayer {
             image: Rgb32FImage::new(width, height),
             mask: GrayImage::new(width, height),
@@ -530,8 +530,8 @@ pub(super) fn estimate_focus_layer_translation(
     }
 
     let patch_radius = FOCUS_FULL_RES_ALIGNMENT_PATCH_RADIUS;
-    let overlap_left = candidate.left.max(0).min(merged_width.saturating_sub(1)) as i32;
-    let overlap_top = candidate.top.max(0).min(merged_height.saturating_sub(1)) as i32;
+    let overlap_left = candidate.left.min(merged_width.saturating_sub(1)) as i32;
+    let overlap_top = candidate.top.min(merged_height.saturating_sub(1)) as i32;
     let overlap_right = (candidate
         .left
         .saturating_add(candidate_width)

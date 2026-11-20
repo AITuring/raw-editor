@@ -379,6 +379,7 @@ pub(super) fn stack_raw_exposure_reference(paths: &[String]) -> Option<RawExposu
     RawExposureReference::from_samples(samples)
 }
 
+#[cfg(test)]
 pub(super) fn load_prepared_stack_source(
     filename: &str,
     settings: &AppSettings,
@@ -409,23 +410,22 @@ pub(super) fn load_prepared_stack_source_with_preflight(
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             &record.bytes[..]
         })
-        .or_else(|| mapped_file_data.as_deref())
+        .or(mapped_file_data.as_deref())
         .expect("either preflight or mapped source bytes must exist");
     let focal_length_35mm = preflight
         .and_then(|record| record.focal_length_35mm)
         .or_else(|| crate::exif_processing::focal_length_35mm_from_bytes(file_data));
-    if is_raw_file(filename) {
-        if let Some(record) = preflight {
-            record
-                .counters
-                .raw_decode_count
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        }
+    if is_raw_file(filename)
+        && let Some(record) = preflight
+    {
+        record
+            .counters
+            .raw_decode_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
-    let mut image = crate::image_loader::load_base_image_from_bytes(
-        &file_data, filename, false, settings, None,
-    )
-    .map_err(|error| format!("Failed to load image {filename}: {error}"))?;
+    let mut image =
+        crate::image_loader::load_base_image_from_bytes(file_data, filename, false, settings, None)
+            .map_err(|error| format!("Failed to load image {filename}: {error}"))?;
     let mut source_footprint = None;
     if is_raw_file(filename) {
         let mut metadata = preflight
@@ -616,7 +616,7 @@ pub(super) fn prepare_focus_rescue_image_from_analysis(
         full_image: None,
         scale_factor: image.scale_factor,
         focal_length_35mm: image.focal_length_35mm,
-        source_footprint: image.source_footprint.clone(),
+        source_footprint: image.source_footprint,
         overview_reference: image.overview_reference,
         foreground_range,
     })

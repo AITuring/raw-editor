@@ -139,16 +139,15 @@ fn materialize_with_density(
     if verified.len() != proposal.len() {
         return None;
     }
-    let decomposition = (if recover_density {
+    let Some(decomposition) = (if recover_density {
         decompose(proposal, &fit.fields, dimensions, initial, limits)
     } else {
         decomposition::decompose_geometry(proposal, &fit.fields, dimensions, initial, limits)
-    })
-    .or_else(|| {
+    }) else {
         #[cfg(test)]
         eprintln!("Joint materialization refused at projective/local decomposition");
-        None
-    })?;
+        return None;
+    };
     let mut global_p95_by_station = vec![0.0f64; proposal.len()];
     for relation in relations {
         let mut errors = relation
@@ -249,12 +248,15 @@ fn materialize_with_density(
                 ))
             })
             .collect::<Vec<_>>();
-        let region=WarpRegion::from_verified_grid(overlap,&values,&observations).or_else(|| {
+        let Some(region) = WarpRegion::from_verified_grid(overlap, &values, &observations) else {
             #[cfg(test)]
-            eprintln!("Joint region {station} refused: {} observations, maximum proposed node {:.6}px",
-                observations.len(),values.iter().map(|v|v[0].hypot(v[1])).fold(0.0,f64::max));
-            None
-        })?;
+            eprintln!(
+                "Joint region {station} refused: {} observations, maximum proposed node {:.6}px",
+                observations.len(),
+                values.iter().map(|v| v[0].hypot(v[1])).fold(0.0, f64::max)
+            );
+            return None;
+        };
         residual.regions.push(region);
     }
     let mut validation = Vec::new();
@@ -550,7 +552,7 @@ fn solve_axis(
     weights: &[f64],
     edges: &[(usize, usize)],
     axis: usize,
-    x: &mut Vec<f64>,
+    x: &mut [f64],
     smoothness: f64,
 ) -> Option<()> {
     let mut rhs = vec![0.0; x.len()];
@@ -741,15 +743,8 @@ pub(crate) fn fit_with_smoothness(
         .collect::<Vec<_>>();
     let mut coordinates = [vec![0.0; offset], vec![0.0; offset]];
     for _ in 0..8 {
-        for axis in 0..2 {
-            solve_axis(
-                &rows,
-                &weights,
-                &edges,
-                axis,
-                &mut coordinates[axis],
-                smoothness,
-            )?;
+        for (axis, coordinate) in coordinates.iter_mut().enumerate() {
+            solve_axis(&rows, &weights, &edges, axis, coordinate, smoothness)?;
         }
         for (row, weight) in rows.iter().zip(&mut weights) {
             let error = (prediction(row, &coordinates[0]) - row.delta[0])

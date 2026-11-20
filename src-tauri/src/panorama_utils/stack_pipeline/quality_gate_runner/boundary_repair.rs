@@ -218,7 +218,7 @@ where
                                 + tangent.1 * f64::from(tangent_shift),
                         );
                         let Ok(pixel) = sample_quality_source_at_world_with_station_relation(
-                            &second_image,
+                            second_image,
                             shifted_world,
                             second_info,
                             first_info,
@@ -274,7 +274,6 @@ where
             // the first station here, replay the inverse relation against the
             // first raw owner as well.  This keeps the local closure symmetric
             // without changing the global pose or owner ledger.
-            drop(try_local_relation);
             if let Some(reverse_relation) = relation.try_inverse() {
                 let mut try_reverse_relation = |normal_shift: i32, tangent_shift: i32| {
                     let mut original = Vec::<(usize, Rgb<f32>)>::new();
@@ -309,7 +308,7 @@ where
                                     + tangent.1 * f64::from(tangent_shift),
                             );
                             let Ok(pixel) = sample_quality_source_at_world_with_station_relation(
-                                &first_image,
+                                first_image,
                                 shifted_world,
                                 first_info,
                                 second_info,
