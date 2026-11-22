@@ -106,7 +106,14 @@ fn real_saved_tone_pair_from_env() {
 fn real_saved_local_tone_from_env() {
     use crate::panorama_utils::stack_pipeline::{compositor, tone, tone_local};
     let directory = PathBuf::from(std::env::var_os("RAW_EDITOR_LOCAL_TONE_FIELDS").unwrap());
-    let mut reader = image::ImageReader::open(directory.join("tone-owners.png")).unwrap();
+    let owner_plane = ["tone-owners.png", "tone-owners.filtered.png"]
+        .iter()
+        .map(|name| directory.join(name))
+        .find(|path| path.is_file())
+        .expect(
+            "saved local tone capture should contain tone-owners.png or tone-owners.filtered.png",
+        );
+    let mut reader = image::ImageReader::open(&owner_plane).unwrap();
     // This is the trusted native ownership artifact emitted by this test
     // pipeline; its 300MP u16 plane exceeds the decoder's default limit.
     reader.no_limits();
@@ -359,7 +366,36 @@ fn real_saved_local_tone_from_env() {
                 "common_rgb":fields.get(&(a,b)).and_then(|f| f.as_ref()).and_then(|f| f.at(cx,cy))}))
         }
     }
-    let result = serde_json::json!({"diagnostic_only":true,"native_roi_prediction":native_roi_prediction,"maximum":maximum,"failed":failed,"iterations":model.iterations,"maximum_parameter_change":model.maximum_parameter_change,"fitted_relations":model.fitted_relations.len(),"plan_step":plan.as_ref().map(|p|p.step)});
+    let mut gain_min = [f32::INFINITY; 3];
+    let mut gain_max = [f32::NEG_INFINITY; 3];
+    let mut offset_min = [f32::INFINITY; 3];
+    let mut offset_max = [f32::NEG_INFINITY; 3];
+    for parameters in model.parameters.iter().flatten() {
+        for channel in 0..3 {
+            gain_min[channel] = gain_min[channel].min(1.0 + parameters[channel]);
+            gain_max[channel] = gain_max[channel].max(1.0 + parameters[channel]);
+            offset_min[channel] = offset_min[channel].min(parameters[channel + 3]);
+            offset_max[channel] = offset_max[channel].max(parameters[channel + 3]);
+        }
+    }
+    let result = serde_json::json!({
+        "diagnostic_only":true,
+        "native_roi_prediction":native_roi_prediction,
+        "maximum":maximum,
+        "failed":failed,
+        "iterations":model.iterations,
+        "maximum_parameter_change":model.maximum_parameter_change,
+        "fitted_relations":model.fitted_relations.len(),
+        "plan_step":plan.as_ref().map(|p|p.step),
+        "test_only_bound_scale":std::env::var("RAW_EDITOR_TEST_TONE_LOCAL_BOUND_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(1.0),
+        "test_only_support_extension_max_radius":std::env::var("RAW_EDITOR_TEST_TONE_SUPPORT_EXTENSION_MAX_RADIUS").ok().and_then(|v| v.parse::<usize>().ok()).unwrap_or(64),
+        "parameter_ranges":{
+            "gain_min":gain_min,
+            "gain_max":gain_max,
+            "offset_min":offset_min,
+            "offset_max":offset_max,
+        },
+    });
     fs::write(
         std::env::var_os("RAW_EDITOR_LOCAL_TONE_OUTPUT").unwrap(),
         serde_json::to_vec_pretty(&result).unwrap(),

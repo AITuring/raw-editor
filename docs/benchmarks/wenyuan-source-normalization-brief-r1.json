@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_active_source_normalization_brief_v1",
+  "production_impact": "read-only source-specific normalization calculation; no source pixels, production bounds, or tone thresholds changed",
+  "input": "/private/tmp/wenyuan-boundary-point-trace-r5-ownerfix/photometric-mismatch-audit.json",
+  "production_box": {"gain": [0.8, 1.25], "offset_abs_max": 0.02, "target_pair_ratio": 1.25},
+  "pairs": {
+    "36↔37": {
+      "active_luminance": [0.16511043774187564, 0.0000016383937464865993],
+      "ratio": 100775.7983060796,
+      "required_bright_gain": 0.000012403771748882192,
+      "required_dark_gain": 80620.63864486368,
+      "best_bounded_ratio_gain_offset": 5.603843678272602,
+      "extra_offset_needed": {"dark_positive": 0.0896686321626173, "bright_negative": 0.10708579020327164},
+      "source_specific_bounded_ab_worthwhile": false
+    },
+    "37↔38": {
+      "active_luminance": [0.0012667527076519833, 0.14125918442606927],
+      "ratio": 111.51283401470147,
+      "required_bright_gain": 0.011209472084936917,
+      "required_dark_gain": 89.21026721176118,
+      "best_bounded_ratio_gain_offset": 4.309199262447907,
+      "extra_offset_needed": {"dark_positive": 0.07282243714811935, "bright_negative": 0.08602804643514919},
+      "source_specific_bounded_ab_worthwhile": false
+    },
+    "36↔38": {
+      "active_luminance": [0.006153517758473753, 0.14909701995700597],
+      "ratio": 24.229558735195113,
+      "required_bright_gain": 0.051589878860826645,
+      "required_dark_gain": 19.38364698815609,
+      "best_bounded_ratio_gain_offset": 3.585078164035811,
+      "extra_offset_needed": {"dark_positive": 0.07173019557439164, "bright_negative": 0.08466274446798955},
+      "source_specific_bounded_ab_worthwhile": false
+    }
+  },
+  "decision": {
+    "promotion": "rejected",
+    "conclusion": "the production gain/offset box cannot normalize any target pair to ratio 1.25; even favorable extrema leave ratios 3.59–5.60",
+    "next_step": "do not spend another bounded source-specific A/B; if needed, design an explicit source calibration or relation-model experiment with a separately justified variable"
+  },
+  "limitations": [
+    "luminance ratio is a diagnostic scalar, not a color-managed QG metric",
+    "best-bounded ratio uses favorable independent extrema and is optimistic",
+    "no full 126-source run or formal QG verdict was performed"
+  ]
+}

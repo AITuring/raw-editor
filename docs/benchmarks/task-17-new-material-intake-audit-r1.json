@@ -1,0 +1,583 @@
+{
+  "schema": 2,
+  "task": 17,
+  "method": "task17_new_material_intake_audit_r6",
+  "generated_at": "2026-11-21",
+  "production_impact": "read-only manifest and filesystem contract audit; four new RAW datasets registered; no production code, thresholds, or baseline change",
+  "manifest": "tests/acceptance/focus-stack-datasets.json",
+  "root": "/Users/dp/Downloads/书画拼图",
+  "dataset_count": 17,
+  "datasets": [
+    {
+      "id": "lanting",
+      "label": "兰亭",
+      "expected_source_count": 45,
+      "directory": "兰亭",
+      "has_baseline": true,
+      "expected_skipped": [
+        "*_FocusStack*.jpg",
+        "褚摹兰亭-比较满意版.jpg"
+      ]
+    },
+    {
+      "id": "mayuan-psd",
+      "label": "马远（PSD）",
+      "expected_source_count": 14,
+      "directory": "马远",
+      "has_baseline": false,
+      "expected_skipped": []
+    },
+    {
+      "id": "langyuan",
+      "label": "阆苑女仙",
+      "expected_source_count": 84,
+      "directory": "阆苑女仙",
+      "has_baseline": false,
+      "expected_skipped": []
+    },
+    {
+      "id": "wenyuan",
+      "label": "文苑图",
+      "expected_source_count": 126,
+      "directory": "文苑图",
+      "has_baseline": false,
+      "expected_skipped": []
+    },
+    {
+      "id": "qixu-1",
+      "label": "祁序1",
+      "expected_source_count": 75,
+      "directory": "祁序1",
+      "has_baseline": false,
+      "expected_skipped": []
+    },
+    {
+      "id": "qixu-2",
+      "label": "祁序2",
+      "expected_source_count": 98,
+      "directory": "祁序2",
+      "has_baseline": false,
+      "expected_skipped": []
+    },
+    {
+      "id": "mayuan-2",
+      "label": "马远2",
+      "expected_source_count": 47,
+      "directory": "马远2",
+      "has_baseline": false,
+      "expected_skipped": []
+    },
+    {
+      "id": "sleeping",
+      "label": "睡觉",
+      "expected_source_count": 45,
+      "directory": "睡觉",
+      "has_baseline": false,
+      "expected_skipped": []
+    },
+    {
+      "id": "fengying-main",
+      "label": "枫鹰雉鸡",
+      "expected_source_count": 63,
+      "directory": "枫鹰雉鸡",
+      "has_baseline": false,
+      "expected_skipped": []
+    },
+    {
+      "id": "fengying-head",
+      "label": "枫鹰雉鸡 / toubu",
+      "expected_source_count": 17,
+      "directory": "枫鹰雉鸡/toubu",
+      "has_baseline": false,
+      "expected_skipped": []
+    },
+    {
+      "id": "fengying-bottom",
+      "label": "枫鹰雉鸡 / 枫鹰底部",
+      "expected_source_count": 24,
+      "directory": "枫鹰雉鸡/枫鹰底部",
+      "has_baseline": false,
+      "expected_skipped": []
+    },
+    {
+      "id": "qixu",
+      "label": "祁序1 + 祁序2（两次拍摄一起选）",
+      "expected_source_count": 173,
+      "directory": null,
+      "has_baseline": true,
+      "expected_skipped": []
+    },
+    {
+      "id": "fengying",
+      "label": "枫鹰雉鸡（整个文件夹）",
+      "expected_source_count": 110,
+      "directory": null,
+      "has_baseline": true,
+      "expected_skipped": []
+    },
+    {
+      "id": "chibi",
+      "label": "赤壁",
+      "expected_source_count": 48,
+      "directory": "赤壁",
+      "has_baseline": false,
+      "expected_skipped": [],
+      "source_bytes": 2725524205,
+      "source_aggregate_sha256": "d41a9207807ea6bc6bb60d2d71491dbc2e02f77bb059746cd6104bd6ed20b0b8",
+      "status": "diagnostic_rejected",
+      "d1_output": "output/acceptance/task17/chibi-d1-r1/",
+      "d1_verdict": "quality_gate_fail; tone boundary ΔE00 max 10.0429; memory gate pass",
+      "native_acceptance": false,
+      "d1_result": {
+        "status": "quality_gate_failed",
+        "scale": 0.25,
+        "run_path": "output/acceptance/task17/chibi-d1-r1/run",
+        "inputs": 48,
+        "stations": 18,
+        "output_dimensions": [
+          7637,
+          2155
+        ],
+        "tone": "degraded",
+        "boundary_delta_e00": {
+          "max": 10.0428838189,
+          "pair": "2↔5",
+          "x": 3584,
+          "y": 256,
+          "violations": 13
+        },
+        "qg": {
+          "verdict": "fail",
+          "local_scale_pixel_ratio": "6/8",
+          "boundary_stroke_alignment": "4/155",
+          "effective_pixel_pass": true,
+          "effective_gradient_pass": true,
+          "effective_roi_delta_e00_pass": true,
+          "effective_owner_sharpness_pass": true
+        },
+        "memory_gate": {
+          "verdict": "PASS",
+          "threshold_rss_bytes": 25769803776,
+          "peak_rss_bytes": 12401836032,
+          "threads": 8
+        },
+        "source_contract": {
+          "decoded": "48/48",
+          "aggregate_sha_unchanged": true
+        },
+        "output_density": {
+          "status": "bypassed",
+          "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof"
+        },
+        "acceptance_claim": false,
+        "note": "D1 diagnostic only; no D2 native, D3 QG, D4 user review, or publishable acceptance."
+      }
+    },
+    {
+      "id": "lisong",
+      "label": "李嵩",
+      "expected_source_count": 46,
+      "directory": "李嵩",
+      "has_baseline": false,
+      "expected_skipped": [],
+      "source_bytes": 2818722255,
+      "source_aggregate_sha256": "760a30788bd2555c260d3b246217ddaf098b3a0ab50cb826297d336b0d639007",
+      "status": "diagnostic_rejected",
+      "d1_result": {
+        "status": "quality_gate_failed",
+        "scale": 0.25,
+        "run_id": "lisong-s0p25-task17-lisongd1r1",
+        "run_path": "output/acceptance/task17/lisong-d1-r1/run",
+        "stack_report": "output/acceptance/task17/lisong-d1-r1/run/lisong-s0p25-task17-lisongd1r1-stack-reports/stack-report-6b797c3f-2301-4742-85c6-808b6e145327.json",
+        "inputs": 46,
+        "stations": 15,
+        "output_dimensions": [
+          3205,
+          2194
+        ],
+        "tone": {
+          "status": "applied",
+          "boundary_delta_e00": {
+            "max": 0.5645683266,
+            "threshold": 1.5,
+            "violations": 0
+          }
+        },
+        "qg": {
+          "verdict": "fail",
+          "local_scale_median": {
+            "verdict": "diagnostic_not_applicable",
+            "measured_count": 8,
+            "range": [
+              1.050317627644588,
+              1.1845703125
+            ]
+          },
+          "local_scale_pixel_ratio": {
+            "verdict": "pass",
+            "measured_count": 8
+          },
+          "boundary_stroke_alignment": {
+            "verdict": "fail",
+            "failed_count": 1,
+            "measured_count": 6,
+            "failed_value": 1.6581128181810776,
+            "threshold": 1.5
+          },
+          "effective_pixel": {
+            "verdict": "pass"
+          },
+          "gradient": {
+            "verdict": "pass"
+          },
+          "noise": {
+            "verdict": "not_applicable"
+          },
+          "roi_delta_e00": {
+            "verdict": "pass"
+          },
+          "owner_sharpness": {
+            "verdict": "pass"
+          }
+        },
+        "memory_gate": {
+          "verdict": "PASS",
+          "threshold_rss_bytes": 25769803776,
+          "peak_rss_bytes": 12670844928,
+          "exceeded": false,
+          "threads": 8,
+          "max_resident_virtual_tiles": 16
+        },
+        "source_contract": {
+          "decoded": "46/46",
+          "aggregate_sha_unchanged": true
+        },
+        "station_relation": {
+          "rejected_count": 1,
+          "reason": "closure_unreliable_pair_p95"
+        },
+        "output_density": {
+          "status": "applied",
+          "factor": 1.1845703125,
+          "sample_count": 121955,
+          "invalid_probe_count": 0,
+          "boundary_probe_count": 3446,
+          "direct_pair_p95_output_px": 2.4716521291388305,
+          "residual_median_output_px": 0.23456790951747458,
+          "minimum_scale": 0.8445761860919788,
+          "p01_scale": 0.8689395381912665,
+          "median_scale": 0.9437522348176617,
+          "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof"
+        },
+        "native_acceptance": "rejected",
+        "acceptance_claim": false,
+        "note": "D1 diagnostic only; no D2 native or D3 QG claim."
+      }
+    },
+    {
+      "id": "xiagui",
+      "label": "夏圭",
+      "expected_source_count": 48,
+      "directory": "夏圭",
+      "has_baseline": false,
+      "expected_skipped": [],
+      "source_bytes": 2903839002,
+      "source_aggregate_sha256": "338af8d29e488d8c4d772677ea3471ece805c3c7fa7ec5b5b1ec6f5a3672fc06",
+      "status": "diagnostic_rejected",
+      "d1_result": {
+        "status": "quality_gate_failed",
+        "scale": 0.25,
+        "run_id": "xiagui-s0p25-task17-xiaguid1r1",
+        "run_path": "output/acceptance/task17/xiagui-d1-r1/run",
+        "stack_report": "output/acceptance/task17/xiagui-d1-r1/run/xiagui-s0p25-task17-xiaguid1r1-stack-reports/stack-report-cb3753ca-4a6b-45ae-9044-99fa72700b35.json",
+        "inputs": 48,
+        "stations": 15,
+        "output_dimensions": [
+          3395,
+          2922
+        ],
+        "tone": {
+          "status": "applied",
+          "tiles": 15,
+          "boundary_delta_e00": {
+            "max": 1.3806623592,
+            "threshold": 1.5,
+            "violations": 0
+          }
+        },
+        "qg": {
+          "verdict": "fail",
+          "local_scale_median": {
+            "verdict": "diagnostic_not_applicable",
+            "measured_count": 8
+          },
+          "local_scale_pixel_ratio": {
+            "verdict": "pass",
+            "measured_count": 8
+          },
+          "effective_pixel": {
+            "verdict": "pass"
+          },
+          "gradient": {
+            "verdict": "pass"
+          },
+          "roi_delta_e00": {
+            "verdict": "pass"
+          },
+          "owner_sharpness": {
+            "verdict": "pass"
+          },
+          "boundary_stroke_alignment": {
+            "verdict": "fail",
+            "failed_count": 7,
+            "measured_count": 46,
+            "failed_value_range": [
+              2.4287,
+              3.5658
+            ],
+            "threshold": 1.5
+          }
+        },
+        "memory_gate": {
+          "verdict": "PASS",
+          "threshold_rss_bytes": 25769803776,
+          "peak_rss_bytes": 12656295936,
+          "exceeded": false,
+          "threads": 8,
+          "max_resident_virtual_tiles": 16
+        },
+        "source_contract": {
+          "decoded": "48/48",
+          "aggregate_sha_unchanged": true
+        },
+        "station_relation": {
+          "rejected_count": 13,
+          "closure_unreliable_pair_p95": 11
+        },
+        "output_density": {
+          "status": "applied",
+          "factor": 1.201171875,
+          "sample_count": 127207,
+          "invalid_probe_count": 0,
+          "boundary_probe_count": 4542,
+          "direct_pair_p95_output_px": 2.35147,
+          "residual_median_output_px": 0.342725,
+          "max_corner_correction_output_px": 5.14225,
+          "minimum_scale": 0.83284,
+          "p01_scale": 0.863529,
+          "median_scale": 0.948205,
+          "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof"
+        },
+        "native_acceptance": "rejected",
+        "acceptance_claim": false,
+        "note": "D1 diagnostic only; no D2 native or D3 QG claim."
+      }
+    },
+    {
+      "id": "lidong",
+      "label": "李东",
+      "expected_source_count": 25,
+      "directory": "李东",
+      "has_baseline": false,
+      "expected_skipped": [],
+      "source_bytes": 1484471346,
+      "source_aggregate_sha256": "17bedaf100ce2d06e001896b9dc373ad72b0cc80e8e5cbfbb54c4d0eddc76f85",
+      "status": "diagnostic_rejected_structural",
+      "d1_result": {
+        "status": "diagnostic_rejected_structural",
+        "scale": 0.25,
+        "run_id": "lidong-s0p25-task17-lidongd1r1",
+        "run_path": "output/acceptance/task17/lidong-d1-r1/run",
+        "inputs": 25,
+        "streamed_sources": 25,
+        "stations": 11,
+        "output_dimensions": [
+          2720,
+          1942
+        ],
+        "reports": [
+          {
+            "selected_path": "layered_virtual_tile",
+            "stack_report": "output/acceptance/task17/lidong-d1-r1/run/lidong-s0p25-task17-lidongd1r1-stack-reports/stack-report-739353a6-0b5f-488b-9d3c-f1eea7d5268e.json",
+            "stations": 11,
+            "degradation": "rejected",
+            "reason": "geometry_disconnected",
+            "component_count": 3,
+            "tone": "not_run",
+            "qg": "not_run",
+            "density": "not_run",
+            "peak_rss_bytes": 11428921344
+          },
+          {
+            "selected_path": "legacy_single_layer_mosaic",
+            "stack_report": "output/acceptance/task17/lidong-d1-r1/run/lidong-s0p25-task17-lidongd1r1-stack-reports/stack-report-b0d2d3a9-782f-4c08-a35d-99baf930ef34.json",
+            "stations": 11,
+            "degradation": "rejected",
+            "tone": "not_run",
+            "qg": {
+              "verdict": "fail",
+              "local_scale_pixel_ratio": "4/8 failed",
+              "boundary_stroke_alignment": "5/74 failed",
+              "owner_sharpness_coverage": "1/1"
+            },
+            "density": "not_run",
+            "peak_rss_bytes": 11490295808
+          }
+        ],
+        "source_contract": {
+          "decoded": "25/25",
+          "aggregate_sha_unchanged": true,
+          "ownership_verified": true
+        },
+        "memory_gate": {
+          "verdict": "PASS",
+          "threshold_rss_bytes": 25769803776,
+          "layered_peak_rss_bytes": 11428921344,
+          "legacy_peak_rss_bytes": 11490295808,
+          "exceeded": false,
+          "threads": 8
+        },
+        "structural_failure": {
+          "geometry_disconnected": {
+            "component_count": 3
+          },
+          "station_relation_scale_out_of_range": true,
+          "station_relation_edge_strength_mismatch": true,
+          "topology_ambiguous": true,
+          "low_sharpness": true
+        },
+        "tone": {
+          "status": "not_run"
+        },
+        "output_density": {
+          "status": "not_run"
+        },
+        "summary_native_acceptance_field": "passed-or-not-applicable",
+        "native_acceptance": "rejected_structural_not_accepted",
+        "artifact_contract": "not-run-preview",
+        "acceptance_claim": false,
+        "note": "The summary field nativeAcceptance=passed-or-not-applicable is not an acceptance claim; structural geometry rejection prevented tone/density/QG proof."
+      }
+    }
+  ],
+  "checks": {
+    "require_data": "passed",
+    "hash_inputs": "passed",
+    "unregistered_new_dataset_detected": false,
+    "manifest_modified": true,
+    "new_material_ids": [
+      "chibi",
+      "lidong",
+      "lisong",
+      "xiagui"
+    ]
+  },
+  "decision": {
+    "status": "d1_complete_diagnostic_rejection",
+    "conclusion": "四组新素材 D1 均已完成。赤壁、李嵩、夏圭完成部分质量指标但各自 QG 拒绝；李东因 layered geometry_disconnected（三个组件）结构失败，fallback legacy 也有 QG 失败，tone/density 无证据。四组均不授予 native/QG/发布验收。",
+    "next_step": "任务17 bounded follow-ups completed; source RGB sampler is available but this run produced only one of three requested owner samples. Preserve native rejection; only rerun if complete per-owner RGB attribution is required, without changing thresholds, bounds or fallback."
+  },
+  "filesystem_scan": {
+    "root": "/Users/dp/Downloads/书画拼图",
+    "raw_source_extensions": [
+      ".nef",
+      ".arw",
+      ".cr2",
+      ".cr3",
+      ".dng",
+      ".raf",
+      ".orf",
+      ".rw2"
+    ],
+    "registered_new_raw_directories": [
+      {
+        "id": "chibi",
+        "directory": "赤壁",
+        "count": 48
+      },
+      {
+        "id": "lisong",
+        "directory": "李嵩",
+        "count": 46
+      },
+      {
+        "id": "xiagui",
+        "directory": "夏圭",
+        "count": 48
+      },
+      {
+        "id": "lidong",
+        "directory": "李东",
+        "count": 25
+      }
+    ],
+    "unregistered_raw_source_directories": [],
+    "derived_root_outputs_ignored": [
+      ".tif",
+      ".tiff",
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".psd"
+    ]
+  },
+  "runner_contract": {
+    "runner": "direct_node_focus_stack_regression",
+    "binary": "base-2026-11-12",
+    "worker_threads": 8,
+    "monitor_contract": "unavailable_ps_preexec_workaround",
+    "note": "标准 scripts/stack-lab/run.py 的 ps/nice 监控在当前 sandbox 被 Operation not permitted；四次 D1 仍使用冻结二进制并记录 child NATIVE_PROCESS_USAGE，均为 diagnostic-only。"
+  },
+  "bounded_followups": {
+    "lidong_grouping_overlap": {
+      "status": "completed_test_only",
+      "report": "docs/benchmarks/task-17-lidong-grouping-overlap-bounded-r1.json",
+      "result": "three components remain; no gate-compatible cross-component bridge; synthetic forced edges are not acceptable evidence"
+    },
+    "lisong_xiagui_boundary_witness": {
+      "status": "completed_dynamic_native_capture_and_saved_preview_replay",
+      "report": "docs/benchmarks/task-17-boundary-witness-replay-r1.json",
+      "result": "all three 1200px preview probes are boundary_low_contrast; native QG failures remain unresolved and are not erased",
+      "artifacts": [
+        "docs/benchmarks/task-17-boundary-witness-replay-r1.json",
+        "docs/benchmarks/task-17-xiagui-native-boundary-capture-r1.json",
+        "docs/benchmarks/task-17-lisong-native-boundary-capture-r1.json",
+        "docs/benchmarks/task-17-lisong-native-boundary-capture-r2.json",
+        "docs/benchmarks/task-17-edge-owner-coverage-audit-r1.json",
+        "docs/benchmarks/task-17-boundary-origin-aggregation-audit-r1.json",
+        "docs/benchmarks/task-17-lisong-native-boundary-capture-r3.json"
+        ,"docs/benchmarks/task-17-xiagui-native-boundary-capture-r3.json"
+      ],
+      "finding": "After dynamic debug-region and P95 coordinate fixes, the LiSong witness moved to real covered output (3010,1697) with owners 30/41/44; the new Xiagui derivative moves its primary witness to covered output (533,1637), owner zero count 0, mainly owners 11/27 (DSC_0988 station3 and DSC_0980 station9), with accepted 3↔9 geometry relation. Boundary-stroke still fails; the derivative also reports tone ΔE00 max 4.116856, retained as test-only evidence and not promoted to a production tone decision."
+    },
+    "chibi_tone_local_scale": {
+      "status": "completed_bounded_source_attempt_blocked",
+      "report": "docs/benchmarks/task-17-chibi-tone-local-scale-isolation-r1.json",
+      "source_witness_artifact": "docs/benchmarks/task-17-chibi-tone-source-mapping-audit-r3.json",
+      "historical_source_witness_artifact": "docs/benchmarks/task-17-chibi-tone-source-witness-r1.json",
+      "result": "2↔5 tone relation remains absent from native fitting and candidate failed insufficient_measurable_patches; six local-scale failures overlap stations 2/3/5/7/8/11. The bounded path-only witness loaded all four requested paths; all eight probes have native_registration/native_warp=true but native_source_sampling_unmapped before RGB sampling, so no photometric relation conclusion is valid.",
+      "next_step": "Keep tone bounds and local-scale thresholds unchanged. Treat native_source_sampling_unmapped as the bounded blocker; move to the next material unless a dedicated owner/source sampling footprint trace is required."
+    },
+    "boundary_p95_coordinate_fix": {
+      "status": "validated_test_and_targeted_tests",
+      "artifact": "docs/benchmarks/task-17-boundary-p95-coordinate-fix-r1.json",
+      "finding": "Aggregate boundary P95 is now attributed to the nearest real measured boundary point instead of input.world_origin; P95 value and thresholds are unchanged. Historical D1 reports remain pre-fix."
+    },
+    "lisong_source_owner_fixture": {
+      "status": "completed_test_only",
+      "artifact": "docs/benchmarks/task-17-lisong-boundary-source-owner-fixture-r1.json",
+      "finding": "The corrected LiSong witness is fully covered and owned by sources 30/41/44 across stations 9/13; station relation geometry passes, but boundary stroke error remains 1.7252. Saved 96px crop replay returns boundary_low_contrast, so source-owner/stroke mismatch remains native-only evidence."
+    },
+    "lisong_source_rgb_sampler": {
+      "status": "completed_path_only_test_only",
+      "artifact": "docs/benchmarks/task-17-lisong-source-rgb-sampler-r3.json",
+      "relation_content_audit": "docs/benchmarks/task-17-lisong-saved-tone-relation-content-audit-r1.json",
+      "finding": "The path-only 3x3 ring shows a near-unity same-station luma median (1.00113) with a broad 0.96694–1.13877 spread; the center mismatch is localized/content-sensitive rather than a stable uniform gain.",
+      "result": "Path-only forced availability sampled DSC_0910 owner30/station9 [0.789633,0.787392,0.700310], DSC_0905 owner41/station13 [0.626993,0.611115,0.519652], and DSC_0912 owner44/station13 [0.665989,0.638547,0.546796] at world (2269,1692). Native boundary-stroke remains rejected at 1.725157 > 1.5; tone boundary ΔE max 0.919580 < 1.5; density applied and memory gate passed.",
+      "next_step": "Keep production tone bounds, thresholds and fallback unchanged. Treat the witness as localized source-content evidence and move to the next material unless a larger content-matched patch is specifically required.",
+      "historical_artifact": "docs/benchmarks/task-17-lisong-source-rgb-sampler-r1.json",
+      "availability_artifact": "docs/benchmarks/task-17-lisong-source-rgb-availability-audit-r1.json",
+      "ring_audit": "docs/benchmarks/task-17-lisong-source-rgb-ring-audit-r1.json"
+    }
+  }
+}

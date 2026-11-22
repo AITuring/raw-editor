@@ -1,0 +1,493 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_lisong_source_rgb_ring_audit_r1",
+  "production_impact": "test_only bounded path-only ring audit; no production decision, threshold, bounds or fallback change",
+  "ring": "output/acceptance/task17/lisong-source-rgb-ring-d9-r8/source-point-rgb/source-point-rgb.json",
+  "summary": "output/acceptance/task17/lisong-source-rgb-ring-d9-r8/lisong-s0p25-task17-lisongsourceRGBringd9r8.summary.json",
+  "stack_report": "output/acceptance/task17/lisong-source-rgb-ring-d9-r8/lisong-s0p25-task17-lisongsourceRGBringd9r8-stack-reports/stack-report-9e08bd7c-284c-4a8e-991b-58b5693031d6.json",
+  "sample_count": 27,
+  "pairwise": [
+    {
+      "label": "station9_vs_station13",
+      "sample_count": 9,
+      "channel_stats": [
+        {
+          "min": 0.9614206032547202,
+          "median": 1.0168517034219486,
+          "max": 1.1856550099101135,
+          "population_stddev": 0.06372739572584521
+        },
+        {
+          "min": 0.9632466760580956,
+          "median": 1.0262472482455915,
+          "max": 1.2330984391091648,
+          "population_stddev": 0.07475570596899705
+        },
+        {
+          "min": 0.9054648240455508,
+          "median": 1.0415568830677016,
+          "max": 1.280751193872669,
+          "population_stddev": 0.11069426939743093
+        }
+      ],
+      "luma_stats": {
+        "min": 0.9621355619569238,
+        "median": 1.0262847526287515,
+        "max": 1.2255152879794213,
+        "population_stddev": 0.07339007762977148
+      },
+      "rows": [
+        {
+          "offset": {
+            "dx": 0,
+            "dy": 0
+          },
+          "rgb_ratio_left_over_right": [
+            1.1856550099101135,
+            1.2330984391091648,
+            1.280751193872669
+          ],
+          "luma_ratio_left_over_right": 1.2255152879794213
+        },
+        {
+          "offset": {
+            "dx": 0,
+            "dy": 32
+          },
+          "rgb_ratio_left_over_right": [
+            1.0176375911469036,
+            1.0,
+            1.0415568830677016
+          ],
+          "luma_ratio_left_over_right": 1.006608845928126
+        },
+        {
+          "offset": {
+            "dx": 0,
+            "dy": -32
+          },
+          "rgb_ratio_left_over_right": [
+            1.0168517034219486,
+            1.0509652856194296,
+            1.0043223014852065
+          ],
+          "luma_ratio_left_over_right": 1.0403102872822092
+        },
+        {
+          "offset": {
+            "dx": 32,
+            "dy": 0
+          },
+          "rgb_ratio_left_over_right": [
+            0.9915861908797458,
+            1.0129598344264608,
+            0.9323000189405897
+          ],
+          "luma_ratio_left_over_right": 1.0030323567084423
+        },
+        {
+          "offset": {
+            "dx": 32,
+            "dy": 32
+          },
+          "rgb_ratio_left_over_right": [
+            1.022124864054334,
+            1.0262472482455915,
+            1.1100001602782186
+          ],
+          "luma_ratio_left_over_right": 1.0302864159292313
+        },
+        {
+          "offset": {
+            "dx": 32,
+            "dy": -32
+          },
+          "rgb_ratio_left_over_right": [
+            0.9697502526708678,
+            0.9632466760580956,
+            0.9220606497380479
+          ],
+          "luma_ratio_left_over_right": 0.9621355619569238
+        },
+        {
+          "offset": {
+            "dx": -32,
+            "dy": 0
+          },
+          "rgb_ratio_left_over_right": [
+            1.0054040238462931,
+            1.0285359940475025,
+            1.0785701994469534
+          ],
+          "luma_ratio_left_over_right": 1.0262847526287515
+        },
+        {
+          "offset": {
+            "dx": -32,
+            "dy": 32
+          },
+          "rgb_ratio_left_over_right": [
+            0.9614206032547202,
+            0.9732603837963116,
+            0.9054648240455508
+          ],
+          "luma_ratio_left_over_right": 0.966308083926997
+        },
+        {
+          "offset": {
+            "dx": -32,
+            "dy": -32
+          },
+          "rgb_ratio_left_over_right": [
+            1.0702054757588397,
+            1.0404144587901836,
+            1.0726060595289013
+          ],
+          "luma_ratio_left_over_right": 1.0491388112575106
+        }
+      ]
+    },
+    {
+      "label": "station9_vs_station13_reference",
+      "sample_count": 9,
+      "channel_stats": [
+        {
+          "min": 0.9570371562216679,
+          "median": 1.0289468957347119,
+          "max": 1.2593967997354931,
+          "population_stddev": 0.09506261661912757
+        },
+        {
+          "min": 0.9719830428388997,
+          "median": 1.0119232460861334,
+          "max": 1.2884515712088964,
+          "population_stddev": 0.09628563596241205
+        },
+        {
+          "min": 0.9141955997697073,
+          "median": 1.0220378002463828,
+          "max": 1.3476527435490335,
+          "population_stddev": 0.13032086690405817
+        }
+      ],
+      "luma_stats": {
+        "min": 0.9662308278599614,
+        "median": 1.0144561419091673,
+        "max": 1.2857342846097042,
+        "population_stddev": 0.09769869124051545
+      },
+      "rows": [
+        {
+          "offset": {
+            "dx": 0,
+            "dy": 0
+          },
+          "rgb_ratio_left_over_right": [
+            1.2593967997354931,
+            1.2884515712088964,
+            1.3476527435490335
+          ],
+          "luma_ratio_left_over_right": 1.2857342846097042
+        },
+        {
+          "offset": {
+            "dx": 0,
+            "dy": 32
+          },
+          "rgb_ratio_left_over_right": [
+            1.1540189256116886,
+            1.1401372129348897,
+            1.1864640319399897
+          ],
+          "luma_ratio_left_over_right": 1.1463002952020844
+        },
+        {
+          "offset": {
+            "dx": 0,
+            "dy": -32
+          },
+          "rgb_ratio_left_over_right": [
+            1.0333988192848502,
+            1.0452299745218954,
+            1.0272121749562433
+          ],
+          "luma_ratio_left_over_right": 1.0414867764992264
+        },
+        {
+          "offset": {
+            "dx": 32,
+            "dy": 0
+          },
+          "rgb_ratio_left_over_right": [
+            0.9936447017067586,
+            0.9986674214002661,
+            0.9440898557454321
+          ],
+          "luma_ratio_left_over_right": 0.9942050369722407
+        },
+        {
+          "offset": {
+            "dx": 32,
+            "dy": 32
+          },
+          "rgb_ratio_left_over_right": [
+            1.031634614756579,
+            1.0191415204872307,
+            1.0594274261958752
+          ],
+          "luma_ratio_left_over_right": 1.0244338039748686
+        },
+        {
+          "offset": {
+            "dx": 32,
+            "dy": -32
+          },
+          "rgb_ratio_left_over_right": [
+            0.9570371562216679,
+            0.9719830428388997,
+            0.9335377290864553
+          ],
+          "luma_ratio_left_over_right": 0.9662308278599614
+        },
+        {
+          "offset": {
+            "dx": -32,
+            "dy": 0
+          },
+          "rgb_ratio_left_over_right": [
+            0.9695856024506467,
+            1.0119232460861334,
+            1.0180677557823146
+          ],
+          "luma_ratio_left_over_right": 1.002586738421619
+        },
+        {
+          "offset": {
+            "dx": -32,
+            "dy": 32
+          },
+          "rgb_ratio_left_over_right": [
+            0.9620920124711727,
+            0.9748436895571589,
+            0.9141955997697073
+          ],
+          "luma_ratio_left_over_right": 0.9681609728959417
+        },
+        {
+          "offset": {
+            "dx": -32,
+            "dy": -32
+          },
+          "rgb_ratio_left_over_right": [
+            1.0289468957347119,
+            1.0091402208848508,
+            1.0220378002463828
+          ],
+          "luma_ratio_left_over_right": 1.0144561419091673
+        }
+      ]
+    },
+    {
+      "label": "same_station13",
+      "sample_count": 9,
+      "channel_stats": [
+        {
+          "min": 0.9614479826924143,
+          "median": 1.0020759777071788,
+          "max": 1.1340175870577656,
+          "population_stddev": 0.050572898935205834
+        },
+        {
+          "min": 0.9699405966140656,
+          "median": 0.9945428158512828,
+          "max": 1.1401372129348897,
+          "population_stddev": 0.04887407911140033
+        },
+        {
+          "min": 0.9439049551937723,
+          "median": 1.0124472065386023,
+          "max": 1.139125525670276,
+          "population_stddev": 0.0571001905942353
+        }
+      ],
+      "luma_stats": {
+        "min": 0.9669417726461075,
+        "median": 1.0011309022234998,
+        "max": 1.1387743112322426,
+        "population_stddev": 0.04911100804321755
+      },
+      "rows": [
+        {
+          "offset": {
+            "dx": 0,
+            "dy": 0
+          },
+          "rgb_ratio_left_over_right": [
+            1.0621949801662542,
+            1.0448894673321625,
+            1.0522361798266773
+          ],
+          "luma_ratio_left_over_right": 1.0491376951564346
+        },
+        {
+          "offset": {
+            "dx": 0,
+            "dy": 32
+          },
+          "rgb_ratio_left_over_right": [
+            1.1340175870577656,
+            1.1401372129348897,
+            1.139125525670276
+          ],
+          "luma_ratio_left_over_right": 1.1387743112322426
+        },
+        {
+          "offset": {
+            "dx": 0,
+            "dy": -32
+          },
+          "rgb_ratio_left_over_right": [
+            1.016272889947685,
+            0.9945428158512828,
+            1.0227913623317804
+          ],
+          "luma_ratio_left_over_right": 1.0011309022234998
+        },
+        {
+          "offset": {
+            "dx": 32,
+            "dy": 0
+          },
+          "rgb_ratio_left_over_right": [
+            1.0020759777071788,
+            0.9858904444772115,
+            1.0126459686424116
+          ],
+          "luma_ratio_left_over_right": 0.9911993669225494
+        },
+        {
+          "offset": {
+            "dx": 32,
+            "dy": 32
+          },
+          "rgb_ratio_left_over_right": [
+            1.009303903110745,
+            0.9930760079790631,
+            0.9544389848829683
+          ],
+          "luma_ratio_left_over_right": 0.9943194320881305
+        },
+        {
+          "offset": {
+            "dx": 32,
+            "dy": -32
+          },
+          "rgb_ratio_left_over_right": [
+            0.9868903396372563,
+            1.0090697087235807,
+            1.0124472065386023
+          ],
+          "luma_ratio_left_over_right": 1.004256433360293
+        },
+        {
+          "offset": {
+            "dx": -32,
+            "dy": 0
+          },
+          "rgb_ratio_left_over_right": [
+            0.9643741018077301,
+            0.9838481608251798,
+            0.9439049551937723
+          ],
+          "luma_ratio_left_over_right": 0.9769089288850566
+        },
+        {
+          "offset": {
+            "dx": -32,
+            "dy": 32
+          },
+          "rgb_ratio_left_over_right": [
+            1.0006983511838414,
+            1.0016268059269724,
+            1.0096423135303567
+          ],
+          "luma_ratio_left_over_right": 1.0019174929815498
+        },
+        {
+          "offset": {
+            "dx": -32,
+            "dy": -32
+          },
+          "rgb_ratio_left_over_right": [
+            0.9614479826924143,
+            0.9699405966140656,
+            0.9528547700870451
+          ],
+          "luma_ratio_left_over_right": 0.9669417726461075
+        }
+      ]
+    }
+  ],
+  "native_result": {
+    "quality_gate": "fail",
+    "outcome": "rejected",
+    "tone_status": "applied",
+    "tone_boundary_delta_e": {
+      "max": 0.9195802029377267,
+      "threshold": 1.5,
+      "violations": []
+    },
+    "density": {
+      "status": "applied",
+      "factor": 1.1845703125,
+      "pixel_count_multiplier": 1.4032068252563477,
+      "canvas_pixels": 7277480,
+      "output_plane_lower_bound_bytes": 130994640,
+      "target_minimum_scale": 1.0,
+      "probe_step_px": 32,
+      "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+      "source_count": 46,
+      "sample_count": 121955,
+      "invalid_probe_count": 0,
+      "boundary_probe_count": 3446,
+      "worst_station_index": 0,
+      "worst_source_id": 3,
+      "worst_station_point": [
+        1953.0,
+        1185.0
+      ],
+      "direct_pair_p95_output_px": 2.4716521291388305,
+      "residual_median_output_px": 0.23456790951747458,
+      "max_corner_correction_output_px": 0.3719994615591257,
+      "minimum_scale": 0.8445761860919788,
+      "p01_scale": 0.8689395381912665,
+      "median_scale": 0.9437522348176617,
+      "bypass_reason": null
+    },
+    "memory": {
+      "memory_threshold_bytes": 25769803776,
+      "memory_threshold_source": "default",
+      "physical_memory_bytes": 34359738368,
+      "peak_rss_bytes": 13581713408,
+      "rss_sample_count": 3441,
+      "memory_threshold_exceeded": false,
+      "max_resident_virtual_tiles": 16,
+      "network_requests": 0,
+      "worker_threads": 8,
+      "random_seed_source": "site_constants_without_run_seed"
+    }
+  },
+  "classification": {
+    "same_station13_luma_median": 1.0011309022234998,
+    "same_station13_luma_range": [
+      0.9669417726461075,
+      1.1387743112322426
+    ],
+    "same_station13_luma_spread": 0.17183253858613512,
+    "localized_or_content_sensitive": true,
+    "production_promotion": "rejected",
+    "interpretation": "The center witness can be strongly different, but the surrounding same-station ring has a near-unity median with a broad spread. This is more consistent with localized content/boundary sensitivity than a stable uniform tone gain; the ring is diagnostic evidence only."
+  },
+  "next_step": "Keep tone bounds, thresholds and fallback unchanged. Treat the witness as localized source-content evidence; move to the next material or collect a larger content-matched patch only if a production decision requires it."
+}

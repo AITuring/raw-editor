@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_lisong_native_boundary_capture_r1",
+  "production_impact": "test_only env sinks on one frozen scale=0.25 diagnostic rerun; no production code, threshold, bounds or fallback change",
+  "run_id": "lisong-s0p25-task17-lisongboundaryd1r1",
+  "run_path": "output/acceptance/task17/lisong-boundary-d1-r1/run",
+  "stack_report": "output/acceptance/task17/lisong-boundary-d1-r1/run/lisong-s0p25-task17-lisongboundaryd1r1-stack-reports/stack-report-dde1f93a-f860-40d1-8d11-6cc090456402.json",
+  "runner_contract": {
+    "direct_runner": true,
+    "binary": "base-2026-11-12",
+    "threads": 8,
+    "preview_only": true,
+    "monitor_contract": "unavailable_ps_preexec_workaround"
+  },
+  "result": {
+    "inputs": 46,
+    "stations": 15,
+    "output": {
+      "width": 3205,
+      "height": 2194
+    },
+    "verdict": "failed",
+    "tone_status": "applied",
+    "quality_gate": "fail",
+    "native_acceptance": "rejected: native output did not pass the complete quality gate"
+  },
+  "native_boundary_witnesses": [
+    {
+      "artifact": "output/acceptance/task17/lisong-boundary-d1-r1/failed-boundaries/boundary-000.json",
+      "world": {
+        "x": -741.0,
+        "y": -5.0
+      },
+      "measured": 1.6581128181810776,
+      "crop": [
+        0,
+        0,
+        96,
+        96
+      ],
+      "crop_point": [
+        0,
+        0
+      ],
+      "world_origin": [
+        -741.0,
+        -5.0
+      ]
+    }
+  ],
+  "capture_outputs": {
+    "failed_boundaries_dir": "output/acceptance/task17/lisong-boundary-d1-r1/failed-boundaries",
+    "boundary_debug_dir": "output/acceptance/task17/lisong-boundary-d1-r1/boundary-debug",
+    "candidate_dir": "output/acceptance/task17/lisong-boundary-d1-r1/boundary-candidates",
+    "candidate_file_present": false,
+    "raw_owner_map": "output/acceptance/task17/lisong-boundary-d1-r1/boundary-debug/raw-owner-map.json",
+    "failure_neighbourhood": "output/acceptance/task17/lisong-boundary-d1-r1/boundary-debug/failure-neighbourhood.json"
+  },
+  "debug_findings": {
+    "world_origin": [
+      -741.0,
+      -5.0
+    ],
+    "raw_owner_region": {
+      "height": 0,
+      "left": 3205,
+      "top": 2194,
+      "width": 0
+    },
+    "raw_owner_region_empty": true,
+    "failure_neighbourhood_world": {
+      "x": -741.0,
+      "y": -5.0
+    },
+    "failure_neighbourhood_output": {
+      "x": 0,
+      "y": 0
+    },
+    "failure_neighbourhood_owner_path": "",
+    "failure_neighbourhood_owner_zero_count": 169
+  },
+  "interpretation": "The native boundary failure witness was captured as a 96px crop at output (0,0), with owner 0 and an empty fixed debug neighbourhood because the debug window is outside the cropped canvas. This is evidence of a crop/owner edge case to isolate; it does not erase the native QG failure or prove a repair. Candidate diagnostics did not flush in this run.",
+  "next_step": "Compare this edge witness with Xiagui capture and preserve native rejection until a bounded source-owner proof is available."
+}

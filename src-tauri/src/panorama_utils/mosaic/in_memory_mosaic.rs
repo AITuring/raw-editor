@@ -39,6 +39,52 @@ use super::{
     refine_native_layer, station_member_median_sharpness, tone_field,
 };
 
+#[cfg(test)]
+fn test_source_geometry_homographies(
+    images: &[&ImageInfo],
+    homographies: &HashMap<usize, Matrix3<f64>>,
+) -> HashMap<usize, Matrix3<f64>> {
+    let Some(selector) = std::env::var_os("RAW_EDITOR_TEST_SOURCE_GEOMETRY_PATH") else {
+        return homographies.clone();
+    };
+    let selector = selector.to_string_lossy();
+    let Ok(factor) = std::env::var("RAW_EDITOR_TEST_SOURCE_GEOMETRY_FACTOR")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .ok_or(())
+    else {
+        return homographies.clone();
+    };
+    if !factor.is_finite() || factor <= 0.0 || (factor - 1.0).abs() < f64::EPSILON {
+        return homographies.clone();
+    }
+    let mut adjusted = homographies.clone();
+    for info in images {
+        let matches = info.filename == selector
+            || std::path::Path::new(&info.filename)
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy() == selector)
+            || info.filename.ends_with(selector.as_ref());
+        if !matches {
+            continue;
+        }
+        let Some(transform) = homographies.get(&info.id).copied() else {
+            continue;
+        };
+        let center_x = f64::from(info.width) * 0.5;
+        let center_y = f64::from(info.height) * 0.5;
+        let recenter = Matrix3::new(1.0, 0.0, center_x, 0.0, 1.0, center_y, 0.0, 0.0, 1.0)
+            * Matrix3::new(factor, 0.0, 0.0, 0.0, factor, 0.0, 0.0, 0.0, 1.0)
+            * Matrix3::new(1.0, 0.0, -center_x, 0.0, 1.0, -center_y, 0.0, 0.0, 1.0);
+        adjusted.insert(info.id, transform * recenter);
+        println!(
+            "  - TEST_SOURCE_GEOMETRY path={} factor={factor}",
+            info.filename
+        );
+    }
+    adjusted
+}
+
 pub(super) fn mask_covered_bounds(mask: &GrayImage) -> Option<(u32, u32, u32, u32)> {
     let mut min_x = mask.width();
     let mut min_y = mask.height();
@@ -105,6 +151,10 @@ pub(crate) fn detail_preserving_mosaic_observed<R: Runtime, F>(
 where
     F: FnMut(&ImageInfo) -> Result<Rgb32FImage, String>,
 {
+    #[cfg(test)]
+    let test_homographies = test_source_geometry_homographies(images, homographies);
+    #[cfg(test)]
+    let homographies = &test_homographies;
     let (min_x, max_x, min_y, max_y) = output_bounds(images, homographies, projection);
     if ![min_x, max_x, min_y, max_y].iter().all(|x| x.is_finite()) {
         return Err("The stack does not have a finite aligned canvas.".into());

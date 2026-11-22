@@ -113,3 +113,17 @@ test-only 组成链已完成一次全量 scale=1 诊断：`station pose → Resi
 owner radius2 只在 test-only 路径把 unresolved `163→0`；生产仍保持 3×3。boundary repair 只把一个具体 seam 的局部误差 `3.000→0.000px`，但可测候选仍不足以让 native criterion 通过；residual-aware density 诊断证明 nonidentity residual 的 composed scale 最低 `0.0172509`，不能复用旧 factor。任务16仍不勾选、不推广生产、不继续 factor 扫描。
 
 最终机器决策：[task-16-final-decision.json](../benchmarks/task-16-final-decision.json)。boundary 合同补充核对见 [task-16-boundary-candidate-measurability-brief.json](../benchmarks/task-16-boundary-candidate-measurability-brief.json)：当前只有 2 个可测样本，低于 `QUALITY_MIN_MEASURABLE=8`。candidate evidence 捕获结果见 [task-16-boundary-candidate-evidence-result.json](../benchmarks/task-16-boundary-candidate-evidence-result.json)：captured strength 中位数 `0.01452`，但导出明确截断。若继续，只能先提出新的 candidate-content 证据或产品合同；没有新的可证伪假设，不再启动全量 A/B。
+
+## 任务14→任务16 交接
+
+任务14 已按最终结论收口为 diagnostic rejection；其运行正常结束且内存门通过，因此任务15 的“超 24GiB 或无法跑完”启动条件未触发。按任务清单顺序，当前转入任务16 review/product-decision lane。
+
+任务16 的 scale=1、owner stencil、boundary repair 和 residual-aware density 诊断已经有最终决策。在新的 boundary candidate-content 假设或明确产品决策出现前，不重复 full A/B，不修改 `QUALITY_MIN_MEASURABLE`、3px/1.5px 门限、density bypass 或生产 owner fallback。交接摘要：[task-14-to-task-16-handoff-r1.json](../benchmarks/task-14-to-task-16-handoff-r1.json)。
+
+## boundary candidate-content 假设复核
+
+对现有 50,000 条 candidate export 做了只读复核：其中 46,533 条 coverage/owner 均有效但被 `boundary_candidate_low_strength` 拒绝，strength 最大仅 `0.06728`，合同阈值为 `0.15`，达到阈值的记录为 `0`。因此“把低强度候选通过内容分类重新标成 measurable”会直接改变测量合同，不能作为修复。机器摘要：[task-16-boundary-candidate-content-hypothesis-r1.json](../benchmarks/task-16-boundary-candidate-content-hypothesis-r1.json)。任务16当前没有新的可证伪运行假设，下一步转为明确产品决策：保留该 artwork 的 boundary diagnostic rejection/NotApplicable，或另行定义独立 content probe 合同。
+
+## boundary 产品决策 brief
+
+本轮采用保守推荐：保留该 artwork 的 boundary diagnostic rejection，不把 `NotApplicable` 提升为 native acceptance；不修改阈值、生产 owner fallback、density adapter 或 TIFF 合同，也不重复 full A/B。任务16交接到任务17新素材登记入口；只有出现独立 content-probe 合同或用户批准的产品政策变更时才重新打开任务16。机器摘要：[task-16-boundary-product-decision-brief-r1.json](../benchmarks/task-16-boundary-product-decision-brief-r1.json)。

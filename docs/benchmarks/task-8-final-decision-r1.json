@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "task": 8,
+  "method": "task_8_provider_final_decision_r1",
+  "production_impact": "read-only decision record; no provider selection, pose write, Stack_Report, QG, threshold, bounds or default change",
+  "inputs": {
+    "initial_audit": "docs/benchmarks/task-8-provider-audit.json",
+    "bundle": "docs/benchmarks/task-8-provider-bundle-r1.json",
+    "opencv_candidate": "docs/benchmarks/langyuan-provider-compare-r1.json",
+    "learned_candidate": "docs/benchmarks/langyuan-raco-aliked-provider-r1.json",
+    "adapter_feasibility": "docs/benchmarks/task-8-learned-adapter-feasibility-r1.json"
+  },
+  "decision": {
+    "task_8_status": "deferred",
+    "rust_default_provider": "rust_fast_brief",
+    "opencv_candidate": "test_only_candidate_metrics_no_rust_submission",
+    "learned_candidate": "runtime_verified_but_contract_blocked",
+    "production_promotion": "rejected",
+    "reason": "The learned ONNX graph emits keypoints, matches and mscores but no descriptors; Rust FeatureProviderResult requires descriptor rows, element type/dimension/bytes and coordinate-frame provenance. Fabricating descriptors or relabeling host-resized coordinates would invalidate evidence.",
+    "thresholds_bounds_fallback_changed": false
+  },
+  "verification": {
+    "rust_provider_tests": "6/6 pass",
+    "python_provider_audit_tests": "2/2 pass",
+    "opencv_candidate_replay": "fieldwise reproducible",
+    "learned_runtime": "ORT candidate run completed",
+    "rust_geometry_gate_rerun": false,
+    "stack_report_or_qg_written": false
+  },
+  "handoff": {
+    "next_task": 11,
+    "reason": "Task 8 cannot complete without a descriptor-emitting sidecar and explicit coordinate-frame contract; bounded source-resampling diagnostics are the safe next path already defined by task 11.",
+    "required_for_reopen": "A pinned learned provider that emits descriptors plus license/weight SHA/sidecar contract and a Rust adapter test that submits the payload through the unchanged geometry gate.",
+    "do_not_do": [
+      "do not fabricate descriptors",
+      "do not select the learned provider as a production fallback",
+      "do not treat candidate inliers as Stack_Report or QG evidence"
+    ]
+  }
+}

@@ -14,6 +14,51 @@ use super::{
     ToneTile, delta_e00_rgb, gaussian_cells, median, median_f64,
 };
 
+#[cfg(test)]
+fn tone_min_sample_luminance() -> f32 {
+    std::env::var("RAW_EDITOR_TEST_TONE_MIN_SAMPLE_LUMINANCE")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|value| value.is_finite() && (0.0001..=TONE_MIN_SAMPLE_LUMINANCE).contains(value))
+        .unwrap_or(TONE_MIN_SAMPLE_LUMINANCE)
+}
+
+#[cfg(not(test))]
+fn tone_min_sample_luminance() -> f32 {
+    TONE_MIN_SAMPLE_LUMINANCE
+}
+
+#[cfg(test)]
+fn tone_max_pair_luma_ratio() -> Option<f32> {
+    // Diagnostic-only gate for saved native relation replays. Production
+    // relation evidence keeps the fixed source contract and never reads this
+    // environment variable.
+    std::env::var("RAW_EDITOR_TEST_TONE_MAX_PAIR_LUMA_RATIO")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|value| value.is_finite() && (1.0..=128.0).contains(value))
+}
+
+#[cfg(not(test))]
+fn tone_max_pair_luma_ratio() -> Option<f32> {
+    None
+}
+
+fn pair_luminance_is_usable(first: [f32; 3], second: [f32; 3]) -> bool {
+    let luminance = |pixel: [f32; 3]| pixel[0] * 0.2126 + pixel[1] * 0.7152 + pixel[2] * 0.0722;
+    let first_luminance = luminance(first);
+    let second_luminance = luminance(second);
+    if !(tone_min_sample_luminance()..=TONE_MAX_SAMPLE_LUMINANCE).contains(&first_luminance)
+        || !(tone_min_sample_luminance()..=TONE_MAX_SAMPLE_LUMINANCE).contains(&second_luminance)
+    {
+        return false;
+    }
+    tone_max_pair_luma_ratio().is_none_or(|limit| {
+        first_luminance.max(second_luminance) / first_luminance.min(second_luminance).max(1e-8)
+            <= limit
+    })
+}
+
 /// The low fields of two tiles over their common support only (需求 9.1).
 ///
 /// Both are normalised convolutions of the same doubly covered cells, so they
@@ -213,13 +258,10 @@ impl PairField {
     /// Every doubly and entirely covered cell whose two fields both lie in
     /// the usable luminance range, `first` as the owner side (需求 9.1).
     pub(crate) fn samples(&self) -> Vec<ToneSample> {
-        let usable = |pixel: [f32; 3]| {
-            let luminance = 0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2];
-            (TONE_MIN_SAMPLE_LUMINANCE..=TONE_MAX_SAMPLE_LUMINANCE).contains(&luminance)
-        };
         (0..self.sample.len())
             .filter(|&index| {
-                self.sample[index] && usable(self.first[index]) && usable(self.second[index])
+                self.sample[index]
+                    && pair_luminance_is_usable(self.first[index], self.second[index])
             })
             .map(|index| ToneSample {
                 owner: self.first[index],
@@ -247,11 +289,7 @@ impl PairField {
                 owner: self.first[i],
                 source: self.second[i],
             };
-            let usable = |rgb: [f32; 3]| {
-                (TONE_MIN_SAMPLE_LUMINANCE..=TONE_MAX_SAMPLE_LUMINANCE)
-                    .contains(&(rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722))
-            };
-            if !usable(sample.owner) || !usable(sample.source) {
+            if !pair_luminance_is_usable(sample.owner, sample.source) {
                 continue;
             }
             let x =

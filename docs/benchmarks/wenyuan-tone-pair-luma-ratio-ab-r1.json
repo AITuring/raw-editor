@@ -1,0 +1,122 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_pair_luminance_ratio_gate_ab_r1",
+  "production_impact": "cfg(test)-only pairwise relation evidence gate; no production bounds, thresholds, or defaults changed",
+  "input": {
+    "capture_dir": "/private/tmp/wenyuan-tone-fields-34-39-r10",
+    "native_proof": "/private/tmp/wenyuan-native-proof-34-39-r7/joint-production-input.json",
+    "owner_plane": "tone-owners.filtered.png"
+  },
+  "variable": {
+    "name": "RAW_EDITOR_TEST_TONE_MAX_PAIR_LUMA_RATIO",
+    "control": null,
+    "candidates": [
+      4.0,
+      16.0
+    ],
+    "bounds_scale": 1.0
+  },
+  "replays": {
+    "control_ownerfix": {
+      "output": "/private/tmp/wenyuan-tone-fields-34-39-r10/saved-local-tone-boundary-ownerfix.json",
+      "maximum_delta_e00": 9.420790066773208,
+      "failed_window_count": 95,
+      "fitted_relations": 13,
+      "iterations": 1000,
+      "bounds_scale": 1.0,
+      "parameter_ranges": {
+        "gain_max": [
+          1.25,
+          1.25,
+          1.25
+        ],
+        "gain_min": [
+          0.800000011920929,
+          0.800000011920929,
+          0.800000011920929
+        ],
+        "offset_max": [
+          0.019999999552965164,
+          0.019999999552965164,
+          0.019999999552965164
+        ],
+        "offset_min": [
+          -0.019999999552965164,
+          -0.019999999552965164,
+          -0.019999999552965164
+        ]
+      }
+    },
+    "ratio4": {
+      "output": "/private/tmp/wenyuan-tone-fields-34-39-r10/saved-local-tone-boundary-ownerfix-ratio4.json",
+      "maximum_delta_e00": 9.401566991665543,
+      "failed_window_count": 95,
+      "fitted_relations": 13,
+      "iterations": 1000,
+      "bounds_scale": 1.0,
+      "parameter_ranges": {
+        "gain_max": [
+          1.25,
+          1.25,
+          1.25
+        ],
+        "gain_min": [
+          0.800000011920929,
+          0.800000011920929,
+          0.800000011920929
+        ],
+        "offset_max": [
+          0.019999999552965164,
+          0.019999999552965164,
+          0.019999999552965164
+        ],
+        "offset_min": [
+          -0.019999999552965164,
+          -0.019999999552965164,
+          -0.019999999552965164
+        ]
+      }
+    },
+    "ratio16": {
+      "output": "/private/tmp/wenyuan-tone-fields-34-39-r10/saved-local-tone-boundary-ownerfix-ratio16.json",
+      "maximum_delta_e00": 9.420790066773208,
+      "failed_window_count": 95,
+      "fitted_relations": 13,
+      "iterations": 1000,
+      "bounds_scale": 1.0,
+      "parameter_ranges": {
+        "gain_max": [
+          1.25,
+          1.25,
+          1.25
+        ],
+        "gain_min": [
+          0.800000011920929,
+          0.800000011920929,
+          0.800000011920929
+        ],
+        "offset_max": [
+          0.019999999552965164,
+          0.019999999552965164,
+          0.019999999552965164
+        ],
+        "offset_min": [
+          -0.019999999552965164,
+          -0.019999999552965164,
+          -0.019999999552965164
+        ]
+      }
+    }
+  },
+  "decision": {
+    "promotion": "rejected",
+    "conclusion": "ratio=4 only changes max residual 9.420790→9.401567 with the same 95 failed windows; ratio=16 is identical to control. Pairwise luminance-ratio rejection is not a sufficient relation repair.",
+    "next_step": "keep this gate test-only and isolate owner-specific source normalization or relation support extrapolation"
+  },
+  "limitations": [
+    "15-source saved-field replay only",
+    "all replays retain production bounds scale 1.0",
+    "no full 126-source QG run"
+  ]
+}

@@ -175,21 +175,26 @@
 - [ ] 11. 祁序到 D3（流式 mosaic 组）
   - 依赖：5.3、6 已合入。冲突：任务 6、12。
   - 摸底brief：祁序1/2均走legacy，0.25分别因尺度/边界/owner覆盖及噪声等判据失败；按两张S2卡复核实际排除、soft-frame donor和局部几何，不先修改正式预期。
+  - 2026-11-22诊断收口：固定输入/排序/source contract 后完成 DSC_3882 source-specific factor clean A/B；两组 source contract/memory gate 通过但 QG 仍 fail，停止 factor 扫描，不进入生产或D3，交接任务12。见 [任务卡](../../../docs/artwork-lanes/11-qixu-diagnostic.md) 与 [交接摘要](../../../docs/benchmarks/qixu-task-11-to-task-12-handoff-r1.json)。
 - [ ] 12. 枫鹰到 D3（流式 mosaic 组）
-  - 依赖：5.4、11 已合入。冲突：任务 6、11。
+  - 依赖：5.4；任务11已完成诊断收口且无生产合入。冲突：任务 6、11。
   - 摸底brief：0.25的DSC04916局部尺度比及owner覆盖0.971365仍失败；保留6张渲染JPEG排除、原0.1对照和曝光/反光观察，先按S2卡定位，不把边界pass外推为原生完成。
+  - 2026-11-22诊断收口：owner fallback、source resampling 与 DSC04916 geometry factor 均完成 bounded 证据；QG 仍 fail，停止扫描，不进入生产或D3，交接任务13。见 [任务卡](../../../docs/artwork-lanes/12-fengying-diagnostic.md) 与 [交接摘要](../../../docs/benchmarks/fengying-task-12-to-task-13-handoff-r1.json)。
 - [ ] 13. 阆苑 84 张到 D2/D3（站点求解组）
-  - 依赖：5.5。冲突：任务 14、15。
+  - 依赖：5.5；任务12已完成诊断收口且无生产合入。冲突：任务 14、15。
   - 摸底brief：84张0.25尺度比/边界QG失败，非恒等残差下密度保护旁路；参考图指标失败另属导出后测量链。按S2卡先核查残差/尺度与边界，再推进原生。
+  - 2026-11-22根因诊断收口：full-84 control 与基线一致；残差支持交集0，尺度因子分散无全局解，唯一 boundary witness 为 station16↔27 / owner48↔82 的4px；停止扫描，不改生产阈值/bounds/fallback，不启动scale1，交接任务14。见 [任务卡](../../../docs/artwork-lanes/13-langyuan-diagnostic.md) 与 [根因摘要](../../../docs/benchmarks/langyuan-task-13-root-cause-closure-r1.json)。
 - [ ] 14. 文苑 126 张到 D2/D3（站点求解组）
-  - 依赖：5.6、13 已合入。冲突：任务 13、15。
+  - 依赖：5.6；任务13已完成根因诊断收口且无生产合入。冲突：任务 13、15。
   - 摸底brief：先处理空源DSC_4885的完整性/排除合同，核查0.25与native入口判据范围、密度旁路及tone ΔE4.605；QG汇总pass不覆盖这些拒绝/降级，色调问题需跨组支持。
+  - 2026-11-23根因诊断收口：schema-8入口合同闭合但空源物理缺失；density 两尺度均 bypass；scale1 tone boundary 仍拒绝，34–39 replay 收敛到 witness-local content/photometric mismatch；不改生产阈值/bounds/fallback，交接任务16。见 [任务卡](../../../docs/artwork-lanes/14-wenyuan-diagnostic.md) 与 [根因摘要](../../../docs/benchmarks/wenyuan-task-14-root-cause-closure-r1.json)。
 - [ ] 15. 必要性能（PF.9，含未移植的 5 个接缝提速提交）
   - 只在诊断卡显示超内存门或无法跑完时启动；接缝提速修改 `stitching/station_seam_*`，属站点求解组。计时只在 `exclusive` 下。依赖：相应诊断卡。冲突：任务 13、14。
 - [ ] 16. 马远2、睡觉 45 张推进
   - 依赖：5.1、5.2。本轮两套均因输出像素闭环门拒绝、未出预览，L0据诊断卡归站点求解组；与13、14、15冲突，仍按批次/依赖串行推进。
 - [ ] 17. 新素材接入（以后每套新素材一项）
   - 登记 manifest → D1 → 诊断卡 → 归组。修改：`tests/acceptance/focus-stack-datasets.json`、`docs/artwork-lanes/`。冲突：无。
+  - 2026-11-23当前批次：赤壁、李嵩、夏圭、李东、赵佶均完成 D1/诊断与必要 bounded 证据，全部 diagnostic rejection；赵佶 station12 A/B 仍因 output-density closure 超限，停止 factor 扫描。所有记录运行内存门通过，不改生产阈值、bounds、fallback、tone 或 pose；后续仅在新假设或新素材登记时重开。见 [五组批次收口](../../../docs/benchmarks/task-17-new-materials-closure-r2.json)。
 
 ### 第 3 批：至少 3 套素材达到 D5 之后
 

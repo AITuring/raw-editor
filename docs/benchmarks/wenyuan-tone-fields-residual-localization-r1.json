@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_saved_tone_residual_localization_v1",
+  "production_impact": "read-only analysis of saved test-only fields; no production change",
+  "inputs": {
+    "capture_dir": "/private/tmp/wenyuan-tone-fields-34-39-r7",
+    "control_replay": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary.json",
+    "candidate_replay": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary-b1.5.json",
+    "native_proof": "/private/tmp/wenyuan-native-proof-34-39-r7/joint-production-input.json",
+    "output": "/private/tmp/wenyuan-native-proof-34-39-r7/residual-localization.json"
+  },
+  "dominant_witnesses": {
+    "control": [
+      {"left_station": 36, "right_station": 38, "delta": 10.857647310904358, "x": 5888, "y": 5632, "samples": 1895, "low_luminance_ratio": 37.99148352061051, "bound_hit": false, "outside_native_verified_support": true},
+      {"left_station": 36, "right_station": 37, "delta": 9.602753609010314, "x": 7680, "y": 5632, "samples": 2392, "bound_hit": false, "outside_native_verified_support": true},
+      {"left_station": 37, "right_station": 38, "delta": 7.676373760054283, "x": 7168, "y": 5632, "samples": 4879, "bound_hit": true, "outside_native_verified_support": true}
+    ],
+    "candidate": [
+      {"left_station": 36, "right_station": 38, "delta": 10.457657219451127, "x": 5888, "y": 5632, "samples": 1895, "low_luminance_ratio": 37.99148352061051, "bound_hit": false, "outside_native_verified_support": true},
+      {"left_station": 36, "right_station": 37, "delta": 9.336838179762308, "x": 7680, "y": 5632, "samples": 2392, "bound_hit": false, "outside_native_verified_support": true},
+      {"left_station": 37, "right_station": 38, "delta": 3.917324569209491, "x": 6400, "y": 5632, "samples": 373, "bound_hit": true, "outside_native_verified_support": true}
+    ]
+  },
+  "native_relation_context": {
+    "36_to_38": {"inliers": 308, "error_px": 1.4985384690020522, "native_verified_points": 308, "hull_support": 0.3737901681921398, "scale": 0.9761409471713268},
+    "36_to_37": {"inliers": 408, "error_px": 1.4901212696103905, "native_verified_points": 408, "hull_support": 0.4614364624312826, "scale": 1.0374299514874927},
+    "37_to_38": {"inliers": 487, "error_px": 1.1276239261159569, "native_verified_points": 487, "hull_support": 0.3833995427535374, "scale": 1.0613043254133776}
+  },
+  "interpretation": "The dominant 36↔38 and 36↔37 witnesses are not bound-limited, show a large low-frequency luminance mismatch, and fall outside the native verified correspondence bounding boxes on both sides; 37↔38 is bound-limited and responds to the widened box. Prioritize source/Jacobian or relation-model support isolation for the dominant pairs before any production bound change.",
+  "decision": {
+    "promotion": "rejected",
+    "next_step": "run a bounded source/Jacobian diagnostic on the two non-bound-hit pairs, reusing the saved native proof and fields"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_boundary_candidate_content_hypothesis_brief_r1",
+  "production_impact": "read-only candidate-content hypothesis audit; no threshold, owner fallback, boundary repair, density, or TIFF change",
+  "input": {
+    "candidate_export": "output/acceptance/task-16/mayuan-2-native-boundary-candidate-export-r1/boundary-candidates/boundary-candidates.json",
+    "record_count": 50000,
+    "truncated": true
+  },
+  "contract": {
+    "minimum_gradient_strength": 0.15,
+    "quality_min_measurable": 8,
+    "boundary_p95_max_px": 1.5,
+    "boundary_max_px": 3.0
+  },
+  "observed": {
+    "low_strength_records": 46533,
+    "coverage_owner_valid_low_strength": 46533,
+    "strength_min": 0.00010647957388583979,
+    "strength_median": 0.014524924092242375,
+    "strength_max": 0.06728228018700258,
+    "records_at_or_above_threshold": 0,
+    "owner_distribution": {
+      "1": 9896,
+      "6": 1858,
+      "8": 5006,
+      "9": 531,
+      "14": 2558,
+      "7": 2229,
+      "12": 2160,
+      "5": 916,
+      "11": 7346,
+      "4": 1537,
+      "10": 10854,
+      "13": 396,
+      "25": 759,
+      "24": 159,
+      "22": 328
+    }
+  },
+  "hypothesis": {
+    "name": "low_strength_candidates_can_be_classified_as_same_content",
+    "result": "rejected",
+    "reason": "all captured low-strength candidates are below threshold; maximum strength is less than half of 0.15, so relabeling would change the measurement contract rather than recover evidence"
+  },
+  "decision": {
+    "promotion": "rejected",
+    "next_step": "make an explicit product decision to keep this artwork boundary NotApplicable/diagnostic rejection, or define a new independent content probe contract before any new run"
+  },
+  "limitations": [
+    "candidate export is truncated at 50,000 records",
+    "no new full image run",
+    "cannot infer a production threshold change from this export"
+  ]
+}

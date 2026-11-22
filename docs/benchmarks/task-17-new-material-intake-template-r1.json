@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "new_material_intake_template_v1",
+  "status": "awaiting_material",
+  "production_impact": "template only; no manifest, production code, thresholds, or baseline change",
+  "required_input": {
+    "material_id": "<new-id>",
+    "label": "<artwork label>",
+    "root_directory": "<absolute read-only directory>",
+    "source_extensions": [
+      ".nef"
+    ],
+    "expected_source_count": "<integer>",
+    "exclude_patterns": [],
+    "expected_skipped": [],
+    "reference_outputs": [],
+    "notes": "<capture batch / camera / focus metadata>"
+  },
+  "registration_steps": [
+    "verify source directory exists and contains only intended RAW inputs",
+    "add one manifest entry with source count, byte aggregate and SHA-256 aggregate",
+    "create docs/artwork-lanes/S2-<material-id>.md",
+    "freeze binary label and SHA under v1",
+    "run npm run focus-stack-datasets:check -- --require-data --hash-inputs",
+    "run scale=0.25 D1 under exclusive slot with independent output directory",
+    "record source participation/exclusion, station count, failure chain, RSS, wall time, preview and coordinates"
+  ],
+  "gates": {
+    "manifest_contract": false,
+    "source_sha_frozen": false,
+    "d1_run": false,
+    "d2_native": false,
+    "d3_qg": false,
+    "d4_user_review": false,
+    "d5_reproducible": false
+  },
+  "current_blocker": "no explicit new RAW material directory has been supplied; current root scan found no unregistered RAW source directory",
+  "forbidden_until_material_arrives": [
+    "do not reuse existing dataset outputs as new input",
+    "do not start a full run without a new manifest entry",
+    "do not alter expectedSkipped or quality thresholds to manufacture acceptance"
+  ]
+}

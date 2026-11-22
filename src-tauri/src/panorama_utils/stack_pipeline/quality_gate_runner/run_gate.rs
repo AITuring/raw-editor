@@ -35,6 +35,9 @@ use super::{
 };
 
 #[cfg(test)]
+#[path = "source_point_rgb_capture.rs"]
+mod source_point_rgb_capture;
+#[cfg(test)]
 #[path = "source_visual_capture.rs"]
 mod source_visual_capture;
 
@@ -74,6 +77,8 @@ pub(crate) fn run_quality_gate_with_cache(
     }
     #[cfg(test)]
     let mut source_visual_capture = source_visual_capture::Capture::from_environment(input);
+    #[cfg(test)]
+    let mut source_point_rgb_capture = source_point_rgb_capture::Capture::from_environment();
     roi_cache.bind_input(input);
     // The small-plane region tracer allocates and walks every owner contour.
     // A 9-source scale=0.5 acceptance canvas is ~22M pixels, large enough
@@ -173,6 +178,27 @@ pub(crate) fn run_quality_gate_with_cache(
     }
     let source_map: BTreeMap<u16, &QualitySource> =
         input.sources.iter().map(|s| (s.owner, s)).collect();
+    #[cfg(test)]
+    if let Some(capture) = source_point_rgb_capture.as_mut() {
+        let requested_owners = capture.requested_owners();
+        let requested_paths = capture.requested_paths();
+        for source_info in input.sources.iter().filter(|source| {
+            requested_owners.contains(&source.owner)
+                || requested_paths
+                    .iter()
+                    .any(|path| path.as_str() == source.path)
+        }) {
+            match load_source(source_info) {
+                Ok(source) => {
+                    capture.record_source_availability(source_info, true, None);
+                    capture.observe(input, source_info, &source);
+                }
+                Err(error) => {
+                    capture.record_source_availability(source_info, false, Some(error.to_string()));
+                }
+            }
+        }
+    }
     let mut station_source_images = BTreeMap::new();
     for (owner, owner_rois) in by_owner {
         let Some(source_info) = source_map.get(&owner).copied() else {
@@ -216,6 +242,11 @@ pub(crate) fn run_quality_gate_with_cache(
         } else {
             None
         };
+        #[cfg(test)]
+        if let (Some(capture), Some(source)) = (source_point_rgb_capture.as_mut(), source.as_ref())
+        {
+            capture.observe(input, source_info, source);
+        }
         for (roi, cached_reference) in owner_rois.into_iter().zip(cached_references.drain(..)) {
             #[cfg(test)]
             eprintln!(
@@ -596,7 +627,7 @@ pub(crate) fn run_quality_gate_with_cache(
                                 category: classify_unmeasurable_reason(reason),
                             });
                         }
-                        for value in measurement.measurements {
+                        for value in &measurement.measurements {
                             boundary.push(
                                 value.world,
                                 value.normal_error_px,
@@ -608,8 +639,10 @@ pub(crate) fn run_quality_gate_with_cache(
                         // and the absolute maximum. Keep the sampled points for
                         // diagnostics and add one aggregate P95 measurement so a
                         // high but sub-3px tail cannot be reported as a pass.
+                        // Attribute the aggregate to a real measured boundary
+                        // point; world_origin may be an uncovered crop edge.
                         boundary.push(
-                            input.world_origin,
+                            measurement.p95_world().unwrap_or(input.world_origin),
                             measurement.p95_error_px,
                             "",
                             measurement.p95_error_px <= quality_gate::QUALITY_BOUNDARY_P95_MAX
@@ -821,6 +854,10 @@ pub(crate) fn run_quality_gate_with_cache(
     report.timing = timing;
     #[cfg(test)]
     source_visual_capture::finish(&mut source_visual_capture, &report);
+    #[cfg(test)]
+    if let Some(capture) = source_point_rgb_capture {
+        capture.finish();
+    }
     report
 }
 

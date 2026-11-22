@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "task": 11,
+  "method": "qixu_source_specific_geometry_factor_fixed_soft_skip_ab_r1",
+  "production_impact": "test_only_cfg_test_fixed_soft_skip_and_source_geometry_override; no production soft-frame, pose, threshold, bounds or fallback change",
+  "dataset": "qixu-1",
+  "scale": 0.25,
+  "input_count": 75,
+  "fixed_participation": {
+    "env": {
+      "RAW_EDITOR_TEST_FIXED_SOFT_SKIP": "DSC_3879.NEF,DSC_3884.NEF,DSC_3907.NEF"
+    },
+    "expected_soft_skipped": ["DSC_3879.NEF", "DSC_3884.NEF", "DSC_3907.NEF"],
+    "ordered_count": 72,
+    "streamed_count": 69,
+    "ordered_names_sha256": "e23d5731817465c2193895993acf2d8cb9856c4c29365dc53305c3327f335a66",
+    "purpose": "hold source participation constant across control and experiment so the geometry factor is the only changed variable"
+  },
+  "variable": {
+    "source_filename": "DSC_3882.NEF",
+    "source_id": 39,
+    "factor": 1.2546019381835418,
+    "experiment_env": {
+      "RAW_EDITOR_TEST_SOURCE_GEOMETRY_PATH": "DSC_3882.NEF",
+      "RAW_EDITOR_TEST_SOURCE_GEOMETRY_FACTOR": "1.2546019381835418"
+    }
+  },
+  "binary": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/binaries/task11-geometry-factor-fixed-soft-r1/candidate-release-binary",
+    "sha256": "a4b35a944e1eba10e08e64c360116f4b756e3a9800c09aea1424b4d1bf944813",
+    "wrapper": "/Users/dp/Desktop/raw-editor/output/acceptance/binaries/task11-geometry-factor-fixed-soft-r1/native-process-wrapper.py",
+    "wrapper_sha256": "badde542c20f38f7fe7d717a8d7e1553aa9c0b318ccdebbfc0dedf229962efdf"
+  },
+  "input_manifest": {
+    "path": "tests/acceptance/focus-stack-datasets.json",
+    "sha256": "6a59b71cf3bc42bec4e20ebe1afeeda55f67c3e9b78dc6069b2092c8552e9e09",
+    "source_aggregate_sha256": "c8225550cd0750da20d7afb573a3942382665bff256cdcb8feb4fdef74027ef9",
+    "runner_inputs_sha256": "a8512539353b33e3298ff371d443f428d008facda409e332e2b870a413e03460"
+  },
+  "control": {
+    "run_id": "qixu-1-s0p25-task11-qixu1-geometry-factor-fixed-soft-control-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-fixed-soft-control-r1",
+    "summary": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-fixed-soft-control-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-fixed-soft-control-r1.summary.json",
+    "metrics": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-fixed-soft-control-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-fixed-soft-control-r1.metrics.json",
+    "stack_report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-fixed-soft-control-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-fixed-soft-control-r1-stack-reports/stack-report-361e8ae8-147f-4d7a-a3b1-9566677658bb.json",
+    "source_contract": {"verdict": "pass", "ordered": 72, "streamed": 69, "absent_from_stream": []},
+    "quality_gate": {
+      "verdict": "fail",
+      "local_scale_pixel_ratio": {"failed": 6, "measurable": 8},
+      "boundary_stroke_alignment": {"failed": 3, "measurable": 15},
+      "owner_sharpness_coverage": {"failed": 1, "measurable": 1}
+    },
+    "memory_gate": {"pass": true, "peak_rss_bytes": 19018563584, "threshold_bytes": 25769803776},
+    "elapsed_seconds": 962.524
+  },
+  "experiment": {
+    "run_id": "qixu-1-s0p25-task11-qixu1-geometry-factor-fixed-soft-experiment-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-fixed-soft-experiment-r1",
+    "summary": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-fixed-soft-experiment-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-fixed-soft-experiment-r1.summary.json",
+    "metrics": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-fixed-soft-experiment-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-fixed-soft-experiment-r1.metrics.json",
+    "stack_report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-fixed-soft-experiment-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-fixed-soft-experiment-r1-stack-reports/stack-report-6fc1887e-3cef-41c7-8980-9024f7d2fa2a.json",
+    "source_contract": {"verdict": "pass", "ordered": 72, "streamed": 69, "absent_from_stream": []},
+    "quality_gate": {
+      "verdict": "fail",
+      "local_scale_pixel_ratio": {"failed": 6, "measurable": 8},
+      "boundary_stroke_alignment": {"failed": 4, "measurable": 16},
+      "owner_sharpness_coverage": {"failed": 1, "measurable": 1}
+    },
+    "memory_gate": {"pass": true, "peak_rss_bytes": 18997837824, "threshold_bytes": 25769803776},
+    "elapsed_seconds": 983.944
+  },
+  "comparison": {
+    "source_participation": "identical_72_ordered_69_streamed",
+    "ordered_names_sha256": "identical",
+    "local_scale_pixel_ratio": "unchanged_6_of_8",
+    "boundary_stroke_alignment": "worsened_3_of_15_to_4_of_16",
+    "owner_sharpness_coverage": "unchanged_1_of_1",
+    "peak_rss_bytes": "19018563584_to_18997837824",
+    "clean_ab": true
+  },
+  "decision": "reject_promotion",
+  "conclusion": "With source participation fixed, the corrected DSC_3882 factor still does not improve local-scale; boundary failures worsen while owner coverage remains failed. Both source contracts pass and both memory gates pass, so the single-variable result is interpretable but remains a diagnostic rejection.",
+  "next_step": "Do not promote the factor or change production thresholds, bounds or fallback. Stop factor scanning; investigate the remaining source-to-world/local-scale and boundary causes with a separate bounded hypothesis only if needed.",
+  "do_not_do": [
+    "do not promote the test-only fixed soft-skip or geometry override",
+    "do not claim D3/native acceptance",
+    "do not widen geometry factors or production bounds from this result"
+  ]
+}

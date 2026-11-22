@@ -14,6 +14,7 @@ use super::super::render_geometry::transformed_image_region;
 use super::super::stack_pipeline::degradation;
 use super::super::stack_pipeline::residual_warp;
 use super::super::stack_pipeline::tone;
+use super::layered_compositor::stale_owner_should_yield;
 use crate::panorama_utils::shared::ImageInfo;
 use image::GrayImage;
 use image::Rgb;
@@ -503,6 +504,13 @@ where
         });
         #[cfg(test)]
         capture_test_tone_tile(tone_tiles.last().unwrap());
+        #[cfg(test)]
+        if std::env::var_os("RAW_EDITOR_TEST_TONE_CAPTURE_ONLY").is_some() {
+            // The owner plane is already authoritative at this point. Emit it
+            // during the capture-only path so diagnostics do not depend on the
+            // later compositor finalizer.
+            capture_test_tone_fields(&panorama, &source_owner_ids, &tone_tiles);
+        }
         let seam = covered_distance.as_ref().map(|distance| {
             let longest = (right - left + 1).max(bottom - top + 1);
             let step = longest.div_ceil(512).clamp(1, 64);
@@ -739,15 +747,30 @@ where
                             .clamp(1.0, 255.0) as u8;
                         let quality_slot = &mut quality_row[x as usize];
                         let candidate_owner = (index + 1).min(255) as u8;
-                        let selected = if mask_row[x as usize]==0 { true }
-                            else if let Some((step,columns,labels)) = seam.as_ref() {
-                                labels[((y as u32-top)/step) as usize*columns+((x-left)/step) as usize]!=0
-                            } else { focus_tile_ownership_should_replace(
-                            *quality_slot,
-                            owner_row[x as usize],
-                            quality,
-                            candidate_owner,
-                        ) };
+                        let current_rgb = &row[x as usize * 3..x as usize * 3 + 3];
+                        let stale_non_canvas_owner =
+                            stale_owner_should_yield(owner_row[x as usize], current_rgb);
+                        let selected = if mask_row[x as usize] == 0 {
+                            true
+                        } else if stale_non_canvas_owner {
+                            // A prior station may have occupied this pixel with
+                            // dark foreground/near-black content. Do not let
+                            // that stale owner suppress a valid native canvas
+                            // candidate merely because the seam label prefers
+                            // the existing owner.
+                            true
+                        } else if let Some((step, columns, labels)) = seam.as_ref() {
+                            labels[((y as u32 - top) / step) as usize * columns
+                                + ((x - left) / step) as usize]
+                                != 0
+                        } else {
+                            focus_tile_ownership_should_replace(
+                                *quality_slot,
+                                owner_row[x as usize],
+                                quality,
+                                candidate_owner,
+                            )
+                        };
                         #[cfg(test)]
                         if let Some(trace) = traced.as_mut() {
                             trace.record("owner_selected", serde_json::json!(selected));
@@ -1267,6 +1290,19 @@ where
                             let Some(color) = originals.sample(source) else {
                                 continue;
                             };
+                            let current_rgb = &row[x * 3..x * 3 + 3];
+                            if !crate::panorama_utils::stack_pipeline::compositor::native_revisit_candidate_should_replace(
+                                current_rgb,
+                                color.0.as_slice(),
+                            ) {
+                                // A native revisit may not replace a valid
+                                // canvas owner with a foreground/near-black
+                                // candidate. The seam pass already resolved
+                                // this bounded relation; preserve that owner
+                                // rather than reintroducing the photometric
+                                // mismatch during the final revisit.
+                                continue;
+                            }
                             row[x * 3..x * 3 + 3].copy_from_slice(&color.0);
                             source_row[x] = candidate;
                             owner_row[x] = candidate.min(255) as u8;
@@ -1332,6 +1368,15 @@ where
     // remaining owner-level tone difference using selected virtual-tile
     // regions at once; doing this after the consensus pass removes residual
     // source steps without averaging or replacing brush pixels.
+    #[cfg(test)]
+    if finishing != TileCompositorFinishing::LayeredVirtualTile
+        && std::env::var_os("RAW_EDITOR_TEST_TONE_CAPTURE_ONLY").is_some()
+    {
+        // Some small diagnostic paths intentionally stop before the layered
+        // finalizer. Preserve the real owner plane and selected ToneTiles for
+        // capture-only replay without changing the production compositor.
+        capture_test_tone_fields(&panorama, &source_owner_ids, &tone_tiles);
+    }
     if finishing == TileCompositorFinishing::LayeredVirtualTile {
         #[cfg(test)]
         capture_test_tone_fields(&panorama, &source_owner_ids, &tone_tiles);

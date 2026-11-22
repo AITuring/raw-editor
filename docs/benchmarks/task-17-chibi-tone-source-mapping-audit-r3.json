@@ -1,0 +1,779 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_chibi_tone_source_mapping_audit_r3",
+  "production_impact": "test_only bounded path-only source mapping audit; no production decision, threshold, bounds or fallback change",
+  "run_id": "chibi-s0p25-task17-chibitonesourceD4r10",
+  "binary": {
+    "label": "task17-source-rgb-r10",
+    "sha256": "3065fc576ed6eb117941b1d352f8f93646e6730fad53c7337cdef84dbf0efbe9"
+  },
+  "execution": {
+    "summary": "output/acceptance/task17/chibi-tone-source-d4-r10/chibi-s0p25-task17-chibitonesourceD4r10.summary.json",
+    "metrics": "output/acceptance/task17/chibi-tone-source-d4-r10/chibi-s0p25-task17-chibitonesourceD4r10.metrics.json",
+    "log": "output/acceptance/task17/chibi-tone-source-d4-r10/chibi-s0p25-task17-chibitonesourceD4r10.log",
+    "stack_report": "output/acceptance/task17/chibi-tone-source-d4-r10/chibi-s0p25-task17-chibitonesourceD4r10-stack-reports/stack-report-1ec08db9-6b87-4a28-9659-308a8c8071dc.json",
+    "elapsed_seconds": 1601.926,
+    "stitch_seconds": 1517.9
+  },
+  "request": {
+    "pair": "2↔5",
+    "worlds": [
+      [
+        3712.0,
+        384.0
+      ],
+      [
+        3712.0,
+        640.0
+      ]
+    ],
+    "paths": [
+      "/Users/dp/Downloads/书画拼图/赤壁/DSC_9676.NEF",
+      "/Users/dp/Downloads/书画拼图/赤壁/DSC_9677.NEF",
+      "/Users/dp/Downloads/书画拼图/赤壁/DSC_9686.NEF",
+      "/Users/dp/Downloads/书画拼图/赤壁/DSC_9687.NEF"
+    ]
+  },
+  "availability": [
+    {
+      "candidate_owner": 7,
+      "candidate_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9676.NEF",
+      "label": "st2_9676_w1",
+      "prepared_dimensions": [
+        2065,
+        1377
+      ],
+      "requested_owner": null,
+      "requested_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9676.NEF",
+      "station_id": 2,
+      "status": "loaded"
+    },
+    {
+      "candidate_owner": 7,
+      "candidate_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9676.NEF",
+      "label": "st2_9676_w2",
+      "prepared_dimensions": [
+        2065,
+        1377
+      ],
+      "requested_owner": null,
+      "requested_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9676.NEF",
+      "station_id": 2,
+      "status": "loaded"
+    },
+    {
+      "candidate_owner": 8,
+      "candidate_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9677.NEF",
+      "label": "st2_9677_w1",
+      "prepared_dimensions": [
+        2065,
+        1377
+      ],
+      "requested_owner": null,
+      "requested_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9677.NEF",
+      "station_id": 2,
+      "status": "loaded"
+    },
+    {
+      "candidate_owner": 8,
+      "candidate_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9677.NEF",
+      "label": "st2_9677_w2",
+      "prepared_dimensions": [
+        2065,
+        1377
+      ],
+      "requested_owner": null,
+      "requested_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9677.NEF",
+      "station_id": 2,
+      "status": "loaded"
+    },
+    {
+      "candidate_owner": 15,
+      "candidate_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9686.NEF",
+      "label": "st5_9686_w1",
+      "prepared_dimensions": [
+        2065,
+        1377
+      ],
+      "requested_owner": null,
+      "requested_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9686.NEF",
+      "station_id": 5,
+      "status": "loaded"
+    },
+    {
+      "candidate_owner": 15,
+      "candidate_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9686.NEF",
+      "label": "st5_9686_w2",
+      "prepared_dimensions": [
+        2065,
+        1377
+      ],
+      "requested_owner": null,
+      "requested_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9686.NEF",
+      "station_id": 5,
+      "status": "loaded"
+    },
+    {
+      "candidate_owner": 16,
+      "candidate_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9687.NEF",
+      "label": "st5_9687_w1",
+      "prepared_dimensions": [
+        2065,
+        1377
+      ],
+      "requested_owner": null,
+      "requested_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9687.NEF",
+      "station_id": 5,
+      "status": "loaded"
+    },
+    {
+      "candidate_owner": 16,
+      "candidate_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9687.NEF",
+      "label": "st5_9687_w2",
+      "prepared_dimensions": [
+        2065,
+        1377
+      ],
+      "requested_owner": null,
+      "requested_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9687.NEF",
+      "station_id": 5,
+      "status": "loaded"
+    }
+  ],
+  "probe_summary": {
+    "record_count": 8,
+    "status_counts": {
+      "failed": 8
+    },
+    "mapping_status_counts": {
+      "native_source_sampling_unmapped": 8
+    },
+    "all_native_registration": true,
+    "all_native_warp": true,
+    "rgb_sampled_count": 0
+  },
+  "result": {
+    "inputs": 48,
+    "stations": 18,
+    "output": {
+      "width": 7637,
+      "height": 2155
+    },
+    "verdict": "failed",
+    "quality_gate": "fail",
+    "tone_status": "degraded",
+    "tone_boundary_delta_e": {
+      "max": 11.177709716043976,
+      "threshold": 1.5,
+      "violations": [
+        {
+          "left": 2,
+          "right": 5,
+          "delta_e00": 9.683161040243602,
+          "world": {
+            "left": 3584.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 5,
+          "delta_e00": 2.4134791082699123,
+          "world": {
+            "left": 3584.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 5,
+          "delta_e00": 7.995264210624769,
+          "world": {
+            "left": 3840.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 1,
+          "delta_e00": 4.880516842290033,
+          "world": {
+            "left": 4608.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 1,
+          "delta_e00": 2.2105915308389803,
+          "world": {
+            "left": 4608.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 1,
+          "delta_e00": 2.102680470090267,
+          "world": {
+            "left": 4608.0,
+            "top": 768.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 1,
+          "delta_e00": 3.818197328470483,
+          "world": {
+            "left": 4864.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 1,
+          "delta_e00": 2.0829210146708936,
+          "world": {
+            "left": 4864.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 1,
+          "delta_e00": 1.6694313929487266,
+          "world": {
+            "left": 4864.0,
+            "top": 768.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 1,
+          "delta_e00": 1.5028102689441185,
+          "world": {
+            "left": 5120.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 6,
+          "delta_e00": 2.0099813131276796,
+          "world": {
+            "left": 3584.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 6,
+          "delta_e00": 1.8239839845471744,
+          "world": {
+            "left": 3584.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 6,
+          "delta_e00": 3.0678145623958697,
+          "world": {
+            "left": 3840.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 6,
+          "delta_e00": 2.391583758201036,
+          "world": {
+            "left": 3840.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 6,
+          "delta_e00": 3.1341807153469117,
+          "world": {
+            "left": 4096.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 6,
+          "delta_e00": 2.341206257299517,
+          "world": {
+            "left": 4096.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 6,
+          "delta_e00": 3.7209967817966856,
+          "world": {
+            "left": 4352.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 6,
+          "delta_e00": 2.556220542634373,
+          "world": {
+            "left": 4352.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 6,
+          "delta_e00": 5.1920253080108045,
+          "world": {
+            "left": 4608.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 2,
+          "right": 6,
+          "delta_e00": 3.7848307849127663,
+          "world": {
+            "left": 4608.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 5,
+          "right": 3,
+          "delta_e00": 2.269383222579321,
+          "world": {
+            "left": 2304.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 5,
+          "right": 3,
+          "delta_e00": 1.5404727904068576,
+          "world": {
+            "left": 2304.0,
+            "top": 768.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 5,
+          "right": 3,
+          "delta_e00": 1.9209780695613121,
+          "world": {
+            "left": 2560.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 5,
+          "right": 6,
+          "delta_e00": 11.177709716043976,
+          "world": {
+            "left": 3584.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 5,
+          "right": 6,
+          "delta_e00": 2.41673388518149,
+          "world": {
+            "left": 3584.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 2.0104350389422976,
+          "world": {
+            "left": 1536.0,
+            "top": 768.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 2.0062394505794794,
+          "world": {
+            "left": 1536.0,
+            "top": 1024.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 2.160176762952672,
+          "world": {
+            "left": 1792.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 1.9992812526778532,
+          "world": {
+            "left": 1792.0,
+            "top": 768.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 1.965613834387218,
+          "world": {
+            "left": 1792.0,
+            "top": 1024.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 1.8460043081037718,
+          "world": {
+            "left": 1792.0,
+            "top": 1280.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 2.52788876133097,
+          "world": {
+            "left": 2048.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 2.114533055959269,
+          "world": {
+            "left": 2048.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 1.5954369347785426,
+          "world": {
+            "left": 2048.0,
+            "top": 1024.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 1.6240946445061866,
+          "world": {
+            "left": 2048.0,
+            "top": 1280.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 2.1070338654925482,
+          "world": {
+            "left": 2304.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 2.169552322554077,
+          "world": {
+            "left": 2304.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 1.5740802686507775,
+          "world": {
+            "left": 2560.0,
+            "top": 256.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 4,
+          "delta_e00": 1.719236076767166,
+          "world": {
+            "left": 2560.0,
+            "top": 512.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 13,
+          "delta_e00": 1.8705006070526031,
+          "world": {
+            "left": 1536.0,
+            "top": 1024.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 13,
+          "delta_e00": 1.8354334688743383,
+          "world": {
+            "left": 1792.0,
+            "top": 768.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 13,
+          "delta_e00": 1.7481249280602031,
+          "world": {
+            "left": 1792.0,
+            "top": 1024.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 14,
+          "delta_e00": 1.5175597012099544,
+          "world": {
+            "left": 1536.0,
+            "top": 1024.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 14,
+          "delta_e00": 1.786243053475137,
+          "world": {
+            "left": 1792.0,
+            "top": 1024.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 14,
+          "delta_e00": 1.5119385095026365,
+          "world": {
+            "left": 1792.0,
+            "top": 1280.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 14,
+          "delta_e00": 1.6043797094449812,
+          "world": {
+            "left": 2048.0,
+            "top": 768.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 14,
+          "delta_e00": 1.6239420570704184,
+          "world": {
+            "left": 2048.0,
+            "top": 1024.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 3,
+          "right": 14,
+          "delta_e00": 1.5032297695720416,
+          "world": {
+            "left": 2048.0,
+            "top": 1280.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 1,
+          "right": 12,
+          "delta_e00": 1.8474528981282574,
+          "world": {
+            "left": 4864.0,
+            "top": 768.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        },
+        {
+          "left": 12,
+          "right": 11,
+          "delta_e00": 1.959054971049405,
+          "world": {
+            "left": 4096.0,
+            "top": 2048.0,
+            "width": 256.0,
+            "height": 256.0
+          }
+        }
+      ]
+    },
+    "local_scale_pixel_ratio": {
+      "verdict": "fail",
+      "failed_count": 6
+    },
+    "boundary_stroke": {
+      "verdict": "fail",
+      "failed_count": 44
+    },
+    "degradation_result": "rejected"
+  },
+  "density": {
+    "status": "bypassed",
+    "factor": 1.0,
+    "pixel_count_multiplier": 1.0,
+    "canvas_pixels": 16861977,
+    "output_plane_lower_bound_bytes": 303515586,
+    "target_minimum_scale": 1.0,
+    "probe_step_px": 32,
+    "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+    "source_count": 48,
+    "sample_count": 0,
+    "invalid_probe_count": 0,
+    "boundary_probe_count": 4169,
+    "worst_station_index": null,
+    "worst_source_id": null,
+    "worst_station_point": null,
+    "direct_pair_p95_output_px": null,
+    "residual_median_output_px": null,
+    "max_corner_correction_output_px": null,
+    "minimum_scale": null,
+    "p01_scale": null,
+    "median_scale": null,
+    "bypass_reason": "nonidentity_world_residual"
+  },
+  "memory_gate": {
+    "threshold_bytes": 25769803776,
+    "peak_rss_bytes": 12825755648,
+    "threshold_exceeded": false,
+    "worker_threads": 8,
+    "verdict": "pass"
+  },
+  "source_contract": {
+    "source_count": 48,
+    "decoded_count": 48,
+    "sha_unchanged_count": 48,
+    "feature_provider": {
+      "requested": "rust_fast_brief",
+      "selected": "rust_fast_brief",
+      "provider_version": "native",
+      "fallback_reason": null,
+      "explicit_copy_bytes": 0
+    },
+    "verdict": "pass"
+  },
+  "finding": "All four requested sources are loaded; all eight probes have native_registration=true and native_warp=true, but every probe fails at native_source_sampling_unmapped before RGB sampling. corrected_station/reference_world/raw inverse stages are not the observed blocker. This is a native source sampling footprint/ownership mapping gap, not RAW decode failure, simple bounds failure, or photometric mismatch evidence.",
+  "decision": "pair_2_5_photometric_witness_blocked_by_native_source_sampling",
+  "next_step": "Keep tone bounds, local-scale thresholds and fallback unchanged. Treat native_source_sampling_unmapped as the bounded blocker; move to the next material unless a dedicated test-only owner/source sampling footprint trace is required."
+}

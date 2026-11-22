@@ -16,7 +16,7 @@
 
 初始能力审计没有产生任何 SIFT/AKAZE/ECC/learned-provider 质量分数，因此当时不能完成 PF.10。现在 OpenCV 候选和 RaCo-ALIKED-LightGlue+ learned 候选都已在隔离环境运行；但 learned pipeline 只输出 keypoints/matches/mscores，没有 descriptors→`FeatureProviderResult` adapter，也未通过 Rust geometry gate。完整 PF.10 仍不能宣称完成。
 
-任务8保持未勾选；当前交付包含固定 OpenCV/learned bundle 和可复现候选对照。由于 learned sidecar 仍不满足 Rust 合同，本轮按条件转入任务11 的单变量 bounded A/B。
+任务8保持未勾选；当前交付包含固定 OpenCV/learned bundle 和可复现候选对照。由于 learned sidecar 仍不满足 Rust 合同，本轮按条件转入任务11 的单变量 bounded A/B。最终延期与重开条件见 [`task-8-final-decision-r1.json`](../benchmarks/task-8-final-decision-r1.json)。
 
 ## provider bundle r1：OpenCV 候选对照
 
@@ -37,3 +37,9 @@
 在相同阆苑 0–2 planes、512×512、ORT intra/inter threads=1 下完成候选运行：[langyuan-raco-aliked-provider-r1.json](../benchmarks/langyuan-raco-aliked-provider-r1.json)。结果为：0→1 `45` matches / `34` inliers / P95 `2.093px` / hull `0.0965`；0→2 `12` / `5` / `0.689px` / `0.0438`；1→2 `117` / `96` / `2.493px` / `0.1529`。
 
 该 end-to-end ONNX pipeline 只输出 `keypoints`、`matches`、`mscores`，不输出 descriptors；因此当前 Rust `FeatureProviderResult` 不兼容，Rust geometry gate 未重跑。模型本身可运行，但 learned provider 仍不能作为任务8的已接入 provider；随后完成的任务11 source-resampling bounded A/B 见[qixu-task-11-source-resampling-ab.json](../benchmarks/qixu-task-11-source-resampling-ab.json)。
+
+## learned adapter feasibility brief
+
+对 learned candidate 与 Rust `FeatureProviderResult` 做了只读逐字段核对：Rust 合同要求每个 keypoint 有严格匹配的 descriptor row、明确的 descriptor element type/dimension/bytes、排序后的 match index/confidence，以及可追溯的 source coordinate frame；candidate 只输出 `keypoints`、`matches`、`mscores`，且坐标仍是 `512×512` host resize frame。不能通过重命名或补零把 candidate 适配成 Rust payload；那会伪造 descriptor 或坐标证据。任务8保持 deferred，Rust FAST/BRIEF 默认不变。机器摘要：[task-8-learned-adapter-feasibility-r1.json](../benchmarks/task-8-learned-adapter-feasibility-r1.json)。
+
+进一步用 ONNX Runtime 直接检查模型 graph：输入为 `images`，输出只有 `keypoints [2*pair_count,512,2]`、`matches [u0,3]`、`mscores [u0]`，没有隐藏 descriptor output。因此阻断是模型输出合同本身，而非当前 Python runner 漏读；不添加伪 descriptor adapter。

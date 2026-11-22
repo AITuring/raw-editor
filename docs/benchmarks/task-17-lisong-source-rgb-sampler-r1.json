@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_lisong_source_rgb_sampler_r1",
+  "production_impact": "test_only bounded source RGB probes; no production decision, threshold, bounds or fallback change",
+  "run_id": "lisong-s0p25-task17-lisongsourceRGBd5r5",
+  "binary": {
+    "label": "task17-source-rgb-r5",
+    "sha256": "03b2521ebfb1a5ccb916aa6e44ed53f7b0566d1b0bed3ba098085363afb9b320"
+  },
+  "stack_report": "output/acceptance/task17/lisong-source-rgb-d5-r5/run/lisong-s0p25-task17-lisongsourceRGBd5r5-stack-reports/stack-report-b8123a33-551c-45a9-bfa2-6e998566856b.json",
+  "result": {
+    "inputs": 46,
+    "output": {
+      "width": 3205,
+      "height": 2194
+    },
+    "verdict": "failed",
+    "quality_gate": "fail",
+    "tone_status": "applied"
+  },
+  "request": {
+    "world": [
+      2269.0,
+      1692.0
+    ],
+    "owners": [
+      30,
+      41,
+      44
+    ]
+  },
+  "source_rgb_capture": {
+    "diagnostic_only": true,
+    "note": "quality-reference source samples only; no production decision or acceptance claim",
+    "records": [
+      {
+        "label": "owner41_station13",
+        "owner": 41,
+        "path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF",
+        "prepared_dimensions": [
+          2065,
+          1377
+        ],
+        "requested_world": [
+          2269.0,
+          1692.0
+        ],
+        "rgb_f32": [
+          0.6269927620887756,
+          0.6111148595809937,
+          0.5196515321731567
+        ],
+        "rgb_f32_bits": [
+          1059095193,
+          1058828806,
+          1057294306
+        ],
+        "sample_stage": "quality_reference_source_sample",
+        "source_image_dimensions": [
+          2065,
+          1377
+        ],
+        "station_id": 13,
+        "status": "sampled"
+      }
+    ],
+    "requested_labels": [
+      "owner30_station9",
+      "owner41_station13",
+      "owner44_station13"
+    ],
+    "schema": 1,
+    "unobserved_labels": [
+      "owner30_station9",
+      "owner44_station13"
+    ]
+  },
+  "interpretation": "The test-only sampler successfully captured one quality-reference source RGB for owner 41/station 13. Owners 30 and 44 were unobserved in this QG pass, so no RGB mismatch claim is made; the fixture remains partial and diagnostic-only.",
+  "next_step": "If complete per-owner RGB comparison is required, make forced owner-load failures explicit and rerun only this bounded sampler; do not alter QG thresholds or bounds."
+}

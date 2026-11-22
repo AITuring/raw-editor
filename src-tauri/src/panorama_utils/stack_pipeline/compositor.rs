@@ -12,7 +12,26 @@
 
 use super::report::{SelectedPath, StackReportRecorder};
 use super::residual_warp::ResidualWarp;
+use crate::panorama_utils::stitching::focus_stack_pixel_is_tone_foreground;
 use nalgebra::{Matrix3, Point2, Point3};
+
+/// Keep an already selected canvas owner when a native revisit candidate is
+/// clearly foreground/near-black.  The revisit pass is allowed to replace an
+/// owner only when its candidate is canvas-like, so a photometrically invalid
+/// dark source cannot undo a valid seam decision.  This is an ownership rule;
+/// it does not alter tone bounds or tone pixels.
+pub(crate) fn native_revisit_candidate_should_replace(current: &[f32], candidate: &[f32]) -> bool {
+    let supported_canvas = |pixel: &[f32]| {
+        if pixel.len() < 3 || pixel[..3].iter().any(|value| !value.is_finite()) {
+            return false;
+        }
+        let luma = pixel[0] * 0.299 + pixel[1] * 0.587 + pixel[2] * 0.114;
+        luma >= 0.08 && !focus_stack_pixel_is_tone_foreground(pixel)
+    };
+    let current_canvas = supported_canvas(current);
+    let candidate_canvas = supported_canvas(candidate);
+    !(current_canvas && !candidate_canvas)
+}
 
 /// Compose the inverse mapping used by the Tile_Compositor.  A target world
 /// coordinate is transformed to tile space once by the global inverse and

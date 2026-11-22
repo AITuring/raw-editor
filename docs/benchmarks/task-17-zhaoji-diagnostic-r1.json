@@ -1,0 +1,97 @@
+{
+  "schema": 1,
+  "task": 17,
+  "dataset": "zhaoji",
+  "label": "赵佶",
+  "status": "diagnostic_rejected",
+  "run": {
+    "run_id": "zhaoji-s0p25-task17-zhaoji-d1-r1",
+    "scale": 0.25,
+    "preview_only": true,
+    "binary": "base-2026-11-12",
+    "binary_sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+    "output_dir": "output/acceptance/task17/zhaoji-d1-r1",
+    "summary": "output/acceptance/task17/zhaoji-d1-r1/zhaoji-s0p25-task17-zhaoji-d1-r1.summary.json",
+    "stack_report": "output/acceptance/task17/zhaoji-d1-r1/zhaoji-s0p25-task17-zhaoji-d1-r1-stack-reports/stack-report-a5b8f23a-46a1-4798-b21c-b68ef4fa659c.json"
+  },
+  "input_contract": {
+    "directory": "/Users/dp/Downloads/书画拼图/赵佶",
+    "extension": ".nef",
+    "source_count": 47,
+    "bytes": 2703135452,
+    "aggregate_sha256": "d839174b01b7ce9ee5e04d9bc2070f3e83d4047c7ab8bf59e327bebaaa2079a8",
+    "preflight_decoded": 47,
+    "preflight_failed": 0,
+    "sha_changed": 0,
+    "preflight_verdict": "pass",
+    "streamed_sources": "unknown_after_native_panic",
+    "source_contract_interpretation": "preflight_pass_only"
+  },
+  "geometry": {
+    "selected_path": "layered_virtual_tile",
+    "station_count": 13,
+    "connected_components": 1,
+    "isolated_sources": 0,
+    "ambiguous_topology_stations": [3, 4, 10, 11],
+    "closure_status": "converged",
+    "closure_participating_constraints": 36,
+    "closure_residual_median_px": 0.1467909433,
+    "closure_residual_p95_px": 1.7054407974,
+    "closure_max_direct_pair_p95_px": 2.7683987819
+  },
+  "density": {
+    "status": "rejected",
+    "factor": 1.29296875,
+    "direct_pair_p95_output_px": 3.5794531125,
+    "residual_median_output_px": 0.1897961025,
+    "max_corner_correction_output_px": 1.5572391520,
+    "minimum_scale": 0.7739037335,
+    "p01_scale": 0.7972338616,
+    "median_scale": 0.9017317841,
+    "sample_count": 124498,
+    "boundary_probe_count": 3682,
+    "worst_station_index": 12,
+    "worst_source_index": 46,
+    "bypass_reason": "output_pixel_closure_limit_exceeded"
+  },
+  "tone": {
+    "status": "not_run",
+    "boundary_delta_e_max": 0.0,
+    "boundary_delta_e_violations": 0
+  },
+  "quality_gate": {
+    "verdict": "not_run",
+    "roi_count": 0
+  },
+  "memory_gate": {
+    "verdict": "pass",
+    "peak_rss_bytes": 12451872768,
+    "threshold_bytes": 25769803776,
+    "threshold_exceeded": false,
+    "worker_threads": 8,
+    "elapsed_seconds": 679.302
+  },
+  "native_acceptance": {
+    "verdict": "harness_failed",
+    "exit_code": 101,
+    "panic": "output density 1.292969 exceeds closure output-pixel limits",
+    "output_written": false,
+    "artifact_validation": "not_run"
+  },
+  "decision": {
+    "native_or_d3_acceptance": false,
+    "root_cause": "output_pixel_closure_limit_exceeded",
+    "next_step": "stop unbounded reruns; reopen only for an explicit single-variable test-only source/geometry hypothesis",
+    "production_changes": false,
+    "do_not_do": [
+      "do not widen density or geometry thresholds",
+      "do not change bounds or fallback",
+      "do not treat preflight source-contract pass as streamed participation proof",
+      "do not claim tone, boundary or QG acceptance when they were not run"
+    ]
+  },
+  "evidence": [
+    "docs/artwork-lanes/S2-zhaoji.md",
+    "output/acceptance/task17/zhaoji-d1-r1/zhaoji-s0p25-task17-zhaoji-d1-r1.log"
+  ]
+}

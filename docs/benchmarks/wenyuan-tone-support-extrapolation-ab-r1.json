@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_tone_support_extrapolation_ab_r1",
+  "production_impact": "cfg(test)-only support-extension radius replay; production relation extension and tone bounds unchanged",
+  "input": {
+    "capture_dir": "/private/tmp/wenyuan-tone-fields-34-39-r10",
+    "native_proof": "/private/tmp/wenyuan-native-proof-34-39-r7/joint-production-input.json",
+    "owner_plane": "tone-owners.filtered.png"
+  },
+  "variable": {
+    "name": "RAW_EDITOR_TEST_TONE_SUPPORT_EXTENSION_MAX_RADIUS",
+    "control": 64,
+    "candidates": [
+      16,
+      0
+    ],
+    "radii_px": [
+      4,
+      8,
+      16,
+      32,
+      64
+    ]
+  },
+  "replays": {
+    "control_radius64": {
+      "output": "/private/tmp/wenyuan-tone-fields-34-39-r10/saved-local-tone-boundary-ownerfix.json",
+      "maximum_delta_e00": 9.420790066773208,
+      "failed_window_count": 95,
+      "fitted_relations": 13,
+      "iterations": 1000,
+      "extension_max_radius": 64,
+      "bounds_scale": 1.0
+    },
+    "radius16": {
+      "output": "/private/tmp/wenyuan-tone-fields-34-39-r10/saved-local-tone-boundary-ownerfix-ext16.json",
+      "maximum_delta_e00": 9.420790066773208,
+      "failed_window_count": 95,
+      "fitted_relations": 13,
+      "iterations": 1000,
+      "extension_max_radius": 16,
+      "bounds_scale": 1.0
+    },
+    "radius0": {
+      "output": "/private/tmp/wenyuan-tone-fields-34-39-r10/saved-local-tone-boundary-ownerfix-ext0.json",
+      "maximum_delta_e00": 10.094218539683784,
+      "failed_window_count": 106,
+      "fitted_relations": 13,
+      "iterations": 1000,
+      "extension_max_radius": 0,
+      "bounds_scale": 1.0
+    }
+  },
+  "decision": {
+    "promotion": "rejected",
+    "conclusion": "disabling extension worsens max residual 9.420790→10.094219 and failed windows 95→106; radius16 is identical to radius64. Extension is necessary for this replay but is not the source of the remaining boundary residual.",
+    "next_step": "stop extension-radius tuning; isolate owner-specific source normalization or retained-domain relation reconstruction",
+    "bounds_unchanged": true
+  },
+  "limitations": [
+    "15-source saved-field replay only",
+    "all replays retain production bounds scale 1.0",
+    "no full 126-source QG run"
+  ]
+}

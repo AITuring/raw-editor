@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "task": 14,
+  "dataset": "wenyuan",
+  "status": "root_cause_diagnostic_closed_d3_not_reached",
+  "production_impact": "read_only and cfg_test evidence; no production threshold, bounds, fallback, source normalization, pose or density change",
+  "entry_root_cause": {
+    "source": "DSC_4885.NEF",
+    "state": "0 bytes, empty SHA, native decode excluded",
+    "initial_contract": "strict report_source_digests=false with expectedSkipped unset",
+    "schema8_contract": "closed with one explicit excluded_sources record; 125 active inputs and 1 excluded source",
+    "remaining_issue": "the physical source is absent; no non-empty recovery copy exists"
+  },
+  "density_root_cause": {
+    "scale025": {"status": "bypassed", "factor": 1.0, "sample_count": 0, "reason": "nonidentity_world_residual"},
+    "scale1": {"status": "bypassed", "factor": 1.0, "sample_count": 0, "reason": "nonidentity_world_residual"},
+    "decision": "there is no native Jacobian density proof; do not infer density safety from QG or closure"
+  },
+  "tone_root_cause": {
+    "scale025_full": {"status": "degraded", "max_delta_e00": 4.6045642866, "violations": 13},
+    "scale1_full": {"status": "degraded", "max_delta_e00": 8.778901254993071, "violations": 142, "mode": "station_affine", "clamped_tiles": 32},
+    "scale1_adaptive_34_39": {"max_delta_e00": 9.420790066773208, "violations": 95},
+    "owner_revisit": "36↔37 final owner corrected; residual remains",
+    "source_identity": "all witness sources belong to expected station clusters; no cross-cluster contamination",
+    "pairwise": {
+      "36_37_luma_ratio": 100776.0,
+      "37_38_luma_ratio": 111.5,
+      "36_38_classification": "weaker content/registration mismatch",
+      "translation_search_best_correlation": {"36_37": 0.256, "37_38": 0.110, "36_38": 0.290}
+    },
+    "decision": "witness-local content/photometric mismatch remains; uniform bounds expansion or fallback is unsupported"
+  },
+  "acceptance_boundary": {
+    "scale1_geometry_qg": "pass",
+    "native_acceptance": "rejected_on_tone_boundary",
+    "memory_gate": "pass",
+    "source_contract": "pass_after_schema8_excluded_source",
+    "test_only_replay_limit": "34-39 capture/replay has no formal full-run QG/source/memory contract"
+  },
+  "decision": "diagnostic_closed_no_production_change",
+  "next_task": 16,
+  "next_step": "use the existing task16 boundary candidate/product-decision lane; do not repeat full Wenyuan runs until a new content-aware correspondence hypothesis is specified",
+  "do_not_do": [
+    "do not widen tone bounds or formal DeltaE thresholds",
+    "do not add source normalization from the extreme luma ratios",
+    "do not enable a production fallback from the test-only replay",
+    "do not claim native acceptance from the 34-39 capture/replay"
+  ]
+}

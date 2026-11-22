@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "task": 11,
+  "method": "qixu_source_specific_geometry_factor_bounded_ab_r1",
+  "production_impact": "test_only_cfg_test_source_geometry_override; no production pose, threshold, bounds, fallback or provider change",
+  "dataset": "qixu-1",
+  "scale": 0.25,
+  "input_count": 75,
+  "variable": {
+    "source_filename": "DSC_3882.NEF",
+    "source_id": 39,
+    "factor": 1.2546019381835418,
+    "env": {
+      "RAW_EDITOR_TEST_SOURCE_GEOMETRY_PATH": "DSC_3882.NEF",
+      "RAW_EDITOR_TEST_SOURCE_GEOMETRY_FACTOR": "1.2546019381835418"
+    },
+    "hypothesis": "apply the source-specific isotropic factor from the sensitivity audit to DSC_3882 only, before output bounds, while holding the rest of the streaming mosaic path fixed"
+  },
+  "binary": {
+    "path": "/Users/dp/Desktop/raw-editor/output/acceptance/binaries/task11-geometry-factor-r1/candidate-release-binary",
+    "sha256": "624e56a783f39d858e93825288a60d8d85f6882f40dee1761fa97639e64b38e",
+    "wrapper": "/Users/dp/Desktop/raw-editor/output/acceptance/binaries/task11-geometry-factor-r1/native-process-wrapper.py"
+  },
+  "control": {
+    "label": "task11-qixu1-geometry-factor-correct-control-r1",
+    "run_id": "qixu-1-s0p25-task11-qixu1-geometry-factor-correct-control-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-correct-control-r1",
+    "summary": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-correct-control-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-correct-control-r1.summary.json",
+    "metrics": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-correct-control-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-correct-control-r1.metrics.json",
+    "stack_report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-correct-control-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-correct-control-r1-stack-reports/stack-report-628defb1-e705-448d-9786-b91759e50f24.json",
+    "verdict": "failed",
+    "output": {"width": 6623, "height": 3155},
+    "elapsed_seconds": 978.418,
+    "source_contract": {
+      "inputs": 75,
+      "ordered": 72,
+      "streamed": 70,
+      "missing_from_order": ["DSC_3842.NEF", "DSC_3910.NEF", "DSC_3911.NEF"],
+      "absent_from_stream": ["DSC_3842.NEF", "DSC_3879.NEF", "DSC_3907.NEF", "DSC_3910.NEF", "DSC_3911.NEF"]
+    },
+    "quality_gate": {
+      "verdict": "fail",
+      "local_scale_pixel_ratio": {"failed": 6, "measurable": 8},
+      "boundary_stroke_alignment": {"failed": 3, "measurable": 15},
+      "owner_sharpness_coverage": {"failed": 1, "measurable": 1}
+    },
+    "memory_gate": {"pass": true, "peak_rss_bytes": 17263673344}
+  },
+  "experiment": {
+    "label": "task11-qixu1-geometry-factor-correct-experiment-r1",
+    "run_id": "qixu-1-s0p25-task11-qixu1-geometry-factor-correct-experiment-r1",
+    "directory": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-correct-experiment-r1",
+    "summary": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-correct-experiment-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-correct-experiment-r1.summary.json",
+    "metrics": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-correct-experiment-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-correct-experiment-r1.metrics.json",
+    "stack_report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-11/qixu-1-geometry-factor-correct-experiment-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-correct-experiment-r1-stack-reports/stack-report-ef1d068b-700c-43f8-973c-5ba51d7e080c.json",
+    "verdict": "failed",
+    "output": {"width": 6623, "height": 3155},
+    "elapsed_seconds": 986.359,
+    "source_contract": {
+      "inputs": 75,
+      "ordered": 72,
+      "streamed": 69,
+      "missing_from_order": ["DSC_3842.NEF", "DSC_3910.NEF", "DSC_3911.NEF"],
+      "absent_from_stream": ["DSC_3842.NEF", "DSC_3879.NEF", "DSC_3884.NEF", "DSC_3907.NEF", "DSC_3910.NEF", "DSC_3911.NEF"]
+    },
+    "quality_gate": {
+      "verdict": "fail",
+      "local_scale_pixel_ratio": {"failed": 6, "measurable": 8},
+      "boundary_stroke_alignment": {"failed": 4, "measurable": 16},
+      "owner_sharpness_coverage": {"failed": 1, "measurable": 1}
+    },
+    "memory_gate": {"pass": true, "peak_rss_bytes": 19126435840}
+  },
+  "comparison": {
+    "local_scale_pixel_ratio": "unchanged_6_of_8",
+    "boundary_stroke_alignment": "worsened_3_of_15_to_4_of_16",
+    "owner_sharpness_coverage": "unchanged_1_of_1",
+    "peak_rss": "increased_17263673344_to_19126435840_bytes",
+    "source_participation": "not_equal; experiment streamed one fewer source and additionally omitted DSC_3884.NEF",
+    "clean_ab": false
+  },
+  "decision": "reject_promotion",
+  "conclusion": "The corrected DSC_3882 source-specific factor did not improve the local-scale gate. Boundary failures and peak RSS worsened, and source participation differed between groups, so this remains diagnostic evidence only and cannot support D3 or a production geometry change.",
+  "next_step": "Stop factor scanning. If another run is needed, first repair and freeze the input/order/source contract so control and experiment have identical participation; then run one bounded comparison only if that repaired contract makes the hypothesis measurable.",
+  "do_not_do": [
+    "do not promote the factor to production",
+    "do not claim a clean quality A/B or D3 acceptance",
+    "do not change thresholds, bounds or fallback based on this run",
+    "do not continue scanning geometry factors before repairing source participation"
+  ]
+}

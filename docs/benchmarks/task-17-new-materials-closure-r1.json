@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "task": 17,
+  "status": "new_material_batch_diagnostic_closed",
+  "production_impact": "diagnostic and test_only evidence; no production threshold, bounds, fallback, tone model or source contract change",
+  "datasets": {
+    "chibi": {
+      "inputs": 48,
+      "status": "diagnostic_rejected",
+      "root_cause": "tone/boundary and local-scale failures; station2↔5 source mapping probes remained native_source_sampling_unmapped",
+      "evidence": ["docs/artwork-lanes/S2-chibi.md", "docs/benchmarks/task-17-chibi-tone-source-mapping-audit-r3.json"]
+    },
+    "lisong": {
+      "inputs": 46,
+      "status": "diagnostic_rejected",
+      "root_cause": "covered station9↔13 boundary-stroke mismatch at 1.7252px; source RGB/saved-tone relation localized and not a uniform gain",
+      "evidence": ["docs/artwork-lanes/S2-lisong.md", "docs/benchmarks/task-17-lisong-native-boundary-capture-r3.json", "docs/benchmarks/task-17-lisong-saved-tone-relation-content-audit-r1.json"]
+    },
+    "xiagui": {
+      "inputs": 48,
+      "status": "diagnostic_rejected",
+      "root_cause": "covered station3↔9 boundary-stroke failures remain after corrected witness attribution; derivative tone evidence is test-only",
+      "evidence": ["docs/artwork-lanes/S2-xiagui.md", "docs/benchmarks/task-17-xiagui-native-boundary-capture-r3.json"]
+    },
+    "lidong": {
+      "inputs": 25,
+      "status": "diagnostic_rejected_structural",
+      "root_cause": "three disconnected geometry components with no gate-compatible cross-component bridge; fallback QG also fails",
+      "evidence": ["docs/artwork-lanes/S2-lidong.md", "docs/benchmarks/task-17-lidong-grouping-overlap-bounded-r1.json"]
+    }
+  },
+  "shared_decision": {
+    "native_or_d3_acceptance": false,
+    "memory_gate": "passed for recorded D1 runs",
+    "next_step": "close this material batch; reopen only for a new source mapping/content correspondence hypothesis or a newly registered material set",
+    "do_not_do": [
+      "do not widen tone/boundary thresholds",
+      "do not change production bounds or fallback",
+      "do not force disconnected geometry components together",
+      "do not treat derivative capture/replay as full-run QG acceptance"
+    ]
+  }
+}

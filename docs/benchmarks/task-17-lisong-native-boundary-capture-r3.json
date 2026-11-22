@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_lisong_native_boundary_capture_r3_p95_coordinate_fix",
+  "production_impact": "test_only diagnostic derivative binary; P95 evidence coordinate fix only; no threshold, bounds, fallback or QG value change",
+  "run_id": "lisong-s0p25-task17-lisongboundaryd3r3",
+  "run_path": "output/acceptance/task17/lisong-boundary-d3-r3/run",
+  "stack_report": "output/acceptance/task17/lisong-boundary-d3-r3/run/lisong-s0p25-task17-lisongboundaryd3r3-stack-reports/stack-report-e1e14a2d-10ab-461d-bec6-0c3efaf4f7ad.json",
+  "binary": {
+    "label": "task17-boundary-debug-r3",
+    "sha256": "1b13125f5a92da5d2249055c54b9aa7bf9266f365723fabbbee644fe141fa134"
+  },
+  "result": {
+    "inputs": 46,
+    "stations": 15,
+    "output": {
+      "width": 3205,
+      "height": 2194
+    },
+    "verdict": "failed",
+    "tone_status": "applied",
+    "quality_gate": "fail",
+    "native_acceptance": "rejected: native output did not pass the complete quality gate"
+  },
+  "native_boundary_witnesses": [
+    {
+      "artifact": "output/acceptance/task17/lisong-boundary-d3-r3/failed-boundaries/boundary-000.json",
+      "world": {
+        "x": 2269.0,
+        "y": 1692.0
+      },
+      "measured": 1.7251570602550932,
+      "crop": [
+        2962,
+        1649,
+        96,
+        96
+      ],
+      "crop_point": [
+        48,
+        48
+      ]
+    }
+  ],
+  "dynamic_debug_map": {
+    "path": "output/acceptance/task17/lisong-boundary-d3-r3/boundary-debug/raw-owner-map.json",
+    "canvas": {
+      "height": 2194,
+      "width": 3205
+    },
+    "region": {
+      "height": 500,
+      "left": 2705,
+      "top": 1447,
+      "width": 500
+    },
+    "anchor_world": [
+      2269.0,
+      1692.0
+    ],
+    "anchor_output": [
+      3010.0,
+      1697.0
+    ],
+    "owner_count": 250000,
+    "unique_owner_count": 11,
+    "owner_zero_count": 20999,
+    "coverage_nonzero_count": 625
+  },
+  "failure_neighbourhood": {
+    "path": "output/acceptance/task17/lisong-boundary-d3-r3/boundary-debug/failure-neighbourhood.json",
+    "output": {
+      "x": 3010,
+      "y": 1697
+    },
+    "owner_zero_count": 0,
+    "coverage_zero_count": 0,
+    "owner_counts": {
+      "30": 600,
+      "41": 22,
+      "44": 3
+    }
+  },
+  "candidate_file_present": false,
+  "interpretation": "The corrected P95 attribution moves the aggregate witness from uncovered world_origin to a real measured boundary point at output (3010,1697). The dynamic owner map is valid, covered, and nonzero-owner around the witness. Native QG still fails at 1.7252, so the failure is now actionable boundary evidence rather than an origin attribution artifact.",
+  "next_step": "Preserve native rejection and investigate this real covered boundary relation with a bounded source-owner/stroke fixture; do not change thresholds or bounds."
+}

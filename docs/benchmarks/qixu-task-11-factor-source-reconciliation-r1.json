@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "task": 11,
+  "method": "qixu_factor_source_reconciliation_r1",
+  "production_impact": "read-only reconciliation; no pose write, threshold, bounds, fallback or production code change",
+  "sensitivity_audit": "docs/benchmarks/qixu-task-11-geometry-sensitivity-audit.json",
+  "historical_ab": "docs/benchmarks/qixu-task-11-legacy-geometry-ab.json",
+  "source_specific_factors": {
+    "DSC_3867.NEF": {
+      "source_id": 24,
+      "required_factor_to_0_95": 1.2166592078859353
+    },
+    "DSC_3882.NEF": {
+      "source_id": 39,
+      "required_factor_to_0_95": 1.2546019381835418
+    }
+  },
+  "historical_experiment": {
+    "applied_path": "DSC_3882.NEF",
+    "applied_factor": 1.2166592079,
+    "factor_source": "matches the sensitivity factor recorded for DSC_3867.NEF, not DSC_3882.NEF",
+    "valid_for_DSC3882": false
+  },
+  "finding": "The previous legacy geometry A/B applied the DSC_3867-derived factor 1.2166592079 to DSC_3882. The source-specific sensitivity audit records DSC_3882 at 1.2546019382 and DSC_3867 at 1.2166592079. The historical A/B therefore cannot validate the correct DSC_3882 geometry hypothesis.",
+  "decision": "historical_ab_reconciled_not_promoted",
+  "next_step": "If another bounded run is authorized, use only DSC_3882.NEF with its source-specific factor 1.2546019382, fixed control/experiment inputs, and the unchanged QG/source contract; otherwise retain the diagnostic rejection and do not extrapolate the old A/B.",
+  "do_not_do": [
+    "do not apply DSC_3867 factor to DSC_3882 again",
+    "do not scan multiple factors",
+    "do not change thresholds, bounds, fallback or default pose"
+  ]
+}

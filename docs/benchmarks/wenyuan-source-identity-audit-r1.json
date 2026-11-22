@@ -1,0 +1,119 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_source_identity_audit_v1",
+  "production_impact": "read-only source identity audit; no production source normalization, owner, relation, or bounds change",
+  "inputs": {
+    "subset": "/private/tmp/wenyuan-stations-34-39-tone-subset-r2.json",
+    "active_mismatch": "/private/tmp/wenyuan-boundary-point-trace-r5-ownerfix/photometric-mismatch-audit.json",
+    "audit": "/private/tmp/wenyuan-tone-fields-34-39-r10/source-identity-audit.json"
+  },
+  "pairs": {
+    "36↔37": {
+      "sides": [
+        {
+          "station_label": 36,
+          "source_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4867.NEF",
+          "source_id": 11,
+          "status": "mask_written",
+          "used_fallback": false,
+          "source_sampling_observed": true,
+          "expected_station_member": true
+        },
+        {
+          "station_label": 37,
+          "source_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4848.NEF",
+          "source_id": 2,
+          "status": "mask_written",
+          "used_fallback": false,
+          "source_sampling_observed": true,
+          "expected_station_member": true
+        }
+      ],
+      "cross_cluster_source": false,
+      "fallback_rows": 0,
+      "source_sampling_complete": true,
+      "classification": "source_identity_consistent_direct_content_mismatch"
+    },
+    "36↔38": {
+      "sides": [
+        {
+          "station_label": 36,
+          "source_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4868.NEF",
+          "source_id": 12,
+          "status": "mask_written",
+          "used_fallback": false,
+          "source_sampling_observed": true,
+          "expected_station_member": true
+        },
+        {
+          "station_label": 38,
+          "source_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4864.NEF",
+          "source_id": 8,
+          "status": "mask_written",
+          "used_fallback": false,
+          "source_sampling_observed": true,
+          "expected_station_member": true
+        }
+      ],
+      "cross_cluster_source": false,
+      "fallback_rows": 0,
+      "source_sampling_complete": true,
+      "classification": "source_identity_consistent_direct_content_mismatch"
+    },
+    "37↔38": {
+      "sides": [
+        {
+          "station_label": 37,
+          "source_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4848.NEF",
+          "source_id": 2,
+          "status": "mask_written",
+          "used_fallback": false,
+          "source_sampling_observed": true,
+          "expected_station_member": true
+        },
+        {
+          "station_label": 38,
+          "source_path": "/Users/dp/Downloads/书画拼图/文苑图/DSC_4861.NEF",
+          "source_id": 5,
+          "status": "mask_written",
+          "used_fallback": false,
+          "source_sampling_observed": true,
+          "expected_station_member": true
+        }
+      ],
+      "cross_cluster_source": false,
+      "fallback_rows": 0,
+      "source_sampling_complete": true,
+      "classification": "source_identity_consistent_direct_content_mismatch"
+    }
+  },
+  "source_reuse": {
+    "/Users/dp/Downloads/书画拼图/文苑图/DSC_4867.NEF": [
+      "36↔37"
+    ],
+    "/Users/dp/Downloads/书画拼图/文苑图/DSC_4848.NEF": [
+      "36↔37",
+      "37↔38"
+    ],
+    "/Users/dp/Downloads/书画拼图/文苑图/DSC_4868.NEF": [
+      "36↔38"
+    ],
+    "/Users/dp/Downloads/书画拼图/文苑图/DSC_4864.NEF": [
+      "36↔38"
+    ],
+    "/Users/dp/Downloads/书画拼图/文苑图/DSC_4861.NEF": [
+      "37↔38"
+    ]
+  },
+  "decision": {
+    "promotion": "rejected",
+    "conclusion": "all reported active witness sources belong to their expected station clusters and use no fallback; remaining pair residuals are not explained by cross-cluster source contamination",
+    "next_step": "inspect source/content correspondence at the witness locations; do not add source normalization or widen tone bounds"
+  },
+  "limitations": [
+    "source identity is checked against the 15-source subset manifest, not a new full-run decode",
+    "membership consistency does not prove that the source pixels depict identical content",
+    "no full 126-source run was performed"
+  ]
+}

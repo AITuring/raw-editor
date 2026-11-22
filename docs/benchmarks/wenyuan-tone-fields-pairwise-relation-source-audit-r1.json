@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_pairwise_relation_source_audit_v1",
+  "production_impact": "read-only pairwise relation/source-Jacobian isolation on r10 saved fields; no production bound or threshold change",
+  "inputs": {
+    "capture_dir": "/private/tmp/wenyuan-tone-fields-34-39-r10",
+    "tone_final_world": "/private/tmp/wenyuan-tone-fields-34-39-r10/tone-final-world.json",
+    "active_mismatch": "/private/tmp/wenyuan-boundary-point-trace-r5-ownerfix/photometric-mismatch-audit.json",
+    "active_trace": "/private/tmp/wenyuan-boundary-point-trace-r5-ownerfix/active-point-trace-audit.json",
+    "replays": {
+      "ownerfix": "/private/tmp/wenyuan-tone-fields-34-39-r10/saved-local-tone-boundary-ownerfix.json",
+      "luma_floor_001": "/private/tmp/wenyuan-tone-fields-34-39-r10/saved-local-tone-boundary-ownerfix-min001.json"
+    },
+    "output": "/private/tmp/wenyuan-tone-fields-34-39-r10/pairwise-relation-source-audit.json"
+  },
+  "pairs": {
+    "36↔37": {
+      "relation_fit": {"pre_delta_e00": 1.366873119728483, "post_delta_e00": 0.0760671946337022, "retained_samples": 86139, "solver_log_residual": [0.0029684124728633146, 0.003663627244785552, 0.00334164943609583]},
+      "active_source_sampling": {"luminance_ratio": 100775.7983060796, "owner_selection_gap": false, "source_sampling_observed": true, "source_footprint_supported": true, "global_source_supported": true, "fallback_rows": 0, "sources": ["DSC_4867.NEF", "DSC_4848.NEF"]},
+      "replay": {"ownerfix_max": 9.420790066773208, "ownerfix_failed": 17, "luma_floor_001_max": 6.822006059658317, "luma_floor_001_failed": 18},
+      "classification": "in-support relation fit plus direct active low-luma mismatch"
+    },
+    "37↔38": {
+      "relation_fit": {"pre_delta_e00": 1.1569588769709842, "post_delta_e00": 0.41203368346206487, "retained_samples": 52973, "solver_log_residual": [-0.003602530143958751, -0.003532682062380551, -0.00333956747541294]},
+      "active_source_sampling": {"luminance_ratio": 111.51283401470147, "owner_selection_gap": false, "source_sampling_observed": true, "source_footprint_supported": true, "global_source_supported": true, "fallback_rows": 0, "sources": ["DSC_4848.NEF", "DSC_4861.NEF"]},
+      "replay": {"ownerfix_max": 7.8051098717824905, "ownerfix_failed": 9, "luma_floor_001_max": 6.608654823655893, "luma_floor_001_failed": 6},
+      "classification": "in-support relation fit plus direct active low-luma mismatch and residual bound response"
+    },
+    "36↔38": {
+      "relation_fit": {"pre_delta_e00": 0.8168077356024843, "post_delta_e00": 0.22444505783949686, "retained_samples": 85313, "solver_log_residual": [0.002552458376752831, 0.0026818128478995687, 0.001898855571384278]},
+      "active_source_sampling": {"luminance_ratio": 24.229558735195113, "owner_selection_gap": false, "source_sampling_observed": true, "source_footprint_supported": true, "global_source_supported": true, "fallback_rows": 0, "sources": ["DSC_4868.NEF", "DSC_4864.NEF"]},
+      "replay": {"ownerfix_max": 6.019646137579922, "ownerfix_failed": 15, "luma_floor_001_max": 3.600144808516698, "luma_floor_001_failed": 9},
+      "classification": "relation fit and supported active sampling; lower-severity photometric residual remains"
+    }
+  },
+  "decision": {
+    "promotion": "rejected",
+    "conclusion": "36↔37 and 37↔38 are direct pairwise low-luminance mismatches under observed supported source sampling; relation support is adequate for the internal fit, while boundary replay still exposes residuals outside the relation's retained sample domain",
+    "next_step": "keep production bounds unchanged; isolate pairwise photometric/source calibration or owner-specific source normalization before considering a production tone change"
+  },
+  "limitations": [
+    "active trace and saved replay are diagnostic artifacts, not formal QG or native acceptance verdicts",
+    "relation post deltas summarize retained relation samples and do not certify every boundary witness",
+    "no full 126-source run was performed"
+  ]
+}

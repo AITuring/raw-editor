@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_active_photometric_mismatch_audit_v1",
+  "production_impact": "read-only join of corrected active point trace and saved native tone replay; no production change",
+  "inputs": {
+    "trace": "/private/tmp/wenyuan-boundary-point-trace-r2-run/process-23859/iteration-0001/trace.json",
+    "saved_replay": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary.json",
+    "capture_dir": "/private/tmp/wenyuan-tone-fields-34-39-r7",
+    "audit": "/private/tmp/wenyuan-boundary-point-trace-r2-run/photometric-mismatch-audit.json"
+  },
+  "pairs": {
+    "36↔38": {
+      "saved_max_delta": 10.857647310904358,
+      "saved_common_rgb": [[0.016512122005224228, 0.006291261874139309, 0.007003816310316324], [0.1805529147386551, 0.1546311974525451, 0.11594393849372864]],
+      "active_left_status": "owner_not_selected",
+      "active_left_source": null,
+      "active_right_source": "DSC_4864.NEF",
+      "active_right_rgb": [0.16342389583587646, 0.14982356131076813, 0.09971313923597336],
+      "active_support": "right source footprint/global support true; left owner was not selected",
+      "classification": "owner_selection_gap_plus_saved_photometric_mismatch"
+    },
+    "36↔37": {
+      "saved_max_delta": 9.602753609010314,
+      "active_left_source": "DSC_4867.NEF",
+      "active_left_rgb": [0.20171409845352173, 0.15461917221546173, 0.16125191748142242],
+      "active_right_source": "DSC_4848.NEF",
+      "active_right_rgb": [0.0, 7.763177478636862e-08, 2.192342799389735e-05],
+      "active_luminance_ratio": 100775.7983060796,
+      "active_support": "both source footprint/global support true; both owners sampled without fallback",
+      "classification": "direct_photometric_mismatch_with_valid_source_sampling"
+    },
+    "37↔38": {
+      "saved_max_delta": 7.676373760054283,
+      "active_left_source": "DSC_4848.NEF",
+      "active_left_rgb": [0.0057703712955117226, 5.0656986161357054e-08, 0.0005531238275580108],
+      "active_right_source": "DSC_4861.NEF",
+      "active_right_rgb": [0.1721937209367752, 0.12942683696746826, 0.1673784703016281],
+      "active_luminance_ratio": 111.51283401470147,
+      "active_support": "both source footprint/global support true; both owners sampled without fallback",
+      "classification": "direct_photometric_mismatch_and_saved_bound_hit"
+    }
+  },
+  "decision": {
+    "promotion": "rejected",
+    "next_step": "separate owner selection for 36↔38 from direct photometric mismatch in 36↔37/37↔38; do not widen tone bounds until the active RGB/source contract is reconciled"
+  },
+  "limitations": [
+    "active RGB samples are compositor witness samples, not a formal QG verdict",
+    "saved replay and active trace use the same labeled canvas witnesses but retain separate owner/relation representations",
+    "no full 126-source run was performed"
+  ]
+}

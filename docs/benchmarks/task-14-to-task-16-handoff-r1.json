@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "method": "task14_to_next_task_handoff_v1",
+  "from_task": 14,
+  "next_task": 16,
+  "date": "2026-11-21",
+  "production_impact": "documentation-only handoff; no production code, thresholds, bounds, fallback, or manifest change",
+  "task14": {
+    "status": "diagnostic_rejection_closed",
+    "final_conclusion": "owner guard validated; source identity, support extrapolation, pair luminance gate, source normalization and local translation do not explain witness residuals; witness-local content mismatch remains",
+    "native_acceptance": "rejected",
+    "tone_boundary_max_delta_e00": 9.420790066773208,
+    "tone_boundary_failed_windows": 95,
+    "memory_gate": "passed",
+    "task15_triggered": false,
+    "task15_trigger_reason": "runs completed normally and stayed below 24GiB memory gate"
+  },
+  "task16": {
+    "lane": "mayuan-2 / sleeping station-density and boundary diagnostics",
+    "status": "diagnostic_rejection_already_recorded",
+    "final_decision": "docs/benchmarks/task-16-final-decision.json",
+    "remaining_blockers": [
+      "boundary candidate measurability",
+      "effective_pixel_count",
+      "native density bypass under nonidentity residual"
+    ],
+    "production_change": "none",
+    "full_ab_rerun_allowed": false,
+    "allowed_next_hypotheses": [
+      "new boundary candidate-content measurability contract",
+      "explicit product decision to keep boundary NotApplicable for the artwork"
+    ]
+  },
+  "handoff_decision": {
+    "action": "switch active planning context to task16 review/product-decision lane",
+    "do_not_run": "no new full image A/B until one allowed hypothesis is specified",
+    "next_artifact": "task16 boundary candidate-measurability contract or product decision brief"
+  },
+  "references": [
+    "docs/artwork-lanes/14-wenyuan-diagnostic.md",
+    "docs/benchmarks/wenyuan-source-content-local-registration-search-r1.json",
+    "docs/artwork-lanes/16-station-density.md",
+    "docs/benchmarks/task-16-final-decision.json",
+    "docs/benchmarks/task-16-boundary-candidate-measurability-brief.json"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_tone_boundary_synthetic_fixture_ab_v1",
+  "production_impact": "cfg(test)-only synthetic tone field; no production threshold, fallback, geometry, density, or bound change",
+  "stations": [34, 35, 36, 37, 38, 39],
+  "fixture": {
+    "owner_bands": 6,
+    "world_dimensions": [512, 512],
+    "relations": "34-35-36-37-38-39",
+    "input": "six constant low-frequency fields with a monotonic exposure mismatch",
+    "purpose": "force the local gain/offset box to be active and make a bounded residual response measurable"
+  },
+  "control": {
+    "bound_scale": 1.0,
+    "before_delta_e00": 7.915622637926218,
+    "after_delta_e00": 3.8409393838544528,
+    "bound_hit": true,
+    "gain_min": [0.800000011920929, 0.800000011920929, 0.800000011920929],
+    "gain_max": [1.25, 1.25, 1.25],
+    "offset_min": [-0.019999999552965164, -0.019999999552965164, -0.019999999552965164],
+    "offset_max": [0.019999999552965164, 0.019999999552965164, 0.019999999552965164]
+  },
+  "candidate": {
+    "bound_scale": 1.5,
+    "before_delta_e00": 7.915622637926218,
+    "after_delta_e00": 0.4828690396730325,
+    "bound_hit": true,
+    "gain_min": [0.7000000476837158, 0.7000000476837158, 0.7000000476837158],
+    "gain_max": [1.375, 1.375, 1.375],
+    "offset_min": [-0.029999999329447746, -0.029999999329447746, -0.029999999329447746],
+    "offset_max": [0.029999999329447746, 0.029999999329447746, 0.029999999329447746]
+  },
+  "result": {
+    "after_delta_e00_change": -3.35807034418142,
+    "candidate_improves_fixture": true,
+    "interpretation": "bound widening improves a deliberately bound-hit synthetic seam, proving only that the solver responds to this variable; it does not establish that the real 34-39 residual is bound-limited"
+  },
+  "decision": {
+    "production_promotion": "rejected",
+    "next_step": "export real 34-39 local fields through the existing test-only capture sink before considering any further bounded experiment"
+  },
+  "evidence": {
+    "test": "src-tauri/src/panorama_utils/stack_pipeline/tone_local.rs::synthetic_tone_boundary_fixture_hits_bounds_and_records_delta_e",
+    "control_output": "/private/tmp/wenyuan-tone-boundary-fixture-control-r2.json",
+    "candidate_output": "/private/tmp/wenyuan-tone-boundary-fixture-bound15-r2.json"
+  }
+}

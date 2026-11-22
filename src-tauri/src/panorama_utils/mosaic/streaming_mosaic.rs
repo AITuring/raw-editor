@@ -21,6 +21,54 @@ use tauri::AppHandle;
 use tauri::Emitter;
 use tauri::Runtime;
 
+#[cfg(test)]
+fn fixed_soft_frame_skip(images: &[&ImageInfo]) -> Option<Vec<(usize, f64)>> {
+    let value = std::env::var_os("RAW_EDITOR_TEST_FIXED_SOFT_SKIP")?;
+    let requested = value
+        .to_string_lossy()
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(|name| name.to_owned())
+        .collect::<Vec<_>>();
+    let mut skipped = Vec::with_capacity(requested.len());
+    let mut missing = Vec::new();
+    for name in requested {
+        match images.iter().position(|info| {
+            std::path::Path::new(&info.filename)
+                .file_name()
+                .map(|file| file.to_string_lossy() == name)
+                .unwrap_or(false)
+        }) {
+            Some(index) if !skipped.iter().any(|(existing, _)| *existing == index) => {
+                skipped.push((index, 1.0));
+            }
+            Some(_) => {}
+            None => missing.push(name),
+        }
+    }
+    if !missing.is_empty() {
+        panic!(
+            "RAW_EDITOR_TEST_FIXED_SOFT_SKIP names are not in the input set: {}",
+            missing.join(", ")
+        );
+    }
+    println!(
+        "  - Focus scan: test fixed soft-skip set: {}",
+        skipped
+            .iter()
+            .map(|(index, _)| {
+                std::path::Path::new(&images[*index].filename)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    Some(skipped)
+}
+
 use super::{
     DetailGrid, ExposureGrid, Field, FocusBand, FrameDetail, FrameSurvey, GRID_STEP, LayerSampler,
     MosaicCoverageObservation, MosaicToneFinish, NEAR_BEST_RATIO, NativeRefineMode, OwnerStations,
@@ -232,7 +280,20 @@ where
                 *detail = FrameDetail::default();
             }
         }
-        let skipped = soft_frames(&details, &grid);
+        #[cfg(test)]
+        let fixed_soft_skip = fixed_soft_frame_skip(images);
+        let skipped = {
+            #[cfg(test)]
+            if let Some(fixed) = fixed_soft_skip {
+                fixed
+            } else {
+                soft_frames(&details, &grid)
+            }
+            #[cfg(not(test))]
+            {
+                soft_frames(&details, &grid)
+            }
+        };
         if !skipped.is_empty() {
             println!(
                 "  - Focus scan: leaving out {} mostly soft frame(s): {}",

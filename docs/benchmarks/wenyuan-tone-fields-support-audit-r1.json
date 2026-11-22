@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_saved_tone_support_audit_v1",
+  "production_impact": "read-only support classification of saved test-only replay failures; no production change",
+  "inputs": {
+    "capture_dir": "/private/tmp/wenyuan-tone-fields-34-39-r7",
+    "native_proof": "/private/tmp/wenyuan-native-proof-34-39-r7/joint-production-input.json",
+    "control_replay": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary.json",
+    "candidate_replay": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary-b1.5.json",
+    "output": "/private/tmp/wenyuan-native-proof-34-39-r7/support-audit.json"
+  },
+  "classification": {
+    "definition": "in_support requires both witness sides inside the axis-aligned bbox of native_verified_points; outside_support means either side is outside",
+    "control_scale_1": {
+      "failed_total": 81,
+      "in_support": {"count": 0, "max_delta": null},
+      "outside_support": {"count": 81, "max_delta": 10.857647310904358, "bound_hit_count": 7},
+      "support_unavailable": {"count": 0}
+    },
+    "candidate_scale_1_5": {
+      "failed_total": 73,
+      "in_support": {"count": 0, "max_delta": null},
+      "outside_support": {"count": 73, "max_delta": 10.457657219451127, "bound_hit_count": 2},
+      "support_unavailable": {"count": 0}
+    }
+  },
+  "pair_max_delta": {
+    "control": {"36↔38": 10.857647310904358, "36↔37": 9.602753609010314, "37↔38": 7.676373760054283},
+    "candidate": {"36↔38": 10.457657219451127, "36↔37": 9.336838179762308, "37↔38": 3.917324569209491}
+  },
+  "interpretation": "all replay failures are outside native verified support under this conservative bbox test; this is consistent with source/Jacobian extrapolation or insufficient relation support, while the bound-hit 37↔38 subset remains separately responsive",
+  "decision": {
+    "promotion": "rejected",
+    "next_step": "repair or independently validate boundary-local source/Jacobian support for 36↔38 and 36↔37 before any production tone change"
+  },
+  "limitations": [
+    "axis-aligned bboxes over native correspondence points are a conservative support proxy, not a full polygon/Jacobian proof",
+    "this does not emit or claim formal QG, source-contract, memory-gate, or native acceptance results",
+    "no full 126-source run was performed"
+  ]
+}

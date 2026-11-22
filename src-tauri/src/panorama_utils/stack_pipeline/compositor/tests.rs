@@ -749,3 +749,17 @@ fn tone_cannot_change_the_ownership_plane() {
     let owners = vec![1u16, 2, 2, 1];
     assert_ownership_unchanged(&owners, &owners);
 }
+
+#[test]
+fn native_revisit_keeps_canvas_owner_from_dark_foreground_candidate() {
+    let current = [0.20, 0.15, 0.16];
+    let dark_foreground = [0.0, 0.0, 0.00002];
+    assert!(!native_revisit_candidate_should_replace(
+        &current,
+        &dark_foreground
+    ));
+    assert!(native_revisit_candidate_should_replace(
+        &dark_foreground,
+        &current
+    ));
+}

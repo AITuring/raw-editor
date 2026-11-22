@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "from_task": 12,
+  "to_task": 13,
+  "from_dataset": "fengying",
+  "status": "diagnostic_closed_d3_not_reached",
+  "evidence": [
+    "docs/benchmarks/fengying-task-12-diagnostic.json",
+    "docs/benchmarks/fengying-task-12-resampling.json",
+    "docs/benchmarks/fengying-task-12-legacy-geometry-ab.json",
+    "docs/benchmarks/fengying-task-12-geometry-sensitivity-audit.json"
+  ],
+  "decision": {
+    "production_promotion": false,
+    "production_changes": [],
+    "qg": "fail",
+    "native_or_d3_acceptance": false,
+    "factor_scan": "stopped",
+    "owner_fallback": "rejected",
+    "source_resampling": "rejected"
+  },
+  "findings": {
+    "owner_fallback": "all nine scale failure points had uniform 3x3 owner neighborhoods; owner coverage failure had no covered neighbor",
+    "source_resampling": "pixels and sharpness changed slightly, but local geometry and Coverage did not improve",
+    "geometry_factor": "DSC04916 factor 1.06896813096 changed local_scale_pixel_ratio to pass, but owner coverage remained failed and two boundary failures appeared"
+  },
+  "handoff_notes": [
+    "Do not promote the DSC04916 geometry factor or alter owner fallback, resampling, thresholds or bounds.",
+    "Keep task12 evidence at scale=0.25; do not extrapolate it to native D3.",
+    "Task 13 may proceed with its Langyuan 84-source diagnostic card under the same exclusive resource and no-promotion rules."
+  ],
+  "next_task": {
+    "id": 13,
+    "card": "docs/artwork-lanes/13-langyuan-diagnostic.md",
+    "dataset": "langyuan",
+    "current_state": "diagnostic evidence exists; D3 remains unaccepted"
+  }
+}

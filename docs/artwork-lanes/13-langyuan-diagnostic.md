@@ -1,6 +1,7 @@
 # 任务13：阆苑84张到 D2/D3 诊断边界
 
-- 更新：2026-11-18；状态：残差/尺度/边界审计完成，原生推进未开始；分支 `lane/task-13/langyuan-diagnostic`。
+- 更新：2026-11-22；状态：残差/尺度/boundary 根因诊断收口，D3 未通过；原生推进未开始，交接任务14；分支 `lane/task-13/langyuan-diagnostic`。
+- 任务12交接（2026-11-22）：枫鹰 fallback、resampling 与 geometry factor 诊断已收口且无生产合入；本卡继续沿用 exclusive 资源和不把 scale=0.25 结果外推到 native 的边界。
 - 输入：阆苑女仙全量84张，scale=0.25；沿用任务5冻结 `base-2026-11-12`，不改生产代码、阈值、矩阵或正式基线。
 - 依据：任务5输出 `/Users/dp/Desktop/raw-editor/output/acceptance/task-5/langyuan-baseline-r1` 及 [S2-langyuan](S2-langyuan.md)。
 
@@ -43,3 +44,11 @@ closure 虽然收敛，但 `residual_median_px=0.0809119`、`residual_p95_px=1.2
 对包含最坏点 `DSC_3681.NEF` 的 `langyuan-10` 子集做了 test-only pose sensitivity：绕虚拟 station group 中心施加 factor `1.5093482447`。hook 命中并记录 marker，但该高倍率导致 output-density factor `1.248047`、closure `no_constraints`，native acceptance 以 `native station geometry is not connected and converged` 拒绝；QG ROI 表面 pass 不能抵消这个 native 几何拒绝，self sharpness median 仅 `0.03345`。
 
 因此停止把该倍率推广到84张全量。机器摘要：[langyuan-task-13-geometry-ab.json](../benchmarks/langyuan-task-13-geometry-ab.json)。
+
+## 根因诊断收口与任务交接
+
+full-84 test-only control 重跑复现了同一 QG：6/8 local-scale pixel-ratio 失败、唯一 boundary witness 为 station16↔27 / owner48↔82 的 4px，owner coverage 通过；closure 仍 converged，residual median/P95 `0.0809/1.2801px`，density 仍因 `nonidentity_world_residual` bypass。该重跑的 Stack_Report 已写出，但参考注册失败导致 acceptance metrics 未写出，因此不把它当作新的验收记录；QG 与 baseline 报告一致。
+
+综合 residual support、station scale sensitivity、boundary witness 和既有 station5 高倍率子集证据，任务13结论是：当前失败点不在记录的 residual 支持域内；尺度因子分散于 `1.0228–1.5093`，不支持全局倍率；boundary 是独立的 station16↔27 覆盖描线问题。停止继续扫描 factor、禁用 residual、放宽阈值、bounds 或 fallback，不启动 scale=1。
+
+机器摘要：[`langyuan-task-13-root-cause-closure-r1.json`](../benchmarks/langyuan-task-13-root-cause-closure-r1.json)。下一项交接任务14文苑，沿用不把 scale=0.25 诊断外推到 native 的约束。

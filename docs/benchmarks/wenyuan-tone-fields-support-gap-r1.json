@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_saved_tone_support_gap_v1",
+  "production_impact": "read-only boundary-local support diagnostic; no production change",
+  "inputs": {
+    "capture_dir": "/private/tmp/wenyuan-tone-fields-34-39-r7",
+    "native_proof": "/private/tmp/wenyuan-native-proof-34-39-r7/joint-production-input.json",
+    "control_replay": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary.json",
+    "candidate_replay": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary-b1.5.json",
+    "output": "/private/tmp/wenyuan-native-proof-34-39-r7/support-gap.json"
+  },
+  "definition": "gap is measured from each witness to the axis-aligned bbox of native_verified_points in each tile's local field coordinates",
+  "control_top_pairs": [
+    {
+      "pair": "36↔38",
+      "world": [5888, 5632],
+      "delta": 10.857647310904358,
+      "left_gap_px": 2364.453530945364,
+      "right_gap_px": 795.2899391799883,
+      "directions": ["right", "bottom"],
+      "field_validity": [255, 255],
+      "field_coverage": [1.0, 1.0],
+      "relation_inliers": 308,
+      "relation_error_px": 1.4985384690020522,
+      "native_verified_support": false
+    },
+    {
+      "pair": "36↔37",
+      "world": [7680, 5632],
+      "delta": 9.602753609010314,
+      "left_gap_px": 2423.113685205773,
+      "right_gap_px": 1674.5,
+      "directions": ["right", "bottom"],
+      "field_validity": [255, 255],
+      "field_coverage": [1.0, 1.0],
+      "relation_inliers": 408,
+      "relation_error_px": 1.4901212696103905,
+      "native_verified_support": false
+    },
+    {
+      "pair": "37↔38",
+      "world": [7168, 5632],
+      "delta": 7.676373760054283,
+      "left_gap_px": 1090.5,
+      "right_gap_px": 1182.117991911753,
+      "directions": ["bottom"],
+      "field_validity": [255, 255],
+      "field_coverage": [1.0, 1.0],
+      "relation_inliers": 487,
+      "relation_error_px": 1.1276239261159569,
+      "native_verified_support": false
+    }
+  ],
+  "candidate_top_pairs": {
+    "36↔38": {"delta": 10.457657219451127, "left_gap_px": 2364.453530945364, "right_gap_px": 795.2899391799883},
+    "36↔37": {"delta": 9.336838179762308, "left_gap_px": 2423.113685205773, "right_gap_px": 1674.5},
+    "37↔38": {"delta": 3.917324569209491, "left_gap_px": 1090.5, "right_gap_px": 1182.117991911753}
+  },
+  "interpretation": "dominant witnesses are far outside native verified support despite valid field cells; the residual is consistent with boundary-local source/Jacobian or relation-support extrapolation, while the 37↔38 bound-hit response remains separable",
+  "decision": {
+    "promotion": "rejected",
+    "next_step": "validate or repair boundary-local source/Jacobian support before any production tone change"
+  },
+  "limitations": [
+    "axis-aligned bbox is a conservative support proxy, not a full polygon or Jacobian proof",
+    "capture-only artifacts do not emit formal QG, source-contract, memory-gate, or native-acceptance verdicts",
+    "no full 126-source run was performed"
+  ]
+}

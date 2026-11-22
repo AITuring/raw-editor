@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_saved_preview_boundary_witness_replay_r1",
+  "production_impact": "test_only_saved_preview replay; no production code, threshold, bounds or fallback change",
+  "native_evidence": false,
+  "inputs": {
+    "lisong_report": "output/acceptance/task17/lisong-d1-r1/run/lisong-s0p25-task17-lisongd1r1-stack-reports/stack-report-6b797c3f-2301-4742-85c6-808b6e145327.json",
+    "xiagui_report": "output/acceptance/task17/xiagui-d1-r1/run/xiagui-s0p25-task17-xiaguid1r1-stack-reports/stack-report-cb3753ca-4a6b-45ae-9044-99fa72700b35.json",
+    "replay_test": "panorama_stitching::acceptance_tests::saved_native_replays::real_saved_boundary_edge_from_env",
+    "preview_contract": "1200px JPEG preview; coordinates mapped from report crop bbox proportionally"
+  },
+  "witnesses": [
+    {
+      "dataset": "lisong",
+      "report_world": [-741.0, -5.0],
+      "report_measured": 1.6581128181810776,
+      "report_crop_local": [49, 5],
+      "preview_size": [1200, 821],
+      "preview_coordinate": [18, 2],
+      "replay": {
+        "fits": "boundary_low_contrast",
+        "edge": "boundary_low_contrast",
+        "cargo_test": "passed"
+      }
+    },
+    {
+      "dataset": "xiagui",
+      "report_world": [-752.0, 1.0],
+      "report_measured": 2.42866385783147,
+      "report_crop_local": [85, 1],
+      "preview_size": [1200, 1033],
+      "preview_coordinate": [30, 0],
+      "replay": {
+        "fits": "boundary_low_contrast",
+        "edge": "boundary_low_contrast",
+        "cargo_test": "passed"
+      }
+    },
+    {
+      "dataset": "xiagui",
+      "report_world": [-439.0, 2304.0],
+      "report_measured": 3.11915769666895,
+      "report_crop_local": [398, 2303],
+      "preview_size": [1200, 1033],
+      "preview_coordinate": [140, 813],
+      "replay": {
+        "fits": "boundary_low_contrast",
+        "edge": "boundary_low_contrast",
+        "cargo_test": "passed"
+      }
+    }
+  ],
+  "interpretation": {
+    "finding": "All three downsampled preview probes are content-ineligible (boundary_low_contrast); this does not reproduce or invalidate the native boundary failures.",
+    "next_test_only_step": "If witness isolation continues, rerun one bounded D1 per dataset with RAW_EDITOR_FOCUS_BOUNDARY_CANDIDATE_DIR and RAW_EDITOR_FAILED_NATIVE_BOUNDARIES enabled to capture raw-owner/source provenance around the native coordinates.",
+    "do_not_do": [
+      "do not widen boundary threshold or bounds",
+      "do not promote preview replay to native acceptance",
+      "do not use the preview low-contrast result to erase the native QG failure"
+    ]
+  }
+}

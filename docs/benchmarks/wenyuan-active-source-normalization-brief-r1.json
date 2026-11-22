@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_active_source_normalization_brief_r1",
+  "production_impact": "read-only arithmetic brief; no source normalization or tone bounds change",
+  "inputs": {
+    "active_mismatch": "/private/tmp/wenyuan-boundary-point-trace-r5-ownerfix/photometric-mismatch-audit.json",
+    "pairwise_audit": "docs/benchmarks/wenyuan-tone-fields-pairwise-relation-source-audit-r1.json"
+  },
+  "bounds": {
+    "gain_min": 0.8,
+    "gain_max": 1.25,
+    "maximum_relative_two_sided_correction": 1.5625,
+    "offset_abs_max": 0.02
+  },
+  "pairs": {
+    "36↔37": {
+      "active_luminance_ratio": 100775.7983060796,
+      "active_source_sampling": {
+        "luminance_ratio": 100775.7983060796,
+        "owner_selection_gap": false,
+        "source_sampling_observed": true,
+        "source_footprint_supported": true,
+        "global_source_supported": true,
+        "fallback_rows": 0,
+        "sources": [
+          "DSC_4867.NEF",
+          "DSC_4848.NEF"
+        ]
+      },
+      "relation_post_delta_e00": 0.0760671946337022,
+      "retained_samples": 86139,
+      "maximum_relative_correction_from_production_bounds": 1.5625,
+      "residual_ratio_after_max_bounded_correction": 64496.51091589094,
+      "required_extra_normalization_fold": 64496.51091589094,
+      "decision": "do_not_normalize_source"
+    },
+    "37↔38": {
+      "active_luminance_ratio": 111.51283401470147,
+      "active_source_sampling": {
+        "luminance_ratio": 111.51283401470147,
+        "owner_selection_gap": false,
+        "source_sampling_observed": true,
+        "source_footprint_supported": true,
+        "global_source_supported": true,
+        "fallback_rows": 0,
+        "sources": [
+          "DSC_4848.NEF",
+          "DSC_4861.NEF"
+        ]
+      },
+      "relation_post_delta_e00": 0.41203368346206487,
+      "retained_samples": 52973,
+      "maximum_relative_correction_from_production_bounds": 1.5625,
+      "residual_ratio_after_max_bounded_correction": 71.36821376940894,
+      "required_extra_normalization_fold": 71.36821376940894,
+      "decision": "do_not_normalize_source"
+    },
+    "36↔38": {
+      "active_luminance_ratio": 24.229558735195113,
+      "active_source_sampling": {
+        "luminance_ratio": 24.229558735195113,
+        "owner_selection_gap": false,
+        "source_sampling_observed": true,
+        "source_footprint_supported": true,
+        "global_source_supported": true,
+        "fallback_rows": 0,
+        "sources": [
+          "DSC_4868.NEF",
+          "DSC_4864.NEF"
+        ]
+      },
+      "relation_post_delta_e00": 0.22444505783949686,
+      "retained_samples": 85313,
+      "maximum_relative_correction_from_production_bounds": 1.5625,
+      "residual_ratio_after_max_bounded_correction": 15.506917590524871,
+      "required_extra_normalization_fold": 15.506917590524871,
+      "decision": "do_not_normalize_source"
+    }
+  },
+  "decision": {
+    "promotion": "rejected",
+    "conclusion": "A bounded source-specific normalization cannot reconcile the observed active witness ratios: even the full two-sided gain envelope leaves >15x, >71x, and >64k residual luminance ratios. This is evidence of content/source mismatch, not a uniform exposure offset.",
+    "next_step": "do not add source normalization; preserve owner guard and relation diagnostics, and inspect source identity/content correspondence at the pair witnesses"
+  },
+  "limitations": [
+    "single active witness per pair; ratio is diagnostic, not a colorimetric acceptance metric",
+    "15-source diagnostic only; no full 126-source run"
+  ]
+}

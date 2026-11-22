@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "zhaoji_station12_jacobian_bounded_ab_v1",
+  "production_impact": "test_only center_preserving station pose scale; no production threshold, bounds, fallback, tone or source contract change",
+  "dataset": "zhaoji",
+  "scale": 0.25,
+  "binary": "task-16-station15-17-jacobian-r1",
+  "binary_sha256": "c809bbfed9f89ee1109d0e48caacad5a81dd9f5aadd9b7f8500ed0c2ba0d67a8",
+  "inputs": {
+    "count": 47,
+    "ordered_names_sha256": "3aa26885bd2c306530b54e27fee2f66e49f771432f35af937ab3a12e29f97a56",
+    "source_contract_preflight": "pass",
+    "streamed_sources": "unknown_after_native_panic",
+    "same_inputs_control_experiment": true
+  },
+  "variable": {
+    "env": "RAW_EDITOR_TEST_STATION_JACOBIAN_SCALE=12:1.29296875",
+    "station": 12,
+    "center_preserving": true,
+    "factor": 1.29296875,
+    "selection": "single inverse-Jacobian factor from D1 station12/source46 minimum scale; no factor scan"
+  },
+  "control": {
+    "label": "task17-zhaoji-st12-control-r1",
+    "directory": "output/acceptance/task17/zhaoji-st12-control-r1",
+    "stack_report": "output/acceptance/task17/zhaoji-st12-control-r1/zhaoji-s0p25-task17-zhaoji-st12-control-r1-stack-reports/stack-report-89362f5f-700d-4e70-b882-8e4582ff1b86.json",
+    "density": {
+      "status": "rejected",
+      "factor": 1.29296875,
+      "direct_pair_p95_output_px": 3.5794531125,
+      "residual_median_output_px": 0.1897961025,
+      "max_corner_correction_output_px": 1.557239152,
+      "minimum_scale": 0.7739037335,
+      "worst_station": 12,
+      "worst_source_id": 46
+    },
+    "closure": {
+      "status": "converged",
+      "participating_constraints": 36,
+      "residual_median_px": 0.1467909433,
+      "residual_p95_px": 1.7054407974,
+      "max_direct_pair_p95_px": 2.7683987819
+    },
+    "quality_gate": "not_run",
+    "memory": {
+      "peak_rss_bytes": 11933696000,
+      "threshold_bytes": 25769803776,
+      "threshold_exceeded": false,
+      "worker_threads": 8
+    },
+    "probe_audit": "output/acceptance/task17/zhaoji-st12-control-r1/density-probe-audit.json"
+  },
+  "experiment": {
+    "label": "task17-zhaoji-st12-experiment-r1",
+    "directory": "output/acceptance/task17/zhaoji-st12-experiment-r1",
+    "stack_report": "output/acceptance/task17/zhaoji-st12-experiment-r1/zhaoji-s0p25-task17-zhaoji-st12-experiment-r1-stack-reports/stack-report-20033671-c559-465c-9ed1-bfaf37ccd9e0.json",
+    "marker_confirmed": true,
+    "density": {
+      "status": "rejected",
+      "factor": 1.244140625,
+      "direct_pair_p95_output_px": 3.4442773907,
+      "residual_median_output_px": 0.1826285759,
+      "max_corner_correction_output_px": 1.498431027,
+      "minimum_scale": 0.8037730644,
+      "worst_station": 10,
+      "worst_source_id": 32
+    },
+    "closure": {
+      "status": "converged",
+      "participating_constraints": 36,
+      "residual_median_px": 0.1467909433,
+      "residual_p95_px": 1.7054407974,
+      "max_direct_pair_p95_px": 2.7683987819
+    },
+    "quality_gate": "not_run",
+    "memory": {
+      "peak_rss_bytes": 12935675904,
+      "threshold_bytes": 25769803776,
+      "threshold_exceeded": false,
+      "worker_threads": 8
+    },
+    "probe_audit": "output/acceptance/task17/zhaoji-st12-experiment-r1/density-probe-audit.json"
+  },
+  "interpretation": {
+    "density_delta_factor": -0.048828125,
+    "density_delta_direct_pair_p95_px": -0.1351757218,
+    "hypothesis_result": "station12_only_insufficient",
+    "reason": "station12 correction improves density but leaves direct P95 above 3px and moves the worst group to station10/source32",
+    "source_probe_result": "station12 all four sources 43-46 share the low-scale cluster; this is station-wide evidence, not a DSC_4299-only content issue",
+    "native_or_d3_acceptance": false,
+    "tone": "not_run",
+    "boundary": "not_run",
+    "qg": "not_run",
+    "next_step": "stop Jacobian factor scanning; require a new multi-station or source-geometry hypothesis before any further run"
+  },
+  "evidence": [
+    "docs/benchmarks/task-17-zhaoji-diagnostic-r1.json",
+    "docs/benchmarks/task-17-zhaoji-station12-jacobian-brief-r1.json",
+    "docs/artwork-lanes/S2-zhaoji.md"
+  ]
+}

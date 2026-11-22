@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "task": 8,
+  "method": "learned_provider_adapter_feasibility_audit_v1",
+  "production_impact": "read-only contract audit; no provider selection, pose write, Stack_Report, QG, or default change",
+  "candidate_input": "docs/benchmarks/langyuan-raco-aliked-provider-r1.json",
+  "rust_contract": {
+    "schema": 1,
+    "required_fields": [
+      "provider",
+      "provider_version",
+      "frame",
+      "keypoints",
+      "descriptors",
+      "matches",
+      "explicit_copy_bytes"
+    ],
+    "descriptor_requirement": "one validated Descriptor row per keypoint; binary/uint8/float32 byte length must match dimension",
+    "match_requirement": "sorted source/target indices with finite distance and confidence in [0,1]",
+    "geometry_authority": "Rust validates provider payload then runs geometry gate; sidecar cannot inject homography"
+  },
+  "learned_candidate": {
+    "outputs": [
+      "keypoints",
+      "matches",
+      "mscores"
+    ],
+    "descriptors_output": false,
+    "coordinate_frame": "512x512 resized host images",
+    "geometry_gate_rerun": false,
+    "rust_feature_provider_result_compatible": false
+  },
+  "adapter_gap": {
+    "missing_descriptor_rows": true,
+    "missing_descriptor_kind_and_element_type": true,
+    "missing_provider_to_source_coordinate_contract": true,
+    "missing_rust_sidecar_payload": true,
+    "safe_adapter_without_model_change": false
+  },
+  "decision": {
+    "promotion": "deferred",
+    "conclusion": "Direct ONNX Runtime inspection confirms the model has exactly keypoints, matches and mscores outputs; there is no hidden descriptor output for the script to recover. The learned candidate cannot be adapted by relabeling keypoints/matches.",
+    "next_step": "either add a descriptor-emitting learned sidecar plus explicit coordinate-frame contract, or defer PF.10; do not write a production adapter that fabricates descriptors"
+  },
+  "limitations": [
+    "no provider payload was submitted to Rust geometry gate",
+    "candidate metrics remain diagnostic only",
+    "no new source material or full artwork run"
+  ],
+  "onnx_model_inspection": {
+    "model": "/private/tmp/raco_aliked_lightglue_pipeline_k512.onnx",
+    "sha256": "3ad66df4caef716588b3c8666f19f819d31fc13b2756fc2551dc20a8da473a98",
+    "inputs": [
+      {
+        "name": "images",
+        "shape": [
+          "2*pair_count",
+          3,
+          "32*height_factor",
+          "32*width_factor"
+        ],
+        "type": "tensor(float)"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "keypoints",
+        "shape": [
+          "2*pair_count",
+          512,
+          2
+        ],
+        "type": "tensor(float)"
+      },
+      {
+        "name": "matches",
+        "shape": [
+          "u0",
+          3
+        ],
+        "type": "tensor(int64)"
+      },
+      {
+        "name": "mscores",
+        "shape": [
+          "u0"
+        ],
+        "type": "tensor(float)"
+      }
+    ],
+    "descriptor_output_present": false,
+    "metadata": {}
+  }
+}

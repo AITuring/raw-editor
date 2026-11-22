@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_lisong_native_boundary_capture_r2_dynamic_debug_region",
+  "production_impact": "test_only diagnostic derivative binary; dynamic debug region only; no production threshold, bounds or fallback change",
+  "run_id": "lisong-s0p25-task17-lisongboundaryd2r2",
+  "run_path": "output/acceptance/task17/lisong-boundary-d2-r2/run",
+  "stack_report": "output/acceptance/task17/lisong-boundary-d2-r2/run/lisong-s0p25-task17-lisongboundaryd2r2-stack-reports/stack-report-825c304f-72ba-4417-a90c-fb3048b664ea.json",
+  "binary": {
+    "label": "task17-boundary-debug-r2",
+    "path": "output/acceptance/binaries/task17-boundary-debug-r2/candidate-release-binary",
+    "sha256": "b089029227122dba3146b9a6d078e35849d503d05e822608138bcfc64724affd"
+  },
+  "result": {
+    "inputs": 46,
+    "stations": 15,
+    "output": {
+      "width": 3205,
+      "height": 2194
+    },
+    "verdict": "failed",
+    "tone_status": "applied",
+    "quality_gate": "fail",
+    "native_acceptance": "rejected: native output did not pass the complete quality gate"
+  },
+  "native_boundary_witnesses": [
+    {
+      "artifact": "output/acceptance/task17/lisong-boundary-d2-r2/failed-boundaries/boundary-000.json",
+      "world": {
+        "x": -741.0,
+        "y": -5.0
+      },
+      "measured": 1.7251570602550932,
+      "crop": [
+        0,
+        0,
+        96,
+        96
+      ],
+      "crop_point": [
+        0,
+        0
+      ],
+      "world_origin": [
+        -741.0,
+        -5.0
+      ]
+    }
+  ],
+  "dynamic_debug_map": {
+    "path": "output/acceptance/task17/lisong-boundary-d2-r2/boundary-debug/raw-owner-map.json",
+    "canvas": {
+      "height": 2194,
+      "width": 3205
+    },
+    "region": {
+      "height": 500,
+      "left": 0,
+      "top": 0,
+      "width": 500
+    },
+    "anchor_world": [
+      -741.0,
+      -5.0
+    ],
+    "anchor_output": [
+      0.0,
+      0.0
+    ],
+    "owner_count": 250000,
+    "unique_owner_count": 18,
+    "anchor_owner": 0
+  },
+  "failure_neighbourhood": {
+    "path": "output/acceptance/task17/lisong-boundary-d2-r2/boundary-debug/failure-neighbourhood.json",
+    "world": {
+      "x": -741.0,
+      "y": -5.0
+    },
+    "output": {
+      "x": 0,
+      "y": 0
+    },
+    "owner_path": "",
+    "owner_zero_count": 169
+  },
+  "candidate_file_present": false,
+  "interpretation": "Dynamic region fix produced a valid 500x500 raw-owner map around the witness (unique owners are present), eliminating the prior 0x0 debug-map defect. The primary witness remains at output (0,0) with owner 0 and native boundary failure measured 1.7252; this is diagnostic evidence of an output-edge owner/crop case, not a repair or acceptance.",
+  "next_step": "Preserve native rejection; if source attribution is required, add an explicit edge-owner/coverage diagnostic or dedicated regrouping fixture, without changing thresholds or bounds."
+}

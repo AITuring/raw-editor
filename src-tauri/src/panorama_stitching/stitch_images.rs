@@ -232,6 +232,40 @@ fn test_disable_shared_raw_normalization() -> bool {
     false
 }
 
+#[cfg(test)]
+fn test_boundary_debug_region(
+    canvas_width: u32,
+    canvas_height: u32,
+    world_origin: (f64, f64),
+    failure_world: Option<(f64, f64)>,
+) -> (u32, u32, u32, u32) {
+    if canvas_width == 0 || canvas_height == 0 {
+        return (0, 0, 0, 0);
+    }
+    let width = 500u32.min(canvas_width);
+    let height = 500u32.min(canvas_height);
+    let (center_x, center_y) = failure_world
+        .map(|(x, y)| {
+            (
+                (x - world_origin.0)
+                    .round()
+                    .clamp(0.0, (canvas_width - 1) as f64) as u32,
+                (y - world_origin.1)
+                    .round()
+                    .clamp(0.0, (canvas_height - 1) as f64) as u32,
+            )
+        })
+        .unwrap_or((width / 2, height / 2));
+    (
+        center_x.saturating_sub(width / 2).min(canvas_width - width),
+        center_y
+            .saturating_sub(height / 2)
+            .min(canvas_height - height),
+        width,
+        height,
+    )
+}
+
 /// Test-only shared station Jacobian correction. The syntax is
 /// `station,station,...:factor`; each listed station is scaled around its
 /// tile centre while preserving the centre world position.
@@ -4703,8 +4737,21 @@ fn stitch_images_attempt<R: Runtime>(
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("/private/tmp/raw-editor-boundary-debug"));
             let _ = std::fs::create_dir_all(&directory);
-            let (region_left, region_top, region_width, region_height) =
-                (6400u32, 6700u32, 500u32, 500u32);
+            // Keep the diagnostic window in the actual cropped output. The
+            // former fixed 6400/6700 origin was outside compact outputs and
+            // silently produced a zero-sized owner map, exactly where the
+            // first failed witness often lands at output (0, 0).
+            let boundary_failure = report
+                .criteria
+                .iter()
+                .find(|criterion| criterion.name == "boundary_stroke_alignment")
+                .and_then(|criterion| criterion.failed.first());
+            let (region_left, region_top, region_width, region_height) = test_boundary_debug_region(
+                panorama.width(),
+                panorama.height(),
+                world_origin,
+                boundary_failure.map(|failure| (failure.world.x, failure.world.y)),
+            );
             let clipped_left = region_left.min(panorama.width());
             let clipped_top = region_top.min(panorama.height());
             let clipped_right = region_left
@@ -4742,15 +4789,15 @@ fn stitch_images_attempt<R: Runtime>(
                     "owners": owners,
                     "owner_sources": owner_sources,
                     "world_origin": [world_origin.0, world_origin.1],
+                    "anchor_world": boundary_failure.map(|failure| [failure.world.x, failure.world.y]),
+                    "anchor_output": boundary_failure.map(|failure| [
+                        (failure.world.x - world_origin.0).round(),
+                        (failure.world.y - world_origin.1).round(),
+                    ]),
                 }))
                 .unwrap_or_default(),
             );
-            if let Some(failure) = report
-                .criteria
-                .iter()
-                .find(|criterion| criterion.name == "boundary_stroke_alignment")
-                .and_then(|criterion| criterion.failed.first())
-            {
+            if let Some(failure) = boundary_failure {
                 let center_x = (failure.world.x - world_origin.0).round() as i32;
                 let center_y = (failure.world.y - world_origin.1).round() as i32;
                 let mut neighbourhood = Vec::new();
@@ -5048,5 +5095,34 @@ mod unresolved_owner_diagnostics_tests {
         assert_eq!(value["records"][0]["compositor_owner"], 8);
 
         std::fs::remove_dir_all(directory).expect("remove diagnostics");
+    }
+}
+
+#[cfg(test)]
+mod boundary_debug_region_tests {
+    use super::test_boundary_debug_region;
+
+    #[test]
+    fn anchors_at_top_left_without_empty_region() {
+        assert_eq!(
+            test_boundary_debug_region(3205, 2194, (-741.0, -5.0), Some((-741.0, -5.0))),
+            (0, 0, 500, 500)
+        );
+    }
+
+    #[test]
+    fn clamps_bottom_right_witness_inside_canvas() {
+        assert_eq!(
+            test_boundary_debug_region(3205, 2194, (0.0, 0.0), Some((3204.0, 2193.0))),
+            (2705, 1694, 500, 500)
+        );
+    }
+
+    #[test]
+    fn handles_empty_canvas() {
+        assert_eq!(
+            test_boundary_debug_region(0, 0, (0.0, 0.0), Some((0.0, 0.0))),
+            (0, 0, 0, 0)
+        );
     }
 }

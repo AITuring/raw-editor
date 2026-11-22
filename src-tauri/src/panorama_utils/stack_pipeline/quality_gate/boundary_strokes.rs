@@ -28,6 +28,22 @@ pub(crate) struct BoundaryStrokeReport {
     pub max_error_px: f64,
 }
 
+impl BoundaryStrokeReport {
+    /// Return a real measured world point representative of the aggregate
+    /// P95. The aggregate must not be attributed to `world_origin`, which can
+    /// be an uncovered crop edge and has no owner/source provenance.
+    pub(crate) fn p95_world(&self) -> Option<(f64, f64)> {
+        self.measurements
+            .iter()
+            .min_by(|left, right| {
+                (left.normal_error_px - self.p95_error_px)
+                    .abs()
+                    .total_cmp(&(right.normal_error_px - self.p95_error_px).abs())
+            })
+            .map(|measurement| measurement.world)
+    }
+}
+
 /// Every pair of labelled regions that touch (8-connected), smaller label
 /// first, with the first pixel in row-major order of either region that has
 /// an 8-neighbour in the other: the start `trace_moore_boundary` would find
@@ -537,6 +553,30 @@ mod touching_pair_tests {
                 .collect(),
             distance_to_boundary: vec![0.0; (width * height) as usize],
         }
+    }
+
+    #[test]
+    fn p95_world_uses_a_real_measured_boundary_point() {
+        let report = BoundaryStrokeReport {
+            measurements: vec![
+                BoundaryStrokeMeasurement {
+                    world: (10.0, 20.0),
+                    normal_error_px: 0.5,
+                    orientation_error_deg: 0.0,
+                },
+                BoundaryStrokeMeasurement {
+                    world: (30.0, 40.0),
+                    normal_error_px: 1.7,
+                    orientation_error_deg: 0.0,
+                },
+            ],
+            pairable_count: 2,
+            unpairable_count: 0,
+            unmeasurable: Vec::new(),
+            p95_error_px: 1.7,
+            max_error_px: 1.7,
+        };
+        assert_eq!(report.p95_world(), Some((30.0, 40.0)));
     }
 
     /// The known-start trace equals the whole-plane scan for every pair, and

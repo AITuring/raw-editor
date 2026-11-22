@@ -387,18 +387,42 @@ pub(in crate::panorama_utils::stack_pipeline) fn bounded_low_frequency_affine_co
     normal: [f64; 3],
     rhs: [f64; 2],
 ) -> (f64, f64) {
+    bounded_low_frequency_affine_coordinate_with_bounds(
+        normal,
+        rhs,
+        TONE_MIN_GAIN,
+        TONE_MAX_GAIN,
+        TONE_MAX_ABS_OFFSET,
+    )
+}
+
+/// Same bounded quadratic solve with explicit limits for isolated test
+/// experiments. Production callers use the wrapper above so the shipped
+/// bounds remain single-sourced and unchanged.
+pub(in crate::panorama_utils::stack_pipeline) fn bounded_low_frequency_affine_coordinate_with_bounds(
+    normal: [f64; 3],
+    rhs: [f64; 2],
+    min_gain: f32,
+    max_gain: f32,
+    max_abs_offset: f32,
+) -> (f64, f64) {
     let [a, b, c] = normal;
     let [x, y] = rhs;
     if !normal.iter().chain(rhs.iter()).all(|v| v.is_finite())
         || a <= 0.0
         || c <= 0.0
         || a * c < b * b
+        || !min_gain.is_finite()
+        || !max_gain.is_finite()
+        || !max_abs_offset.is_finite()
+        || min_gain > max_gain
+        || max_abs_offset < 0.0
     {
         return (0.0, 0.0);
     }
-    let lo = f64::from(TONE_MIN_GAIN) - 1.0;
-    let hi = f64::from(TONE_MAX_GAIN) - 1.0;
-    let bound = f64::from(TONE_MAX_ABS_OFFSET);
+    let lo = f64::from(min_gain) - 1.0;
+    let hi = f64::from(max_gain) - 1.0;
+    let bound = f64::from(max_abs_offset);
     let cost = |alpha: f64, offset: f64| {
         a * alpha * alpha + 2.0 * b * alpha * offset + c * offset * offset
             - 2.0 * x * alpha

@@ -1,0 +1,200 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_source_content_patch_audit_v1",
+  "production_impact": "read-only prepared-source patch export and statistics; no production source, owner, relation, or bounds change",
+  "inputs": {
+    "prepared_dump_dir": "/private/tmp/wenyuan-source-patches-r1",
+    "prepared_dump_scale": 0.5,
+    "dump_test": "panorama_stitching::acceptance_tests::focus_stack_fixture::dump_prepared_sources_from_env",
+    "active_trace": "/private/tmp/wenyuan-boundary-point-trace-r5-ownerfix/process-47781/iteration-0001/trace.json",
+    "witness_patch_radius_prepared_px": [
+      32,
+      96
+    ],
+    "source_paths": [
+      "DSC_4867.NEF",
+      "DSC_4848.NEF",
+      "DSC_4861.NEF",
+      "DSC_4868.NEF",
+      "DSC_4864.NEF"
+    ]
+  },
+  "statistics": {
+    "radius_32px": {
+      "36↔37": {
+        "sources": [
+          "DSC_4867.png",
+          "DSC_4848.png"
+        ],
+        "radius_prepared_px": 32.0,
+        "left": {
+          "mean": 0.04363893995098039,
+          "std": 0.025079243285867164,
+          "p10": 0.0,
+          "p50": 0.054901960784313725,
+          "p90": 0.06666666666666667,
+          "gradient_l1": 0.016207107843137256
+        },
+        "right": {
+          "mean": 0.0004901960784313725,
+          "std": 0.0013864838846795048,
+          "p10": 0.0,
+          "p50": 0.0,
+          "p90": 0.00392156862745098,
+          "gradient_l1": 0.0014744178921568627
+        },
+        "mean_ratio": 89.0234375,
+        "normalized_patch_correlation": -0.044216497980813556,
+        "absolute_mae": 0.04337086397058824
+      },
+      "37↔38": {
+        "sources": [
+          "DSC_4848.png",
+          "DSC_4861.png"
+        ],
+        "radius_prepared_px": 32.0,
+        "left": {
+          "mean": 0.0004557291666666667,
+          "std": 0.0013378115712459262,
+          "p10": 0.0,
+          "p50": 0.0,
+          "p90": 0.00392156862745098,
+          "gradient_l1": 0.0013403799019607843
+        },
+        "right": {
+          "mean": 0.022487745098039216,
+          "std": 0.007856290670830298,
+          "p10": 0.011764705882352941,
+          "p50": 0.023529411764705882,
+          "p90": 0.03137254901960784,
+          "gradient_l1": 0.01426547181372549
+        },
+        "mean_ratio": 49.34453781512605,
+        "normalized_patch_correlation": 0.0022996642926343632,
+        "absolute_mae": 0.022032015931372547
+      },
+      "36↔38": {
+        "sources": [
+          "DSC_4868.png",
+          "DSC_4864.png"
+        ],
+        "radius_prepared_px": 32.0,
+        "left": {
+          "mean": 0.04574142156862745,
+          "std": 0.008043956991232448,
+          "p10": 0.03529411764705882,
+          "p50": 0.047058823529411764,
+          "p90": 0.054901960784313725,
+          "gradient_l1": 0.015284160539215686
+        },
+        "right": {
+          "mean": 0.06843979779411764,
+          "std": 0.008207724841025967,
+          "p10": 0.058823529411764705,
+          "p50": 0.06666666666666667,
+          "p90": 0.0784313725490196,
+          "gradient_l1": 0.013572303921568628
+        },
+        "mean_ratio": 1.4962324179504354,
+        "normalized_patch_correlation": 0.08064756254889503,
+        "absolute_mae": 0.022797947303921567
+      }
+    },
+    "radius_96px": {
+      "36↔37": {
+        "sources": [
+          "DSC_4867.png",
+          "DSC_4848.png"
+        ],
+        "radius_prepared_px": 96.0,
+        "left": {
+          "mean": 0.0326593137254902,
+          "std": 0.02815161237800035,
+          "p10": 0.0,
+          "p50": 0.047058823529411764,
+          "p90": 0.06274509803921569,
+          "gradient_l1": 0.00880012595315904
+        },
+        "right": {
+          "mean": 0.000522109885620915,
+          "std": 0.0014567016652108544,
+          "p10": 0.0,
+          "p50": 0.0,
+          "p90": 0.00392156862745098,
+          "gradient_l1": 0.0014356958061002177
+        },
+        "mean_ratio": 62.55256723716382,
+        "normalized_patch_correlation": -0.06431730461303052,
+        "absolute_mae": 0.03265122889433551
+      },
+      "37↔38": {
+        "sources": [
+          "DSC_4848.png",
+          "DSC_4861.png"
+        ],
+        "radius_prepared_px": 96.0,
+        "left": {
+          "mean": 0.00043828295206971675,
+          "std": 0.0013355313107618846,
+          "p10": 0.0,
+          "p50": 0.0,
+          "p90": 0.00392156862745098,
+          "gradient_l1": 0.0012242136437908497
+        },
+        "right": {
+          "mean": 0.020455048338779955,
+          "std": 0.010376369388822786,
+          "p10": 0.00392156862745098,
+          "p50": 0.0196078431372549,
+          "p90": 0.03137254901960784,
+          "gradient_l1": 0.012614038671023965
+        },
+        "mean_ratio": 46.67087378640777,
+        "normalized_patch_correlation": -0.026794378849310078,
+        "absolute_mae": 0.02014867578976035
+      },
+      "36↔38": {
+        "sources": [
+          "DSC_4868.png",
+          "DSC_4864.png"
+        ],
+        "radius_prepared_px": 96.0,
+        "left": {
+          "mean": 0.04655543641067538,
+          "std": 0.008493898169643981,
+          "p10": 0.03529411764705882,
+          "p50": 0.047058823529411764,
+          "p90": 0.058823529411764705,
+          "gradient_l1": 0.0136927253540305
+        },
+        "right": {
+          "mean": 0.06657858455882354,
+          "std": 0.010616699655704833,
+          "p10": 0.050980392156862744,
+          "p50": 0.06666666666666667,
+          "p90": 0.0784313725490196,
+          "gradient_l1": 0.013631025326797386
+        },
+        "mean_ratio": 1.430092588361104,
+        "normalized_patch_correlation": 0.2793724517309421,
+        "absolute_mae": 0.02039334831154684
+      }
+    }
+  },
+  "interpretation": {
+    "36↔37": "both 32px and 96px patches have near-zero normalized correlation and 46–89x mean-luma ratio; this is a direct content/brightness mismatch, not a uniform exposure step",
+    "37↔38": "both patch scales have near-zero normalized correlation and 47–49x mean-luma ratio; this is a direct content/brightness mismatch",
+    "36↔38": "mean-luma ratio is only 1.43–1.50, but normalized correlation remains low (0.08–0.28), so it is a lower-severity content/registration mismatch rather than pure exposure"
+  },
+  "decision": {
+    "promotion": "rejected",
+    "conclusion": "The witness-local prepared source patches do not depict the same content strongly enough for a single photometric relation to explain the residuals. 36↔37 and 37↔38 should not receive source normalization or wider tone bounds; 36↔38 remains a lower-severity relation/content mismatch.",
+    "next_step": "preserve the owner guard and relation diagnostics; require a content-correspondence or seam/geometry correction before any production tone change"
+  },
+  "limitations": [
+    "grayscale prepared sources at scale 0.5; patch statistics are diagnostic, not a QG verdict",
+    "prepared points come from the active native trace and are not a new full 126-source run",
+    "correlation is computed at the exported patch scale without a new local registration optimization"
+  ]
+}

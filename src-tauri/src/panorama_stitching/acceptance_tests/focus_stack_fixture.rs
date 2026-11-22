@@ -792,8 +792,15 @@ fn real_focus_stack_fixture_from_env() {
             &fs::read(&path).expect("native acceptance report should be readable"),
         )
         .expect("native acceptance report should match its schema");
-        verify_layered_native_acceptance(&report)
-            .unwrap_or_else(|error| panic!("{error}; report: {}", path.display()));
+        if std::env::var_os("RAW_EDITOR_TEST_TONE_CAPTURE_ONLY").is_some() {
+            println!(
+                "test-only tone capture: skipping native acceptance verdict for {}",
+                path.display()
+            );
+        } else {
+            verify_layered_native_acceptance(&report)
+                .unwrap_or_else(|error| panic!("{error}; report: {}", path.display()));
+        }
     }
 }
 

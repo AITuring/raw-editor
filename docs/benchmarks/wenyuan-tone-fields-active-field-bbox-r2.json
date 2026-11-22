@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_active_field_bbox_audit_v2",
+  "production_impact": "read-only comparison using corrected active canvas coordinates",
+  "inputs": {
+    "trace": "/private/tmp/wenyuan-boundary-point-trace-r2-run/process-23859/iteration-0001/trace.json",
+    "capture_dir": "/private/tmp/wenyuan-tone-fields-34-39-r7",
+    "audit": "/private/tmp/wenyuan-boundary-point-trace-r2-run/field-bbox-audit.json"
+  },
+  "comparison": {
+    "witness_station_rows": 18,
+    "saved_field_world_rect_contains_canvas_point": 15,
+    "active_tile_contains_canvas_point": 11,
+    "field_inside_active_outside": 4,
+    "interpretation": "with the corrected origin, saved field and active tile domains mostly overlap; the prior all-outside result was caused by a trace reference-origin error"
+  },
+  "decision": {
+    "promotion": "rejected",
+    "next_step": "use the corrected active source samples to isolate owner selection and photometric relation residuals"
+  },
+  "limitations": [
+    "bbox comparison is not a full homography/Jacobian proof",
+    "capture-only artifacts do not emit formal QG, source-contract, memory-gate, or native-acceptance verdicts",
+    "no full 126-source run was performed"
+  ]
+}

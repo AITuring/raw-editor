@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_saved_tone_relation_luma_floor_ab_v1",
+  "production_impact": "cfg(test)-only saved-native relation model replay; production tone bounds and sample threshold unchanged",
+  "input": {
+    "capture_dir": "/private/tmp/wenyuan-tone-fields-34-39-r7",
+    "native_proof": "/private/tmp/wenyuan-native-proof-34-39-r7/joint-production-input.json",
+    "replay_command": "real_saved_local_tone_from_env"
+  },
+  "variable": {
+    "name": "RAW_EDITOR_TEST_TONE_MIN_SAMPLE_LUMINANCE",
+    "control": 0.02,
+    "candidate": 0.001,
+    "production_default_unchanged": 0.02,
+    "bounds_scale": 1.0
+  },
+  "control": {
+    "output": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary.json",
+    "maximum_prediction_delta": 10.857647310904358,
+    "failed_window_count": 81
+  },
+  "candidate": {
+    "output": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary-min001-v2.json",
+    "maximum_prediction_delta": 7.105320469903537,
+    "failed_window_count": 44
+  },
+  "comparison": {
+    "maximum_delta_change": -3.752326841000821,
+    "relative_change": -0.34559299391060083,
+    "interpretation": "including dark low-frequency relation samples materially reduces the saved-native residual without changing bounds, but the replay still fails; this is a model direction, not an acceptance result"
+  },
+  "decision": {
+    "promotion": "rejected_pending_active_owner_validation",
+    "next_step": "validate the owner-selection fix on the active 15-source LayeredVirtualTile path, then rerun relation replay with the lowest stable luminance floor"
+  },
+  "limitations": [
+    "candidate is test-only and no production threshold was changed",
+    "no full 126-source QG or native acceptance was run",
+    "candidate replay still fails its diagnostic assertion"
+  ]
+}

@@ -1,0 +1,486 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_lisong_source_rgb_sampler_r3_path_only",
+  "production_impact": "test_only bounded path-only source RGB probes with explicit availability; no production decision, threshold, bounds or fallback change",
+  "run_id": "lisong-s0p25-task17-lisongsourceRGBd8r8",
+  "binary": {
+    "label": "task17-source-rgb-r8",
+    "sha256": "c37e223bd925c6a2a459a848575bed9224d4ba94587c41cb534fde3698b89edd"
+  },
+  "execution": {
+    "summary": "output/acceptance/task17/lisong-source-rgb-d8-r8/lisong-s0p25-task17-lisongsourceRGBd8r8.summary.json",
+    "metrics": "output/acceptance/task17/lisong-source-rgb-d8-r8/lisong-s0p25-task17-lisongsourceRGBd8r8.metrics.json",
+    "log": "output/acceptance/task17/lisong-source-rgb-d8-r8/lisong-s0p25-task17-lisongsourceRGBd8r8.log",
+    "stack_report": "output/acceptance/task17/lisong-source-rgb-d8-r8/lisong-s0p25-task17-lisongsourceRGBd8r8-stack-reports/stack-report-5669787f-fb48-47b4-9a32-01139a2f273d.json",
+    "elapsed_seconds": 1755.839,
+    "stitch_seconds": 1602.12
+  },
+  "result": {
+    "inputs": 46,
+    "stations": 15,
+    "output": {
+      "width": 3205,
+      "height": 2194
+    },
+    "verdict": "failed",
+    "quality_gate": "fail",
+    "native_acceptance": "rejected: native output did not pass the complete quality gate",
+    "degradation_result": "rejected",
+    "tone_status": "applied",
+    "tone_boundary_delta_e": {
+      "max": 0.9195802029377267,
+      "threshold": 1.5,
+      "violations": []
+    },
+    "boundary_stroke": {
+      "verdict": "fail",
+      "measurable_count": 46,
+      "failed": [
+        {
+          "world": {
+            "x": 2269.0,
+            "y": 1692.0
+          },
+          "measured": 1.7251570602550932,
+          "owner_path": ""
+        }
+      ]
+    },
+    "local_scale_median": {
+      "verdict": "not_applicable",
+      "measurable_count": 8
+    },
+    "local_scale_pixel_ratio": {
+      "verdict": "pass",
+      "measurable_count": 8
+    },
+    "roi_delta_e00": {
+      "verdict": "pass",
+      "measurable_count": 8
+    },
+    "owner_sharpness_coverage": {
+      "verdict": "pass"
+    }
+  },
+  "availability": [
+    {
+      "candidate_owner": 30,
+      "candidate_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0910.NEF",
+      "label": "path_dsc0910_station9",
+      "prepared_dimensions": [
+        2065,
+        1377
+      ],
+      "requested_owner": null,
+      "requested_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0910.NEF",
+      "station_id": 9,
+      "status": "loaded"
+    },
+    {
+      "candidate_owner": 41,
+      "candidate_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF",
+      "label": "path_dsc0905_station13",
+      "prepared_dimensions": [
+        2065,
+        1377
+      ],
+      "requested_owner": null,
+      "requested_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF",
+      "station_id": 13,
+      "status": "loaded"
+    },
+    {
+      "candidate_owner": 44,
+      "candidate_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0912.NEF",
+      "label": "path_dsc0912_station13",
+      "prepared_dimensions": [
+        2065,
+        1377
+      ],
+      "requested_owner": null,
+      "requested_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0912.NEF",
+      "station_id": 13,
+      "status": "loaded"
+    }
+  ],
+  "source_rgb_capture": {
+    "availability": [
+      {
+        "candidate_owner": 30,
+        "candidate_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0910.NEF",
+        "label": "path_dsc0910_station9",
+        "prepared_dimensions": [
+          2065,
+          1377
+        ],
+        "requested_owner": null,
+        "requested_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0910.NEF",
+        "station_id": 9,
+        "status": "loaded"
+      },
+      {
+        "candidate_owner": 41,
+        "candidate_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF",
+        "label": "path_dsc0905_station13",
+        "prepared_dimensions": [
+          2065,
+          1377
+        ],
+        "requested_owner": null,
+        "requested_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF",
+        "station_id": 13,
+        "status": "loaded"
+      },
+      {
+        "candidate_owner": 44,
+        "candidate_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0912.NEF",
+        "label": "path_dsc0912_station13",
+        "prepared_dimensions": [
+          2065,
+          1377
+        ],
+        "requested_owner": null,
+        "requested_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0912.NEF",
+        "station_id": 13,
+        "status": "loaded"
+      }
+    ],
+    "diagnostic_only": true,
+    "note": "quality-reference source samples only; no production decision or acceptance claim",
+    "records": [
+      {
+        "label": "path_dsc0910_station9",
+        "owner": 30,
+        "path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0910.NEF",
+        "prepared_dimensions": [
+          2065,
+          1377
+        ],
+        "requested_owner": null,
+        "requested_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0910.NEF",
+        "requested_world": [
+          2269.0,
+          1692.0
+        ],
+        "rgb_f32": [
+          0.7896326780319214,
+          0.7873919010162354,
+          0.7003098130226135
+        ],
+        "rgb_f32_bits": [
+          1061823838,
+          1061786244,
+          1060325249
+        ],
+        "sample_stage": "quality_reference_source_sample",
+        "source_image_dimensions": [
+          2065,
+          1377
+        ],
+        "station_id": 9,
+        "status": "sampled"
+      },
+      {
+        "label": "path_dsc0905_station13",
+        "owner": 41,
+        "path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF",
+        "prepared_dimensions": [
+          2065,
+          1377
+        ],
+        "requested_owner": null,
+        "requested_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF",
+        "requested_world": [
+          2269.0,
+          1692.0
+        ],
+        "rgb_f32": [
+          0.6269927620887756,
+          0.6111148595809937,
+          0.5196515321731567
+        ],
+        "rgb_f32_bits": [
+          1059095193,
+          1058828806,
+          1057294306
+        ],
+        "sample_stage": "quality_reference_source_sample",
+        "source_image_dimensions": [
+          2065,
+          1377
+        ],
+        "station_id": 13,
+        "status": "sampled"
+      },
+      {
+        "label": "path_dsc0912_station13",
+        "owner": 44,
+        "path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0912.NEF",
+        "prepared_dimensions": [
+          2065,
+          1377
+        ],
+        "requested_owner": null,
+        "requested_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0912.NEF",
+        "requested_world": [
+          2269.0,
+          1692.0
+        ],
+        "rgb_f32": [
+          0.665988564491272,
+          0.6385474801063538,
+          0.5467961430549622
+        ],
+        "rgb_f32_bits": [
+          1059749434,
+          1059289049,
+          1057749717
+        ],
+        "sample_stage": "quality_reference_source_sample",
+        "source_image_dimensions": [
+          2065,
+          1377
+        ],
+        "station_id": 13,
+        "status": "sampled"
+      }
+    ],
+    "requested_labels": [
+      "path_dsc0910_station9",
+      "path_dsc0905_station13",
+      "path_dsc0912_station13"
+    ],
+    "schema": 1,
+    "unobserved_labels": []
+  },
+  "saved_tone": {
+    "station_tiles": {
+      "9": {
+        "gain": [
+          0.9965487984783706,
+          0.9961867251517138,
+          0.9939249969820493
+        ],
+        "offset": [
+          -6.5003350862378e-05,
+          -0.00012466195971614033,
+          -0.0003238628516307104
+        ],
+        "solved_gain": [
+          1.001497507095337,
+          1.0017144680023193,
+          0.9965473413467407
+        ],
+        "solved_offset": [
+          -8.56592487252783e-06,
+          -3.5102385709251394e-07,
+          -8.30189151201921e-07
+        ],
+        "spatial_gain_min": [
+          0.8000468760728836,
+          0.800000011920929,
+          0.800000011920929
+        ],
+        "spatial_gain_max": [
+          1.0708463788032532,
+          1.0664469823241234,
+          1.068706177175045
+        ],
+        "spatial_offset_min": [
+          -0.019999999552965164,
+          -0.019999999552965164,
+          -0.019999999552965164
+        ],
+        "spatial_offset_max": [
+          0.019999999552965164,
+          0.019999999552965164,
+          0.019999999552965164
+        ],
+        "clamped": true
+      },
+      "13": {
+        "gain": [
+          0.9960834613229171,
+          0.9959198957426233,
+          0.9949846188938034
+        ],
+        "offset": [
+          9.63779853664519e-06,
+          -9.480337984392547e-05,
+          -0.00028643268494828416
+        ],
+        "solved_gain": [
+          1.000488519668579,
+          1.000423789024353,
+          0.9974212050437927
+        ],
+        "solved_offset": [
+          -4.0286180592374876e-05,
+          -2.5048035240615718e-05,
+          2.232756742159836e-06
+        ],
+        "spatial_gain_min": [
+          0.800000011920929,
+          0.800000011920929,
+          0.800000011920929
+        ],
+        "spatial_gain_max": [
+          1.062281109392643,
+          1.0540965981781483,
+          1.0434203296899796
+        ],
+        "spatial_offset_min": [
+          -0.013489806093275547,
+          -0.019999999552965164,
+          -0.019999999552965164
+        ],
+        "spatial_offset_max": [
+          0.019999999552965164,
+          0.019999999552965164,
+          0.019999999552965164
+        ],
+        "clamped": true
+      }
+    },
+    "station_relation_9_to_13": {
+      "left": 9,
+      "right": 13,
+      "evidence_kind": "virtual_tile",
+      "inliers": 275,
+      "spatial_support": 0.6589407508451456,
+      "scale_ratio": 1.0016057102844462,
+      "median_error_px": 0.28884385761913006,
+      "independent_support": 1
+    }
+  },
+  "pairwise_comparison": [
+    {
+      "label": "station9_vs_station13",
+      "source_a": "DSC_0910",
+      "source_b": "DSC_0912",
+      "rgb_ratio_a_over_b": [
+        1.1856550099101135,
+        1.2330984391091648,
+        1.280751193872669
+      ],
+      "luma_a": 0.7815809634566306,
+      "luma_b": 0.6377570081114768,
+      "luma_ratio_a_over_b": 1.2255152879794213,
+      "rgb_a": [
+        0.7896326780319214,
+        0.7873919010162354,
+        0.7003098130226135
+      ],
+      "rgb_b": [
+        0.665988564491272,
+        0.6385474801063538,
+        0.5467961430549622
+      ],
+      "station_a": 9,
+      "station_b": 13
+    },
+    {
+      "label": "station9_vs_station13_reference",
+      "source_a": "DSC_0910",
+      "source_b": "DSC_0905",
+      "rgb_ratio_a_over_b": [
+        1.2593967997354931,
+        1.2884515712088964,
+        1.3476527435490335
+      ],
+      "luma_a": 0.7815809634566306,
+      "luma_b": 0.6078868494153022,
+      "luma_ratio_a_over_b": 1.2857342846097042,
+      "rgb_a": [
+        0.7896326780319214,
+        0.7873919010162354,
+        0.7003098130226135
+      ],
+      "rgb_b": [
+        0.6269927620887756,
+        0.6111148595809937,
+        0.5196515321731567
+      ],
+      "station_a": 9,
+      "station_b": 13
+    },
+    {
+      "label": "same_station13",
+      "source_a": "DSC_0912",
+      "source_b": "DSC_0905",
+      "rgb_ratio_a_over_b": [
+        1.0621949801662542,
+        1.0448894673321625,
+        1.0522361798266773
+      ],
+      "luma_a": 0.6377570081114768,
+      "luma_b": 0.6078868494153022,
+      "luma_ratio_a_over_b": 1.0491376951564346,
+      "rgb_a": [
+        0.665988564491272,
+        0.6385474801063538,
+        0.5467961430549622
+      ],
+      "rgb_b": [
+        0.6269927620887756,
+        0.6111148595809937,
+        0.5196515321731567
+      ],
+      "station_a": 13,
+      "station_b": 13
+    }
+  ],
+  "density": {
+    "status": "applied",
+    "factor": 1.1845703125,
+    "pixel_count_multiplier": 1.4032068252563477,
+    "canvas_pixels": 7277480,
+    "output_plane_lower_bound_bytes": 130994640,
+    "target_minimum_scale": 1.0,
+    "probe_step_px": 32,
+    "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+    "source_count": 46,
+    "sample_count": 121955,
+    "invalid_probe_count": 0,
+    "boundary_probe_count": 3446,
+    "worst_station_index": 0,
+    "worst_source_id": 3,
+    "worst_station_point": [
+      1953.0,
+      1185.0
+    ],
+    "direct_pair_p95_output_px": 2.4716521291388305,
+    "residual_median_output_px": 0.23456790951747458,
+    "max_corner_correction_output_px": 0.3719994615591257,
+    "minimum_scale": 0.8445761860919788,
+    "p01_scale": 0.8689395381912665,
+    "median_scale": 0.9437522348176617,
+    "bypass_reason": null
+  },
+  "memory_gate": {
+    "threshold_bytes": 25769803776,
+    "peak_rss_bytes": 13257736192,
+    "threshold_exceeded": false,
+    "worker_threads": 8,
+    "max_resident_virtual_tiles": 16,
+    "verdict": "pass"
+  },
+  "source_contract": {
+    "source_count": 46,
+    "decoded_count": 46,
+    "excluded_count": 0,
+    "sha_unchanged_count": 46,
+    "feature_provider": {
+      "requested": "rust_fast_brief",
+      "selected": "rust_fast_brief",
+      "provider_version": "native",
+      "fallback_reason": null,
+      "explicit_copy_bytes": 0
+    },
+    "verdict": "pass"
+  },
+  "finding": "Path-only forced availability loaded and sampled all three requested sources at world (2269,1692): DSC_0910 owner30/station9, DSC_0905 owner41/station13, and DSC_0912 owner44/station13. Their direct RGB ratios are substantially larger than the near-unity saved station tone gains; same-station 0912/0905 also differs. This establishes a bounded source-content/photometric discrepancy witness, but does not prove tone correction is safe because the point may not represent identical content across frames.",
+  "decision": "bounded_photometric_mismatch_evidence_only_native_qg_still_rejected",
+  "next_step": "Keep production tone bounds, thresholds and fallback unchanged. Use this witness for a saved-tone relation/content patch audit before considering any production model change; do not widen bounds from this point sample alone."
+}

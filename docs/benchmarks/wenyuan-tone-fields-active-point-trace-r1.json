@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_active_layered_native_point_trace_audit_v1",
+  "status": "superseded_invalid_reference_canvas_origin",
+  "superseded_by": "docs/benchmarks/wenyuan-tone-fields-active-point-trace-r2.json",
+  "production_impact": "cfg(test)-only bounded point trace; no production pixel, owner, threshold, QG, or compositor change",
+  "inputs": {
+    "point_input": "/private/tmp/wenyuan-boundary-point-trace-r1.json",
+    "trace": "/private/tmp/wenyuan-boundary-point-trace-r1-run/process-18719/iteration-0001/trace.json",
+    "audit": "/private/tmp/wenyuan-boundary-point-trace-r1-run/active-point-trace-audit.json",
+    "source_count": 15,
+    "witnesses": ["36↔38", "36↔37", "37↔38"]
+  },
+  "active_path": "FocusStack→LayeredVirtualTile→sample_with_geometry",
+  "evidence": {
+    "trace_status": "compositor_complete",
+    "station_count": 6,
+    "station_point_rows": 18,
+    "outside_station_bbox_rows": 18,
+    "inside_station_bbox_rows": 0,
+    "source_diagnostic_rows": 0,
+    "native_owner_resolution_rows": 0,
+    "sample_invoked_rows": 0,
+    "final_compositor_points_covered": 0,
+    "final_compositor_points_uncovered": 3
+  },
+  "interpretation": "all three saved tone witnesses are outside every active station tile bbox; the actual LayeredVirtualTile resolver never reaches native owner/source sampling at those coordinates, confirming a boundary-local support gap before tone fitting",
+  "decision": {
+    "promotion": "rejected",
+    "next_step": "repair or independently validate active station boundary geometry/source support at these coordinates before tone fitting; do not widen tone bounds"
+  },
+  "limitations": [
+    "point trace is compositor evidence only and does not provide a formal QG, source-contract, memory-gate, or native-acceptance verdict",
+    "final compositor points are outside the delivered coverage in this preview-only run and require no offline TIFF binding",
+    "no full 126-source run was performed"
+  ]
+}

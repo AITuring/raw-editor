@@ -1,0 +1,247 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_owner_selection_and_relation_model_fix_r1",
+  "production_impact": "bounded owner-selection guard is production code; relation luma-floor remains cfg(test)-only; no tone bounds or formal thresholds widened",
+  "inputs": {
+    "before_trace": "/private/tmp/wenyuan-boundary-point-trace-r2-run/process-23859/iteration-0001/trace.json",
+    "after_trace": "/private/tmp/wenyuan-boundary-point-trace-r5-ownerfix/process-47781/iteration-0001/trace.json",
+    "capture_dir": "/private/tmp/wenyuan-tone-fields-34-39-r10",
+    "stack_report": "/private/tmp/wenyuan-boundary-point-trace-r5-ownerfix/stack-reports/stack-report-8c0901b4-29a8-4ede-bae3-70c568ac764a.json",
+    "source_count": 15,
+    "stations": [
+      34,
+      35,
+      36,
+      37,
+      38,
+      39
+    ],
+    "witnesses": [
+      "36↔38",
+      "36↔37",
+      "37↔38"
+    ]
+  },
+  "owner_selection": {
+    "witnesses": {
+      "boundary-36-38": {
+        "before": {
+          "station_owner": 6,
+          "rgb": [
+            0.1906975656747818,
+            0.18097683787345886,
+            0.13228069245815277
+          ],
+          "coverage": 255
+        },
+        "after": {
+          "station_owner": 6,
+          "rgb": [
+            0.19069640338420868,
+            0.1809806078672409,
+            0.1322692632675171
+          ],
+          "coverage": 255
+        },
+        "owner_changed": false,
+        "owner_fix_effect": "unchanged_or_already_valid"
+      },
+      "boundary-36-37": {
+        "before": {
+          "station_owner": 3,
+          "rgb": [
+            0.012310342863202095,
+            0.011485164985060692,
+            0.0070766303688287735
+          ],
+          "coverage": 255
+        },
+        "after": {
+          "station_owner": 4,
+          "rgb": [
+            0.2017667442560196,
+            0.1546737104654312,
+            0.16129085421562195
+          ],
+          "coverage": 255
+        },
+        "owner_changed": true,
+        "owner_fix_effect": "retained_valid_canvas_owner"
+      },
+      "boundary-37-38": {
+        "before": {
+          "station_owner": 5,
+          "rgb": [
+            0.2105015516281128,
+            0.15966597199440002,
+            0.19626560807228088
+          ],
+          "coverage": 255
+        },
+        "after": {
+          "station_owner": 5,
+          "rgb": [
+            0.21104148030281067,
+            0.15975533425807953,
+            0.1965051293373108
+          ],
+          "coverage": 255
+        },
+        "owner_changed": false,
+        "owner_fix_effect": "unchanged_or_already_valid"
+      }
+    },
+    "all_final_covered": true,
+    "interpretation": "revisit no longer overwrites a valid canvas owner with a native near-black/foreground candidate; the 36↔37 witness now ends on station owner 4 (station 36)"
+  },
+  "relation_replay": {
+    "saved_control_r7": {
+      "output": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary.json",
+      "maximum_delta_e00": 10.857647310904358,
+      "failed_window_count": 81,
+      "fitted_relations": 13,
+      "iterations": 1000,
+      "bounds_scale": 1.0,
+      "parameter_ranges": {
+        "gain_max": [
+          1.25,
+          1.25,
+          1.25
+        ],
+        "gain_min": [
+          0.800000011920929,
+          0.800000011920929,
+          0.800000011920929
+        ],
+        "offset_max": [
+          0.019999999552965164,
+          0.019999999552965164,
+          0.019999999552965164
+        ],
+        "offset_min": [
+          -0.019999999552965164,
+          -0.019999999552965164,
+          -0.019999999552965164
+        ]
+      }
+    },
+    "saved_ownerfix_r10": {
+      "output": "/private/tmp/wenyuan-tone-fields-34-39-r10/saved-local-tone-boundary-ownerfix.json",
+      "maximum_delta_e00": 9.420790066773208,
+      "failed_window_count": 95,
+      "fitted_relations": 13,
+      "iterations": 1000,
+      "bounds_scale": 1.0,
+      "parameter_ranges": {
+        "gain_max": [
+          1.25,
+          1.25,
+          1.25
+        ],
+        "gain_min": [
+          0.800000011920929,
+          0.800000011920929,
+          0.800000011920929
+        ],
+        "offset_max": [
+          0.019999999552965164,
+          0.019999999552965164,
+          0.019999999552965164
+        ],
+        "offset_min": [
+          -0.019999999552965164,
+          -0.019999999552965164,
+          -0.019999999552965164
+        ]
+      }
+    },
+    "saved_ownerfix_min001_r10": {
+      "output": "/private/tmp/wenyuan-tone-fields-34-39-r10/saved-local-tone-boundary-ownerfix-min001.json",
+      "maximum_delta_e00": 7.457317903204724,
+      "failed_window_count": 76,
+      "fitted_relations": 13,
+      "iterations": 1000,
+      "bounds_scale": 1.0,
+      "parameter_ranges": {
+        "gain_max": [
+          1.25,
+          1.25,
+          1.25
+        ],
+        "gain_min": [
+          0.800000011920929,
+          0.800000011920929,
+          0.800000011920929
+        ],
+        "offset_max": [
+          0.019999999552965164,
+          0.019999999552965164,
+          0.019999999552965164
+        ],
+        "offset_min": [
+          -0.019999999552965164,
+          -0.019999999552965164,
+          -0.019999999552965164
+        ]
+      }
+    }
+  },
+  "run_summary": {
+    "selected_path": "layered_virtual_tile",
+    "tone_status": "degraded",
+    "tone_boundary_max_delta_e00": 9.420790066773208,
+    "tone_boundary_threshold": 1.5,
+    "tone_boundary_violation_count": 95,
+    "quality_gate_verdict": "fail",
+    "source_contract": {
+      "source_count": 15,
+      "stat_count": 15,
+      "file_map_count": 15,
+      "hash_count": 15,
+      "exif_parse_count": 15,
+      "failed_count": 0
+    },
+    "memory_gate": {
+      "peak_rss_bytes": 12858425344,
+      "threshold_bytes": 25769803776,
+      "threshold_exceeded": false,
+      "worker_threads": 10
+    },
+    "density": {
+      "status": "bypassed",
+      "factor": 1.0,
+      "pixel_count_multiplier": 1.0,
+      "canvas_pixels": 99323840,
+      "output_plane_lower_bound_bytes": 1787829120,
+      "target_minimum_scale": 1.0,
+      "probe_step_px": 32,
+      "sampling_contract": "sampled_native_jacobian_not_full_pixel_proof",
+      "source_count": 15,
+      "sample_count": 0,
+      "invalid_probe_count": 102,
+      "boundary_probe_count": 8709,
+      "worst_station_index": null,
+      "worst_source_id": null,
+      "worst_station_point": null,
+      "direct_pair_p95_output_px": null,
+      "residual_median_output_px": null,
+      "max_corner_correction_output_px": null,
+      "minimum_scale": null,
+      "p01_scale": null,
+      "median_scale": null,
+      "bypass_reason": "nonidentity_world_residual"
+    }
+  },
+  "decision": {
+    "owner_selection": "validated_on_active_15_source_diagnostic; promote as bounded owner guard, but not a full 126-source acceptance claim",
+    "relation_model": "test_only_luma_floor candidate materially lowers max residual but still fails; keep production default and bounds unchanged",
+    "promotion": "rejected_for_formal_acceptance_pending_relation_model_and_full_qg",
+    "next_step": "use active owner-fixed fields to design a pairwise relation model that rejects source-mismatch samples without globally lowering the luminance floor"
+  },
+  "limitations": [
+    "15-source diagnostic only; no full 126-source run",
+    "Stack_Report quality gate is fail and density is bypassed/nonidentity_world_residual",
+    "saved replay compares stored fields and is not a formal native acceptance verdict"
+  ]
+}

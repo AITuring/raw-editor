@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "task": 16,
+  "method": "task16_boundary_product_decision_brief_r1",
+  "date": "2026-11-21",
+  "production_impact": "documentation-only product decision recommendation; no production threshold, fallback, density, owner, or TIFF change",
+  "decision_scope": {
+    "artwork": "mayuan-2 / sleeping boundary diagnostics",
+    "native_acceptance": "not granted",
+    "boundary_status": "diagnostic_rejection",
+    "not_applicable_semantics": "must not be promoted to native acceptance"
+  },
+  "evidence": {
+    "candidate_content_hypothesis": "rejected",
+    "valid_low_strength_candidates": 46533,
+    "maximum_strength": 0.06728228018700258,
+    "minimum_gradient_strength": 0.15,
+    "measurable_candidates": 2,
+    "quality_min_measurable": 8,
+    "owner_unresolved_after_test_only_radius2": 0,
+    "density_status": "bypassed/nonidentity_world_residual"
+  },
+  "recommendation": {
+    "retain_diagnostic_rejection": true,
+    "promote_boundary_not_applicable": false,
+    "change_thresholds": false,
+    "change_production_owner_fallback": false,
+    "change_density_adapter": false,
+    "repeat_full_ab": false
+  },
+  "handoff": {
+    "next_task": 17,
+    "entry_condition": "new material is explicitly registered in the acceptance manifest and receives a new lane/diagnostic card",
+    "task16_reopen_condition": "independent content-probe contract or user-approved product policy change",
+    "current_state": "ready_for_new-material-intake"
+  },
+  "references": [
+    "docs/benchmarks/task-16-final-decision.json",
+    "docs/benchmarks/task-16-boundary-candidate-content-hypothesis-r1.json",
+    "docs/artwork-lanes/16-station-density.md"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_source_resample_hook_path_audit_v1",
+  "production_impact": "read-only path audit plus stopped test-only small captures; no production sampling, tone, threshold, or compositor change",
+  "experiment": {
+    "source": "DSC_4862.NEF",
+    "divisor": 1.25,
+    "requested_capture": "/private/tmp/wenyuan-tone-fields-34-39-r8-resample4862",
+    "forced_capture": "/private/tmp/wenyuan-tone-fields-34-39-r9-force-resample4862",
+    "control_capture": "/private/tmp/wenyuan-tone-fields-34-39-r7",
+    "source_count": 15,
+    "station_labels": [34, 35, 36, 37, 38, 39]
+  },
+  "comparison": {
+    "r8_all_field_and_proof_hashes_equal_r7": true,
+    "r9_all_field_and_proof_hashes_equal_r7": true,
+    "r8_saved_replay_max": 10.857647310904358,
+    "r7_saved_replay_max": 10.857647310904358,
+    "interpretation": "the requested source resample did not enter the active FocusStack→LayeredVirtualTile source path; the streaming_mosaic hook is not a discriminating experiment for this task"
+  },
+  "decision": {
+    "promotion": "rejected",
+    "production_change": "none",
+    "next_step": "do not repeat this hook; obtain boundary-local native correspondence/source sampling evidence in the active LayeredVirtualTile path"
+  },
+  "limitations": [
+    "capture-only runs emitted no formal QG, source-contract, memory-gate, or native-acceptance verdict",
+    "identical artifacts show no observable effect but do not prove a hypothetical resample would be harmless in another compositor",
+    "no full 126-source run was performed"
+  ]
+}

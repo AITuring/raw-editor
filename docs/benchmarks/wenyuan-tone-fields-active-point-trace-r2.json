@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_active_layered_native_point_trace_audit_v2",
+  "production_impact": "cfg(test)-only bounded point trace with corrected reference origin; no production change",
+  "inputs": {
+    "point_input": "/private/tmp/wenyuan-boundary-point-trace-r2.json",
+    "reference_canvas_origin": [-7724.0, 4.0],
+    "trace": "/private/tmp/wenyuan-boundary-point-trace-r2-run/process-23859/iteration-0001/trace.json",
+    "audit": "/private/tmp/wenyuan-boundary-point-trace-r2-run/active-point-trace-audit.json",
+    "source_count": 15,
+    "witnesses": ["36↔38", "36↔37", "37↔38"]
+  },
+  "evidence": {
+    "trace_status": "compositor_complete",
+    "station_count": 6,
+    "station_point_rows": 18,
+    "inside_station_bbox_rows": 13,
+    "outside_station_bbox_rows": 5,
+    "source_diagnostic_rows": 9,
+    "native_owner_resolution_rows": 8,
+    "sample_invoked_rows": 9,
+    "final_compositor_points_covered": 3,
+    "source_footprint_supported": "true for every reported source diagnostic",
+    "global_source_supported": "true for every reported source diagnostic"
+  },
+  "interpretation": "after applying the active world-origin offset, the LayeredVirtualTile path does execute native source sampling at the witnesses; the remaining tone residual is not explained by a universal missing source-support domain",
+  "decision": {
+    "promotion": "rejected",
+    "next_step": "compare the active sampled RGB/source-owner selections for 36↔38 and 36↔37 against the saved tone relation fields; focus on owner selection and photometric mismatch, not bounds"
+  },
+  "limitations": [
+    "point trace is compositor evidence only and does not provide a formal QG, source-contract, memory-gate, or native-acceptance verdict",
+    "some station rows remain outside tile rectangles or return no selected owner; the trace records these separately",
+    "no full 126-source run was performed"
+  ]
+}

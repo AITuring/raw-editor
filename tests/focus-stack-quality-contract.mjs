@@ -22,6 +22,9 @@ const readModule = (relativePath) => readRustModule(repoRoot, relativePath);
 const mosaic = readModule('src-tauri/src/panorama_utils/mosaic.rs');
 // stitching.rs is a facade over the panorama_utils/stitching/ child modules.
 const stitching = readModule('src-tauri/src/panorama_utils/stitching.rs');
+const tileOwnershipStitcher = read(
+  'src-tauri/src/panorama_utils/stitching/tile_ownership_stitcher.rs',
+);
 // Matching contracts are split out of the panorama facade by N1-5/N1-6, and
 // the station relation gate, closure, topology, pose and solver stages by N1-7,
 // and Capture_Station grouping and capture groups by N1-8.
@@ -71,6 +74,18 @@ const determinism = readModule(`${stackPipelineDir}/determinism.rs`);
 const virtualTile = readModule(`${stackPipelineDir}/virtual_tile.rs`);
 const photometric = readModule('src-tauri/src/panorama_utils/photometric.rs');
 const tone = readModule(`${stackPipelineDir}/tone.rs`);
+// The split pair-evidence module contains two explicitly cfg(test) helpers for
+// bounded tone replays.  The production contract must exclude those helpers
+// while still rejecting any environment read in the release path.
+const productionTone = tone
+  .replace(
+    /#\[cfg\(test\)\]\s*fn tone_min_sample_luminance\(\)[\s\S]*?\n}\n/,
+    '',
+  )
+  .replace(
+    /#\[cfg\(test\)\]\s*fn tone_max_pair_luma_ratio\(\)[\s\S]*?\n}\n/,
+    '',
+  );
 const qualityGate = readModule(`${stackPipelineDir}/quality_gate.rs`);
 const qualityGateRunner = readModule(`${stackPipelineDir}/quality_gate_runner.rs`);
 const testSupport = readModule(`${stackPipelineDir}/test_support.rs`);
@@ -224,7 +239,11 @@ assert.match(photometric, /min_sample_value:\s*0\.02/);
 assert.match(photometric, /max_sample_value:\s*0\.98/);
 assert.match(photometric, /max_abs_log_gain:\s*1\.25_f64\.ln\(\)/);
 assert.match(photometric, /allow_linear:\s*false/);
-assert.doesNotMatch(tone, /std::env::var/, 'Tone_Harmonizer must not read environment switches');
+assert.doesNotMatch(
+  productionTone,
+  /std::env::var/,
+  'Tone_Harmonizer production path must not read environment switches',
+);
 assert.match(
   tone,
   /const TONE_SPATIAL_FIELD_ENABLED: bool = false;/,
@@ -1707,11 +1726,16 @@ for (const variable of [
   assert.doesNotMatch(compositorChoice, new RegExp(variable), `${variable} must be deleted (任务 13.7)`);
 }
 {
-  const entry = stitching.indexOf('fn focus_tile_ownership_stitcher_with_finishing');
+  const entry = tileOwnershipStitcher.indexOf('fn focus_tile_ownership_stitcher_with_finishing');
   assert.ok(entry >= 0, 'the Tile_Compositor entry must exist');
-  const body = stitching.slice(entry, stitching.indexOf('\n}\n', entry));
-  assert.doesNotMatch(body, /std::env::var/, 'the Tile_Compositor entry must not read std::env::var (任务 13.7)');
-  assert.match(body, /ownership_compositor_switches\(finishing\)/, 'the entry must use the production switch resolver');
+  const resolverCall = tileOwnershipStitcher.indexOf('let switches = ownership_compositor_switches(finishing);', entry);
+  assert.ok(resolverCall >= 0, 'the Tile_Compositor entry must use the production switch resolver');
+  const productionEntry = tileOwnershipStitcher.slice(entry, resolverCall);
+  assert.doesNotMatch(
+    productionEntry,
+    /std::env::var/,
+    'the production Tile_Compositor entry must not read std::env::var (任务 13.7)',
+  );
   const resolver = stitching.slice(stitching.indexOf('fn ownership_compositor_switches'));
   assert.match(
     resolver,

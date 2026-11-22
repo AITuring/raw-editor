@@ -1,6 +1,6 @@
 # 任务11：祁序到 D3 诊断边界
 
-- 更新：2026-11-18；状态：诊断完成，修复未开始；分支 `lane/task-11/qixu-diagnostic`；起点 v1 `4d7d33aa`。
+- 更新：2026-11-22；状态：诊断收口，D3 未通过；停止 factor 扫描，交接任务12；分支 `lane/task-11/qixu-diagnostic`；起点 v1 `4d7d33aa`。
 - 输入范围：祁序1 75 张、祁序2 98 张，均为任务5冻结 baseline、scale=0.25；本次不改生产代码、阈值、基线或输出。
 
 ## 基线失败摘要
@@ -53,6 +53,12 @@ feather=1.0 只对 seam/owner 有局部改善，不能解释或修复几何尺�
 
 下一步转向 local-scale ratio=0 的 source-to-world 几何/采样根因；不再继续调 feather，也不自动应用 3×3 owner fallback。
 
+## factor source reconciliation（2026-11-22）
+
+复核发现历史 legacy geometry A/B 的 source-factor 绑定有误：`qixu-task-11-geometry-sensitivity-audit.json` 记录 `DSC_3867.NEF` 的理论 factor 为 `1.2166592079`，而 `DSC_3882.NEF` 的 source-specific factor 为 `1.2546019382`；历史 A/B 却把 `1.2166592079` 应用到了 `DSC_3882.NEF`。因此该历史 A/B 不能验证 DSC_3882 的正确几何假设，也不进入生产或D3结论。
+
+机器摘要：[`qixu-task-11-factor-source-reconciliation-r1.json`](../benchmarks/qixu-task-11-factor-source-reconciliation-r1.json)。若再次运行，只能固定 DSC_3882 与其 source-specific factor `1.2546019382` 做单变量 test-only 对照；不扫描多因子、不改阈值/bounds/fallback，也不把旧 A/B 结果外推。
+
 ## source-to-world geometry sensitivity（只读）
 
 对祁序1 保存的 14 个 local-scale failure records 重算 source-to-world sensitivity：6 个实际低于 0.95 的点需要理论 isotropic factor `1.095009–1.254602` 才能到 0.95；其余 8 个 ratio/median 失败点不能从 `0` 的测量值倒推倍率。该审计只保存失败 world 坐标、owner source id、原始 homography 和理论 factor，不修改 pose、阈值或像素。
@@ -80,3 +86,41 @@ learned provider 候选虽能在独立 ONNX 环境输出匹配，但没有 descr
 将 DSC_3882 factor `1.2166592079` 与 feather `1.0` 组合后，local-scale ratio 的一个点仍为 `0.01953125`，但 owner coverage 只有 `0.8850510328`，boundary 仍有两个 4px 失败，QG 继续 fail。该联合假设不能推广；停止继续扫描 pose/feather 参数。
 
 机器摘要：[qixu-task-11-joint-geometry-owner-ab.json](../benchmarks/qixu-task-11-joint-geometry-owner-ab.json)。
+
+## 正确 DSC_3882 source-specific factor bounded A/B（2026-11-22）
+
+按 source reconciliation 对账，重新使用 `DSC_3882.NEF`（source id=39）对应的唯一 test-only factor `1.2546019381835418`，控制组不设置几何覆盖，实验组只对该源应用居中各向同性倍率；其余输入、scale=0.25、线程、streaming mosaic、QG 与阈值保持不变。二进制为 `candidate-release-binary`，SHA-256 `624e56a783f39d858e93825288a60d8d85f6882f40dee1761fa97639e64b38e`。
+
+- 控制组输入 75、排序 72、streamed 70；local-scale pixel ratio `6/8` 失败、boundary `3/15` 失败、owner coverage `1/1` 失败；峰值 RSS `17,263,673,344 B`，QG fail。
+- 实验组输入 75、排序 72、streamed 69；local-scale 仍 `6/8`，boundary 变为 `4/16`，owner coverage 仍 `1/1`；峰值 RSS 增至 `19,126,435,840 B`，QG fail。实验组比控制组额外缺少 `DSC_3884.NEF`，因此来源参与不一致，不能视作 clean A/B。
+- 结论：正确的 source-specific factor 没有改善 local-scale，边界和资源指标变差；仅保留为诊断证据，拒绝推广到生产，也不授予 D3。停止继续扫描 factor；若再运行，先修复并冻结输入/排序/source contract，使两组参与源完全一致。
+
+机器摘要：[`qixu-task-11-geometry-factor-correct-ab-r1.json`](../benchmarks/qixu-task-11-geometry-factor-correct-ab-r1.json)。
+
+## 输入、排序与 soft-frame source contract 冻结（2026-11-22）
+
+对两次已有日志做 `--reuse-artifacts` 重评，没有启动新的 RAW 渲染。此前误报的三张未对齐源已在 qixu-1 manifest 登记为 `expectedSkipped`：`DSC_3842.NEF`、`DSC_3910.NEF`、`DSC_3911.NEF`。排序合同固定为 72 项，输入总数 75，输入清单 SHA、ordered basenames SHA、baseline source-alignment SHA 和全源分类均写入冻结摘要。
+
+- 控制组合同通过：72 ordered、70 streamed，实际 soft-skip 与冻结值一致：`DSC_3879.NEF`、`DSC_3907.NEF`；其中 `DSC_3907.NEF` 只作为 detail-only donor。
+- 实验组合同仍失败：72 ordered、69 streamed，实际额外 soft-skip `DSC_3884.NEF`，并因此少一张 streamed source。`DSC_3884.NEF` 不能登记为静态 `expectedSkipped`，因为控制组排序中包含且实际 streamed；把它加入静态排除会掩盖变量导致的参与变化。
+- 阶段性决策（固定参与 hook 前）：source contract 已冻结，但 factor 实验尚不具备 clean A/B 条件；因此先不重跑。后续若继续，必须增加 test-only 的固定 soft-skip/参与集合，使控制组与实验组的 streamed 集合完全一致；下一节记录了该补充实验。生产阈值、bounds、fallback 或 pose 不变。
+
+机器摘要：[`qixu-task-11-source-contract-freeze-r1.json`](../benchmarks/qixu-task-11-source-contract-freeze-r1.json)。
+
+## 固定 soft-skip 参与集合后的单因子 bounded A/B（2026-11-22）
+
+为消除前一轮 `DSC_3884.NEF` 动态 soft-skip 造成的参与差异，新增 test-only `RAW_EDITOR_TEST_FIXED_SOFT_SKIP`，控制组和实验组都固定排除 `DSC_3879.NEF`、`DSC_3884.NEF`、`DSC_3907.NEF`；缺名会 fail-closed。该 hook 只在 test binary 生效，生产 soft-frame survey 不变。两组重新使用相同 75 输入、72 ordered、69 streamed 和相同 ordered names SHA；实验组只对 `DSC_3882.NEF` 应用 source-specific factor `1.2546019381835418`。
+
+- 控制组 source contract 通过；local-scale pixel ratio `6/8`、boundary `3/15`、owner `1/1` 失败；峰值 RSS `19,018,563,584 B`，memory gate 通过。
+- 实验组 source contract 通过；local-scale 仍 `6/8`，boundary 变为 `4/16`，owner 仍 `1/1`；峰值 RSS `18,997,837,824 B`，memory gate 通过；日志确认 test-only geometry factor 已应用。
+- 结论：在参与集合完全一致的 clean A/B 中，正确 factor 仍未改善 local-scale，boundary 反而变差；拒绝生产推广，不修改阈值、bounds、fallback 或 pose，也不授予 D3/native 验收。停止继续扫描 factor。
+
+机器摘要：[`qixu-task-11-geometry-factor-fixed-soft-ab-r1.json`](../benchmarks/qixu-task-11-geometry-factor-fixed-soft-ab-r1.json)。
+
+## 最终收口与任务交接
+
+clean A/B 已证明 source-specific factor `1.2546019381835418` 不能改善祁序1的 local-scale：两组均 `6/8` 失败；boundary 从 `3/15` 变为 `4/16`，owner coverage 仍 `1/1` 失败。两组 source contract 和 memory gate 均通过，因此结果可解释，但 QG 仍 fail。
+
+任务11到此收口：停止继续扫描 factor，不把 test-only fixed soft-skip 或几何 hook 写入生产，不修改阈值、bounds、fallback 或 pose，不授予 D3/native 验收。下一项转任务12枫鹰，保留任务12既有诊断证据和同样的 no-promotion 约束。
+
+交接摘要：[`qixu-task-11-to-task-12-handoff-r1.json`](../benchmarks/qixu-task-11-to-task-12-handoff-r1.json)。

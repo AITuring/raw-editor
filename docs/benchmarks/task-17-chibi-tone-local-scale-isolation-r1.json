@@ -1,0 +1,541 @@
+{
+  "schema": 1,
+  "method": "task17_chibi_tone_local_scale_bounded_audit_v1",
+  "production_impact": "read-only report join; no pixels, thresholds, bounds, fallback, or production code changed",
+  "report": "output/acceptance/task17/chibi-d1-r1/run/chibi-s0p25-task17-chibid1r1-stack-reports/stack-report-504a289a-2351-43bc-a4b8-0b89d25a3110.json",
+  "dataset": "chibi",
+  "scale": 0.25,
+  "tone_pair": {
+    "pair": "2↔5",
+    "violations": [
+      {
+        "left": 2,
+        "right": 5,
+        "delta_e00": 10.042883818935454,
+        "world": {
+          "left": 3584.0,
+          "top": 256.0,
+          "width": 256.0,
+          "height": 256.0
+        }
+      },
+      {
+        "left": 2,
+        "right": 5,
+        "delta_e00": 3.2482553538012784,
+        "world": {
+          "left": 3584.0,
+          "top": 512.0,
+          "width": 256.0,
+          "height": 256.0
+        }
+      }
+    ],
+    "candidate": {
+      "left": 2,
+      "right": 5,
+      "left_tile": {
+        "dimensions": [
+          2084,
+          1407
+        ],
+        "effective_bounds": [
+          32,
+          16,
+          2024,
+          1376
+        ],
+        "tile_to_world": [
+          0.9457952037801062,
+          -0.08261957510088618,
+          -1953.394625039192,
+          -0.0009059398348799278,
+          0.9884252802751579,
+          222.21514295867655,
+          7.338563604234764e-06,
+          -9.205769279874589e-07,
+          0.9999083070326765
+        ]
+      },
+      "right_tile": {
+        "dimensions": [
+          2076,
+          1393
+        ],
+        "effective_bounds": [
+          28,
+          12,
+          2020,
+          1372
+        ],
+        "tile_to_world": [
+          0.8939810281874584,
+          -0.11393080482474698,
+          -3411.008058730864,
+          -0.057522349699221015,
+          0.9350887293308392,
+          409.59292029910205,
+          -3.527062516621979e-05,
+          1.3878792064657304e-05,
+          1.000149742831711
+        ]
+      },
+      "predicted_overlap_area_px": 23433.323597043953,
+      "model_fitted": false,
+      "evidence_kind": "virtual_tile",
+      "grid_probe_count": 45,
+      "measurable_patch_count": 10,
+      "bidirectional_match_count": 8,
+      "occupied_grid_cells": 4,
+      "search_radius_px": 16.0,
+      "residual_dx_px": {
+        "count": 0,
+        "min": 0.0,
+        "p10": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "max": 0.0
+      },
+      "residual_dy_px": {
+        "count": 0,
+        "min": 0.0,
+        "p10": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "max": 0.0
+      },
+      "residual_magnitude_px": {
+        "count": 0,
+        "min": 0.0,
+        "p10": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "max": 0.0
+      },
+      "max_residual_translation_consensus": 0,
+      "residual_translation": {
+        "candidate_inliers": 0,
+        "final_support": 0.0,
+        "bounded_correction": null,
+        "rejection_reason": ""
+      },
+      "residual_affine": {
+        "candidate_inliers": 0,
+        "final_support": 0.0,
+        "bounded_correction": null,
+        "rejection_reason": ""
+      },
+      "residual_projective": {
+        "candidate_inliers": 0,
+        "final_support": 0.0,
+        "bounded_correction": null,
+        "rejection_reason": ""
+      },
+      "residual_model": "not_run",
+      "fitted_inliers": 0,
+      "hull_support": 0.0,
+      "median_prefit_structural_orientation_difference_degrees": 14.042991538797988,
+      "median_fitted_orientation_difference_degrees": null,
+      "failure_stage": "insufficient_measurable_patches",
+      "pyramid_factors": [
+        4
+      ],
+      "measurement_factor": 4,
+      "seed": "rendering_prior",
+      "prior_free_inliers": 0,
+      "global_proposals": [],
+      "after_prior_repair": false,
+      "hypotheses": []
+    },
+    "tile_fields": {
+      "2": {
+        "gain": [
+          0.9989639920492559,
+          1.0001587473081228,
+          1.0034011956268087
+        ],
+        "solved_gain": [
+          0.9934932589530945,
+          1.0172131061553955,
+          1.0606422424316406
+        ],
+        "solved_offset": [
+          5.018286174163222e-06,
+          9.640345524530858e-06,
+          -1.4501526948151877e-06
+        ],
+        "spatial_gain_min": [
+          0.9470703639090061,
+          0.9611337222158909,
+          1.0
+        ],
+        "spatial_gain_max": [
+          1.0178192146122456,
+          1.034174669533968,
+          1.0824928358197212
+        ],
+        "samples": 4870
+      },
+      "5": {
+        "gain": [
+          1.0014054506944365,
+          1.0015246347482045,
+          1.0021256204217817
+        ],
+        "solved_gain": [
+          1.0039803981781006,
+          0.9972987174987793,
+          0.9817331433296204
+        ],
+        "solved_offset": [
+          -3.40832184519968e-06,
+          4.521928076428594e-06,
+          2.0628233414754504e-06
+        ],
+        "spatial_gain_min": [
+          0.9954415536485612,
+          0.985953469760716,
+          0.9657008498907089
+        ],
+        "spatial_gain_max": [
+          1.0722323283553123,
+          1.063573732972145,
+          1.0730093196034431
+        ],
+        "samples": 4652
+      }
+    },
+    "native_fitting_relation_present": false,
+    "native_fitting_relations": [
+      [
+        0,
+        9
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        0,
+        10
+      ],
+      [
+        9,
+        12
+      ],
+      [
+        9,
+        10
+      ],
+      [
+        2,
+        12
+      ],
+      [
+        5,
+        4
+      ],
+      [
+        5,
+        11
+      ],
+      [
+        5,
+        15
+      ],
+      [
+        5,
+        13
+      ],
+      [
+        3,
+        7
+      ],
+      [
+        7,
+        8
+      ],
+      [
+        7,
+        16
+      ],
+      [
+        1,
+        10
+      ],
+      [
+        12,
+        11
+      ],
+      [
+        6,
+        11
+      ],
+      [
+        6,
+        15
+      ],
+      [
+        8,
+        16
+      ],
+      [
+        8,
+        17
+      ],
+      [
+        11,
+        15
+      ],
+      [
+        15,
+        13
+      ],
+      [
+        13,
+        14
+      ],
+      [
+        16,
+        14
+      ],
+      [
+        16,
+        17
+      ]
+    ],
+    "pairs_without_evidence": [
+      {
+        "left": 7,
+        "right": 17,
+        "retained_samples": 902
+      }
+    ]
+  },
+  "local_scale": {
+    "local_scale_median": {
+      "verdict": "not_applicable",
+      "threshold": 0.98,
+      "rows": [
+        {
+          "world": {
+            "x": 805.0,
+            "y": 125.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9663.NEF",
+          "owner_station": 0,
+          "failed": true
+        },
+        {
+          "world": {
+            "x": -475.0,
+            "y": 125.0
+          },
+          "measured": 0.9682861945454297,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9672.NEF",
+          "owner_station": 1,
+          "failed": true
+        },
+        {
+          "world": {
+            "x": -1755.0,
+            "y": 381.0
+          },
+          "measured": 0.9082982594649353,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9676.NEF",
+          "owner_station": 2,
+          "failed": true
+        },
+        {
+          "world": {
+            "x": -4059.0,
+            "y": 509.0
+          },
+          "measured": 0.7215746489486734,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9695.NEF",
+          "owner_station": 3,
+          "failed": true
+        },
+        {
+          "world": {
+            "x": -2779.0,
+            "y": 509.0
+          },
+          "measured": 0.8542124391559025,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9687.NEF",
+          "owner_station": 5,
+          "failed": true
+        },
+        {
+          "world": {
+            "x": -4571.0,
+            "y": 765.0
+          },
+          "measured": 0.653459917893783,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9700.NEF",
+          "owner_station": 7,
+          "failed": true
+        },
+        {
+          "world": {
+            "x": -5339.0,
+            "y": 893.0
+          },
+          "measured": 0.5557604689838165,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9705.NEF",
+          "owner_station": 8,
+          "failed": true
+        },
+        {
+          "world": {
+            "x": -2139.0,
+            "y": 1021.0
+          },
+          "measured": 0.8277444242377696,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9681.NEF",
+          "owner_station": 11,
+          "failed": true
+        }
+      ]
+    },
+    "local_scale_pixel_ratio": {
+      "verdict": "fail",
+      "threshold": 0.99,
+      "rows": [
+        {
+          "world": {
+            "x": 805.0,
+            "y": 125.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9663.NEF",
+          "owner_station": 0,
+          "failed": false
+        },
+        {
+          "world": {
+            "x": -475.0,
+            "y": 125.0
+          },
+          "measured": 1.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9672.NEF",
+          "owner_station": 1,
+          "failed": false
+        },
+        {
+          "world": {
+            "x": -1755.0,
+            "y": 381.0
+          },
+          "measured": 0.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9676.NEF",
+          "owner_station": 2,
+          "failed": true
+        },
+        {
+          "world": {
+            "x": -4059.0,
+            "y": 509.0
+          },
+          "measured": 0.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9695.NEF",
+          "owner_station": 3,
+          "failed": true
+        },
+        {
+          "world": {
+            "x": -2779.0,
+            "y": 509.0
+          },
+          "measured": 0.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9687.NEF",
+          "owner_station": 5,
+          "failed": true
+        },
+        {
+          "world": {
+            "x": -4571.0,
+            "y": 765.0
+          },
+          "measured": 0.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9700.NEF",
+          "owner_station": 7,
+          "failed": true
+        },
+        {
+          "world": {
+            "x": -5339.0,
+            "y": 893.0
+          },
+          "measured": 0.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9705.NEF",
+          "owner_station": 8,
+          "failed": true
+        },
+        {
+          "world": {
+            "x": -2139.0,
+            "y": 1021.0
+          },
+          "measured": 0.0,
+          "owner_path": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9681.NEF",
+          "owner_station": 11,
+          "failed": true
+        }
+      ]
+    }
+  },
+  "station_members": {
+    "2": {
+      "members": [
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9676.NEF",
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9677.NEF"
+      ],
+      "anchor": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9676.NEF"
+    },
+    "3": {
+      "members": [
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9695.NEF",
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9696.NEF",
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9697.NEF"
+      ],
+      "anchor": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9695.NEF"
+    },
+    "5": {
+      "members": [
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9686.NEF",
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9687.NEF"
+      ],
+      "anchor": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9686.NEF"
+    },
+    "7": {
+      "members": [
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9700.NEF",
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9701.NEF"
+      ],
+      "anchor": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9700.NEF"
+    },
+    "8": {
+      "members": [
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9705.NEF",
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9706.NEF",
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9707.NEF"
+      ],
+      "anchor": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9705.NEF"
+    },
+    "11": {
+      "members": [
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9682.NEF",
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9681.NEF",
+        "/Users/dp/Downloads/书画拼图/赤壁/DSC_9680.NEF"
+      ],
+      "anchor": "/Users/dp/Downloads/书画拼图/赤壁/DSC_9680.NEF"
+    }
+  },
+  "finding": {
+    "relation_support": "2↔5 candidate is not fitted: 10 measurable patches, 8 bidirectional matches, residual model not_run, failure_stage=insufficient_measurable_patches, prefit orientation difference ≈14.043°",
+    "local_scale_overlap": "all six non-1.0 local_scale_pixel_ratio failures map to stations 2,3,5,7,8,11; station 2 and 5 are included in the tone witness pair",
+    "bounded_next": "test-only source/geometry witness replay for pair 2↔5 and the six failed local-scale owners; keep thresholds/bounds/fallback unchanged"
+  }
+}

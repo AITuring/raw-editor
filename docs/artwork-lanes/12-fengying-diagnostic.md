@@ -1,6 +1,7 @@
 # 任务12：枫鹰到 D3 诊断边界
 
-- 更新：2026-11-18；状态：诊断完成，修复未开始；分支 `lane/task-12/fengying-diagnostic`；起点 v1 `43f5668e`。
+- 更新：2026-11-22；状态：诊断收口，D3 未通过；停止 factor/fallback/resampling 扫描，交接任务13；分支 `lane/task-12/fengying-diagnostic`；起点 v1 `43f5668e`。
+- 任务11交接（2026-11-22）：祁序 clean A/B 已诊断收口且无生产合入；本卡继续沿用 exclusive 资源、test-only 实验和不授予 D3 的边界。
 - 输入范围：枫鹰三文件夹全量 110 张，scale=0.25；使用同一冻结 `base-2026-11-12`，不改生产算法、质量阈值或正式基线。
 - 目标：按 S2 卡定位 DSC04916 的局部尺度失败与 owner 覆盖失败，并补齐 test-only owner/coverage 导出，判断 3×3 fallback 是否有足够证据。
 
@@ -75,3 +76,11 @@ QG source visual capture 完整覆盖失败 ROI：`roi-02` 对应 station 2 / ow
 - detail repairs：`409 → 406`；24GiB 内存门通过；来源计数保持一致；最终 QG 仍 fail。
 
 结论：该倍率只能修复单一尺度门，代价是 owner/边界退化，不能进入生产默认，也不能授予 D2/D3。机器摘要：[fengying-task-12-legacy-geometry-ab.json](../benchmarks/fengying-task-12-legacy-geometry-ab.json)。实验 hook 已从主线移除。
+
+## 最终收口与任务交接
+
+任务12的三条诊断路径均已收口：3×3 owner fallback 没有替代覆盖证据，单源 resampling 不能改变 geometry Jacobian 或制造 Coverage，DSC04916 geometry factor 虽把一个 local-scale pixel ratio 点推过门槛，却让 owner coverage 继续失败并新增两个 boundary 失败。QG 仍 fail，D3/native 未通过。
+
+停止继续扫描 factor、fallback 和 resampling；不修改生产 owner、阈值、bounds、pose 或默认路径。下一项转任务13阆苑，沿用 exclusive 资源和不把 scale=0.25 结果外推到 native 的约束。
+
+交接摘要：[`fengying-task-12-to-task-13-handoff-r1.json`](../benchmarks/fengying-task-12-to-task-13-handoff-r1.json)。

@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_active_field_bbox_audit_v1",
+  "status": "superseded_invalid_reference_canvas_origin",
+  "superseded_by": "docs/benchmarks/wenyuan-tone-fields-active-field-bbox-r2.json",
+  "production_impact": "read-only comparison of saved test-only field rectangles with active LayeredVirtualTile geometry",
+  "inputs": {
+    "trace": "/private/tmp/wenyuan-boundary-point-trace-r1-run/process-18719/iteration-0001/trace.json",
+    "capture_dir": "/private/tmp/wenyuan-tone-fields-34-39-r7",
+    "audit": "/private/tmp/wenyuan-boundary-point-trace-r1-run/field-bbox-audit.json"
+  },
+  "comparison": {
+    "witness_station_rows": 18,
+    "saved_field_world_rect_contains_witness": 15,
+    "active_tile_contains_witness": 0,
+    "field_inside_active_outside": 15,
+    "interpretation": "the saved ToneTile world rectangles cover most witnesses, but the active LayeredVirtualTile station mapping covers none; the saved replay support and active compositor geometry are not the same support domain"
+  },
+  "decision": {
+    "promotion": "rejected",
+    "next_step": "reconcile active station-to-world geometry with the saved field domain before fitting tone or changing bounds"
+  },
+  "limitations": [
+    "this is a diagnostic bbox comparison, not a full homography/Jacobian proof",
+    "capture-only artifacts do not emit formal QG, source-contract, memory-gate, or native-acceptance verdicts",
+    "no full 126-source run was performed"
+  ]
+}

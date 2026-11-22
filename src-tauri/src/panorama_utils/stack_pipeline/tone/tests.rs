@@ -95,6 +95,17 @@ fn affine_coordinate_agrees_with_an_independent_dense_feasible_oracle() {
 }
 
 #[test]
+fn explicit_affine_bounds_are_only_widened_for_the_test_solver() {
+    let normal = [1.0, 0.0, 1.0];
+    let rhs = [0.8, 0.2];
+    let tight = bounded_low_frequency_affine_coordinate_with_bounds(normal, rhs, 0.8, 1.25, 0.02);
+    let wide = bounded_low_frequency_affine_coordinate_with_bounds(normal, rhs, 0.7, 1.375, 0.03);
+    assert!(tight.1.abs() <= 0.0200001);
+    assert!(wide.1.abs() > tight.1.abs());
+    assert!((0.7 - 1.0..=1.375 - 1.0).contains(&wide.0));
+}
+
+#[test]
 fn fewer_than_1024_samples_keep_identity() {
     let _run_scope = crate::panorama_utils::stack_pipeline::degradation::begin_run_scope();
     let samples = vec![

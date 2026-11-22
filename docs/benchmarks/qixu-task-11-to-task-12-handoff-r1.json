@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "from_task": 11,
+  "to_task": 12,
+  "from_dataset": "qixu-1",
+  "status": "diagnostic_closed_d3_not_reached",
+  "final_evidence": "docs/benchmarks/qixu-task-11-geometry-factor-fixed-soft-ab-r1.json",
+  "decision": {
+    "factor_scan": "stopped",
+    "production_promotion": false,
+    "production_changes": [],
+    "qg": "fail",
+    "native_or_d3_acceptance": false
+  },
+  "final_contract": {
+    "ordered": 72,
+    "streamed": 69,
+    "source_contract_control": "pass",
+    "source_contract_experiment": "pass",
+    "fixed_soft_skip": ["DSC_3879.NEF", "DSC_3884.NEF", "DSC_3907.NEF"]
+  },
+  "handoff_notes": [
+    "Do not reuse DSC_3882 factor as a production pose or bounds change.",
+    "Keep the fixed soft-skip hook test-only and out of default runs.",
+    "Task 12 may proceed with its existing fengying diagnostic card and source-specific evidence; it must preserve exclusive resource limits and the same no-promotion rule."
+  ],
+  "next_task": {
+    "id": 12,
+    "card": "docs/artwork-lanes/12-fengying-diagnostic.md",
+    "dataset": "fengying",
+    "current_state": "diagnostic evidence exists; D3 remains unaccepted"
+  }
+}

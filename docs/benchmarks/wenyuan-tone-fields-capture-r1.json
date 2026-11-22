@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_real_station_tone_fields_capture_v1",
+  "production_impact": "cfg(test)-only small real subset capture; no production runner, threshold, bound, fallback, or full acceptance change",
+  "original_stations": [34, 35, 36, 37, 38, 39],
+  "original_source_count": 15,
+  "source_membership": "selected from task-14 full Stack_Report grouping; all 15 NEFs exist and are non-empty",
+  "capture": {
+    "field_json_count": 6,
+    "native_field_pair_count": 6,
+    "run_local_station_indices": [0, 1, 2, 3, 4, 5],
+    "run_local_reindexed": true,
+    "native_bytes_total": 198348672,
+    "field_pair_contract": true,
+    "owner_plane_present": false,
+    "tone_final_world_present": false,
+    "diagnostic_only": true
+  },
+  "paths": {
+    "subset_selector": "scripts/stack-lab/wenyuan_station_tone_subset.py",
+    "capture_audit": "scripts/stack-lab/wenyuan_tone_fields_capture_audit.py",
+    "subset_manifest": "/private/tmp/wenyuan-stations-34-39-tone-subset.json",
+    "capture_directory": "/private/tmp/wenyuan-tone-fields-34-39-r1",
+    "capture_audit": "/private/tmp/wenyuan-tone-fields-34-39-r1/capture-audit.json",
+    "latest_capture_directory": "/private/tmp/wenyuan-tone-fields-34-39-r2",
+    "latest_capture_audit": "/private/tmp/wenyuan-tone-fields-34-39-r2/capture-audit.json"
+  },
+  "decision": {
+    "status": "real_small_subset_fields_ready",
+    "production_promotion": "none",
+    "replay_status": "blocked_missing_owner_plane_and_native_proof",
+    "next_step": "complete a test-only owner-plane/native-proof capture before offline 34–39 boundary replay; do not fabricate either artifact or infer full-run acceptance"
+  },
+  "limitations": [
+    "run-local station indices are reindexed and must be related back to original 34–39 through the source subset manifest",
+    "the capture filter accepts run-local station indices for a reindexed subset; original 34–39 indices are reserved for a full-run diagnostic",
+    "the preview-only diagnostic was stopped after field pairs were written, so no owner plane or tone-final-world report was claimed",
+    "no 126-source full run and no native acceptance verdict"
+  ]
+}

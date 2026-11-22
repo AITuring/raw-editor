@@ -228,7 +228,9 @@ use color_metrics::rgb_to_lab;
 
 mod transforms;
 
+#[cfg(test)]
 pub(super) use transforms::bounded_low_frequency_affine_coordinate;
+pub(super) use transforms::bounded_low_frequency_affine_coordinate_with_bounds;
 use transforms::{
     ToneHoldoutGate, build_spatial_field_iterations, constrain_source_fidelity,
     sample_spatial_gain, solve_tone_transforms, spatial_holdout_gate,

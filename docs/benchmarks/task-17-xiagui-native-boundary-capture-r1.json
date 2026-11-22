@@ -1,0 +1,217 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_xiagui_native_boundary_capture_r1",
+  "production_impact": "test_only env sinks on one frozen scale=0.25 diagnostic rerun; no production code, threshold, bounds or fallback change",
+  "run_id": "xiagui-s0p25-task17-xiaguiboundaryd1r1",
+  "run_path": "output/acceptance/task17/xiagui-boundary-d1-r1/run",
+  "stack_report": "output/acceptance/task17/xiagui-boundary-d1-r1/run/xiagui-s0p25-task17-xiaguiboundaryd1r1-stack-reports/stack-report-1ecf4bd3-e147-4cfe-b042-98881a7dc217.json",
+  "runner_contract": {
+    "direct_runner": true,
+    "binary": "base-2026-11-12",
+    "threads": 8,
+    "preview_only": true,
+    "monitor_contract": "unavailable_ps_preexec_workaround"
+  },
+  "result": {
+    "inputs": 48,
+    "stations": 15,
+    "output": {
+      "width": 3395,
+      "height": 2922
+    },
+    "verdict": "failed",
+    "tone_status": "applied",
+    "quality_gate": "fail",
+    "native_acceptance": "rejected: native output did not pass the complete quality gate"
+  },
+  "native_boundary_witnesses": [
+    {
+      "artifact": "output/acceptance/task17/xiagui-boundary-d1-r1/failed-boundaries/boundary-000.json",
+      "world": {
+        "x": -752.0,
+        "y": 1.0
+      },
+      "measured": 2.42866385783147,
+      "crop": [
+        0,
+        0,
+        96,
+        96
+      ],
+      "crop_point": [
+        0,
+        0
+      ],
+      "world_origin": [
+        -752.0,
+        1.0
+      ]
+    },
+    {
+      "artifact": "output/acceptance/task17/xiagui-boundary-d1-r1/failed-boundaries/boundary-001.json",
+      "world": {
+        "x": -439.0,
+        "y": 2304.0
+      },
+      "measured": 3.11915769666895,
+      "crop": [
+        265,
+        2255,
+        96,
+        96
+      ],
+      "crop_point": [
+        48,
+        48
+      ],
+      "world_origin": [
+        -752.0,
+        1.0
+      ]
+    },
+    {
+      "artifact": "output/acceptance/task17/xiagui-boundary-d1-r1/failed-boundaries/boundary-002.json",
+      "world": {
+        "x": -752.0,
+        "y": 1.0
+      },
+      "measured": 3.11915769666895,
+      "crop": [
+        0,
+        0,
+        96,
+        96
+      ],
+      "crop_point": [
+        0,
+        0
+      ],
+      "world_origin": [
+        -752.0,
+        1.0
+      ]
+    },
+    {
+      "artifact": "output/acceptance/task17/xiagui-boundary-d1-r1/failed-boundaries/boundary-003.json",
+      "world": {
+        "x": -440.0,
+        "y": 2304.0
+      },
+      "measured": 3.3394938984664724,
+      "crop": [
+        264,
+        2255,
+        96,
+        96
+      ],
+      "crop_point": [
+        48,
+        48
+      ],
+      "world_origin": [
+        -752.0,
+        1.0
+      ]
+    },
+    {
+      "artifact": "output/acceptance/task17/xiagui-boundary-d1-r1/failed-boundaries/boundary-004.json",
+      "world": {
+        "x": -752.0,
+        "y": 1.0
+      },
+      "measured": 3.3394938984664724,
+      "crop": [
+        0,
+        0,
+        96,
+        96
+      ],
+      "crop_point": [
+        0,
+        0
+      ],
+      "world_origin": [
+        -752.0,
+        1.0
+      ]
+    },
+    {
+      "artifact": "output/acceptance/task17/xiagui-boundary-d1-r1/failed-boundaries/boundary-005.json",
+      "world": {
+        "x": -431.0,
+        "y": 2304.0
+      },
+      "measured": 3.5658204605136614,
+      "crop": [
+        273,
+        2255,
+        96,
+        96
+      ],
+      "crop_point": [
+        48,
+        48
+      ],
+      "world_origin": [
+        -752.0,
+        1.0
+      ]
+    },
+    {
+      "artifact": "output/acceptance/task17/xiagui-boundary-d1-r1/failed-boundaries/boundary-006.json",
+      "world": {
+        "x": -752.0,
+        "y": 1.0
+      },
+      "measured": 3.5658204605136614,
+      "crop": [
+        0,
+        0,
+        96,
+        96
+      ],
+      "crop_point": [
+        0,
+        0
+      ],
+      "world_origin": [
+        -752.0,
+        1.0
+      ]
+    }
+  ],
+  "capture_outputs": {
+    "failed_boundaries_dir": "output/acceptance/task17/xiagui-boundary-d1-r1/failed-boundaries",
+    "boundary_debug_dir": "output/acceptance/task17/xiagui-boundary-d1-r1/boundary-debug",
+    "candidate_dir": "output/acceptance/task17/xiagui-boundary-d1-r1/boundary-candidates",
+    "candidate_file_present": false,
+    "raw_owner_map": "output/acceptance/task17/xiagui-boundary-d1-r1/boundary-debug/raw-owner-map.json",
+    "failure_neighbourhood": "output/acceptance/task17/xiagui-boundary-d1-r1/boundary-debug/failure-neighbourhood.json"
+  },
+  "debug_findings": {
+    "world_origin": [
+      -752.0,
+      1.0
+    ],
+    "raw_owner_region": {
+      "height": 0,
+      "left": 3395,
+      "top": 2922,
+      "width": 0
+    },
+    "raw_owner_region_empty": true,
+    "failure_neighbourhood_world": {
+      "x": -752.0,
+      "y": 1.0
+    },
+    "failure_neighbourhood_output": {
+      "x": 0,
+      "y": 0
+    },
+    "failure_neighbourhood_owner_path": "",
+    "failure_neighbourhood_owner_zero_count": 169
+  },
+  "interpretation": "Native failed-boundary crops were captured for all 7 boundary-stroke failures. The first witness is at output (0,0) with owner 0 and an empty debug neighbourhood because the fixed debug window is outside the cropped canvas; this is evidence of a crop/owner edge case, not proof that the QG failure is removable. Candidate diagnostics did not flush in this run.",
+  "next_step": "Run the same bounded capture for LiSong, then compare native witness crop provenance; do not widen threshold/bounds or reinterpret preview replay as native proof."
+}

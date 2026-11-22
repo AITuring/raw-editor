@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_saved_native_tone_bound_bounded_ab_v1",
+  "production_impact": "cfg(test)-only replay of saved real 34–39 fields; no production bound, threshold, fallback, geometry, density, or runner change",
+  "dataset": {
+    "source_subset_manifest": "/private/tmp/wenyuan-stations-34-39-tone-subset-r2.json",
+    "capture_dir": "/private/tmp/wenyuan-tone-fields-34-39-r7",
+    "native_proof": "/private/tmp/wenyuan-native-proof-34-39-r7/joint-production-input.json",
+    "field_pairs": 6,
+    "authoritative_relations": 13
+  },
+  "variable": {
+    "name": "local_tone_affine_bound_scale",
+    "control": 1.0,
+    "candidate": 1.5,
+    "scope": "RAW_EDITOR_TEST_TONE_LOCAL_BOUND_SCALE"
+  },
+  "control": {
+    "output": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary.json",
+    "maximum_prediction_delta": 10.857647310904358,
+    "failed_window_count": 81,
+    "fitted_relations": 13,
+    "iterations": 1000,
+    "parameter_ranges": {
+      "gain_min": [0.800000011920929, 0.800000011920929, 0.800000011920929],
+      "gain_max": [1.25, 1.25, 1.25],
+      "offset_min": [-0.019999999552965164, -0.019999999552965164, -0.019999999552965164],
+      "offset_max": [0.019999999552965164, 0.019999999552965164, 0.019999999552965164]
+    }
+  },
+  "candidate": {
+    "output": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary-b1.5.json",
+    "maximum_prediction_delta": 10.457657219451127,
+    "failed_window_count": 73,
+    "fitted_relations": 13,
+    "iterations": 1000,
+    "parameter_ranges": {
+      "gain_min": [0.7000000476837158, 0.7000000476837158, 0.7000000476837158],
+      "gain_max": [1.375, 1.375, 1.375],
+      "offset_min": [-0.029999999329447746, -0.029999999329447746, -0.029999999329447746],
+      "offset_max": [0.029999999329447746, 0.029999999329447746, 0.029999999329447746]
+    }
+  },
+  "comparison": {
+    "maximum_prediction_delta_change": -0.399990091453231,
+    "relative_change": -0.03683948096670264,
+    "failed_window_count_change": -8,
+    "candidate_passed": false,
+    "interpretation": "widening the saved-native local affine box produces a small response but leaves a large residual; bounds alone are not a sufficient explanation or fix"
+  },
+  "residual_localization": {
+    "control_top_pairs": [
+      {"left_station": 36, "right_station": 38, "max_delta": 10.857647310904358, "x": 5888, "y": 5632, "samples": 1895, "bound_hit": false},
+      {"left_station": 36, "right_station": 37, "max_delta": 9.602753609010314, "x": 7680, "y": 5632, "samples": 2392, "bound_hit": false},
+      {"left_station": 37, "right_station": 38, "max_delta": 7.676373760054283, "x": 7168, "y": 5632, "samples": 4879, "bound_hit": true}
+    ],
+    "candidate_top_pairs": [
+      {"left_station": 36, "right_station": 38, "max_delta": 10.457657219451127, "x": 5888, "y": 5632, "samples": 1895, "bound_hit": false},
+      {"left_station": 36, "right_station": 37, "max_delta": 9.336838179762308, "x": 7680, "y": 5632, "samples": 2392, "bound_hit": false},
+      {"left_station": 37, "right_station": 38, "max_delta": 3.917324569209491, "x": 6400, "y": 5632, "samples": 373, "bound_hit": true}
+    ],
+    "interpretation": "the dominant 36↔38 and 36↔37 witnesses are not bound-limited; 37↔38 responds strongly when bounds widen, so the remaining dominant residual should be isolated as a source/Jacobian or relation-model issue before any bounds change"
+  },
+  "decision": {
+    "promotion": "rejected",
+    "next_step": "keep production bounds and threshold unchanged; isolate the remaining residual with boundary-local diagnostics or a bound-hit synthetic fixture"
+  },
+  "limitations": [
+    "this is a saved-native diagnostic replay, not a 126-source full run",
+    "capture-only harness emitted no formal QG, source-contract, or memory-gate verdict",
+    "the output assertion intentionally fails because both candidates remain outside the replay quality bound"
+  ]
+}

@@ -44,6 +44,10 @@ const report = {quality_gate:{verdict:'pass'}, output:{written:!previewOnly,
   format:'TIFF', path:output, width:2, height:3, bit_depth:16, icc:'sRGB',
   alpha_preserved:true, tiff_extra_samples:[2]}};
 if (scenario === 'framed') report.composition = {publication_crop:{x:1,y:1,width:2,height:3}};
+if (scenario === 'soft-contract') {
+  console.log('Stitching order determined: ["one.nef", "two.nef"]');
+  console.log('  - Focus scan: leaving out 1 mostly soft frame(s): two.nef (50% of its cells soft)');
+}
 if (scenario === 'source-owned' || scenario === 'source-unresolved') {
   report.composition = {source_covered_pixels:6,source_owned_pixels:6};
   report.quality_gate.legacy_native_evidence = {unresolved_pixel_count:scenario === 'source-unresolved' ? 1 : 0,
@@ -145,4 +149,16 @@ test('legacy ownership observation uses native source evidence and fails closed 
   run = f.invoke('source-unresolved', ['--write-output']);
   assert.equal(run.status, 0, run.stderr + run.stdout);
   assert.equal(f.result().summary.ownershipVerified, false);
+});
+
+test('explicit soft-frame source contract is recorded and enforced', (t) => {
+  const f = fixture(t);
+  const datasetPath = path.join(f.repo, 'tests', 'acceptance', 'focus-stack-datasets.json');
+  const datasets = JSON.parse(fs.readFileSync(datasetPath, 'utf8'));
+  datasets.datasets[0].expectedSoftSkipped = ['two.nef'];
+  fs.writeFileSync(datasetPath, JSON.stringify(datasets));
+  const run = f.invoke('soft-contract');
+  assert.equal(run.status, 0, run.stderr + run.stdout);
+  assert.deepEqual(f.result().summary.sourceContract.actualSoftSkipped, ['two.nef']);
+  assert.equal(f.result().summary.sourceContract.verdict, 'pass');
 });

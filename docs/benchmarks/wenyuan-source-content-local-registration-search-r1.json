@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_source_content_local_registration_search_r1",
+  "production_impact": "read-only translation search over prepared witness patches; no production geometry, owner, relation, or tone change",
+  "inputs": {
+    "prepared_dump_dir": "/private/tmp/wenyuan-source-patches-r1",
+    "patch_stats": "docs/benchmarks/wenyuan-source-content-patch-audit-r1.json",
+    "search_window_native_px": [
+      -128,
+      128
+    ],
+    "step_native_px": 8
+  },
+  "pairs": {
+    "36↔37": {
+      "radius_32px": {
+        "baseline_correlation": -0.044216497980813556,
+        "best_correlation": 0.22906666480085844,
+        "best_shift_native_px": [
+          72.0,
+          96.0
+        ],
+        "search_window_native_px": [
+          -128,
+          128
+        ]
+      },
+      "radius_96px": {
+        "baseline_correlation": -0.06431730461303052,
+        "best_correlation": 0.2555622159947121,
+        "best_shift_native_px": [
+          56.0,
+          96.0
+        ],
+        "search_window_native_px": [
+          -128,
+          128
+        ]
+      }
+    },
+    "37↔38": {
+      "radius_32px": {
+        "baseline_correlation": 0.0022996642926343632,
+        "best_correlation": 0.11031480958585894,
+        "best_shift_native_px": [
+          96.0,
+          -112.0
+        ],
+        "search_window_native_px": [
+          -128,
+          128
+        ]
+      },
+      "radius_96px": {
+        "baseline_correlation": -0.026794378849310078,
+        "best_correlation": 0.05981255255434067,
+        "best_shift_native_px": [
+          -64.0,
+          -32.0
+        ],
+        "search_window_native_px": [
+          -128,
+          128
+        ]
+      }
+    },
+    "36↔38": {
+      "radius_32px": {
+        "baseline_correlation": 0.08064756254889503,
+        "best_correlation": 0.1730071260858437,
+        "best_shift_native_px": [
+          56.0,
+          80.0
+        ],
+        "search_window_native_px": [
+          -128,
+          128
+        ]
+      },
+      "radius_96px": {
+        "baseline_correlation": 0.2793724517309421,
+        "best_correlation": 0.28999087919868477,
+        "best_shift_native_px": [
+          16.0,
+          24.0
+        ],
+        "search_window_native_px": [
+          -128,
+          128
+        ]
+      }
+    }
+  },
+  "decision": {
+    "promotion": "rejected",
+    "conclusion": "A bounded local translation search does not recover strong correspondence: best correlation remains <=0.256 for 36↔37, <=0.110 for 37↔38, and <=0.290 for 36↔38. The residual is not explained by a small local translation at the witness.",
+    "next_step": "do not add local translation or tone normalization; preserve the owner guard and close task-14 as a diagnostic rejection pending a content-aware source correspondence model"
+  },
+  "limitations": [
+    "grayscale prepared sources at scale 0.5",
+    "translation-only search; no affine or nonrigid refit",
+    "diagnostic evidence only; no full 126-source QG run"
+  ]
+}

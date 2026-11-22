@@ -93,8 +93,15 @@ for (const dataset of manifest.datasets) {
     fail(`${dataset.id}: unknown inputOrder ${JSON.stringify(dataset.inputOrder)}`);
   }
   const names = new Set(files.map((name) => path.basename(name)));
-  for (const skipped of dataset.expectedSkipped ?? []) {
+  const expectedSkipped = new Set(dataset.expectedSkipped ?? []);
+  for (const skipped of expectedSkipped) {
     if (!names.has(skipped)) fail(`${dataset.id}: expectedSkipped ${skipped} is not an input`);
+  }
+  for (const skipped of dataset.expectedSoftSkipped ?? []) {
+    if (!names.has(skipped)) fail(`${dataset.id}: expectedSoftSkipped ${skipped} is not an input`);
+    if (expectedSkipped.has(skipped)) {
+      fail(`${dataset.id}: expectedSoftSkipped ${skipped} overlaps expectedSkipped`);
+    }
   }
 
   if (files.length !== dataset.expectedSourceCount) {

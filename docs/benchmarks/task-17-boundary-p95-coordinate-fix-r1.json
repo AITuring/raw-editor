@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_boundary_p95_coordinate_fix_r1",
+  "production_impact": "evidence-coordinate correction only; P95 value, thresholds, bounds, fallback and QG verdict semantics unchanged",
+  "change": {
+    "source": "src-tauri/src/panorama_utils/stack_pipeline/quality_gate_runner/run_gate.rs",
+    "helper": "BoundaryStrokeReport::p95_world",
+    "before": "aggregate boundary P95 was recorded at input.world_origin, which can be an uncovered crop edge",
+    "after": "aggregate boundary P95 is recorded at the nearest real measured boundary point"
+  },
+  "validation": {
+    "p95_world_uses_a_real_measured_boundary_point": "passed",
+    "boundary_alignment_tests": "10 passed",
+    "cargo_check_lib": "passed",
+    "git_diff_check": "passed"
+  },
+  "interpretation": "This removes the false owner=0/coverage=0 origin witness from future reports while preserving the measured P95 value and native QG decision. Existing D1 reports remain historical pre-fix evidence and are not retroactively reclassified.",
+  "next_step": "Use a bounded rerun only if fresh native evidence is required; do not widen thresholds or bounds."
+}

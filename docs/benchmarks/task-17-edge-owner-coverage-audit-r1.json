@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_edge_owner_coverage_audit_r1",
+  "production_impact": "read-only test-only attribution; no threshold, bounds, fallback or QG change",
+  "inputs": {
+    "owner_map": "output/acceptance/task17/lisong-boundary-d2-r2/boundary-debug/raw-owner-map.json",
+    "neighbourhood": "output/acceptance/task17/lisong-boundary-d2-r2/boundary-debug/failure-neighbourhood.json"
+  },
+  "canvas": {
+    "height": 2194,
+    "width": 3205
+  },
+  "owner_region": {
+    "height": 500,
+    "left": 0,
+    "top": 0,
+    "width": 500
+  },
+  "anchor_world": [
+    -741.0,
+    -5.0
+  ],
+  "anchor_output": [
+    0.0,
+    0.0
+  ],
+  "owner_region_unique_count": 18,
+  "neighbourhood": {
+    "world": {
+      "x": -741.0,
+      "y": -5.0
+    },
+    "output": {
+      "x": 0,
+      "y": 0
+    },
+    "owner_path": "",
+    "pixel_count": 169,
+    "owner_zero_count": 169,
+    "coverage_zero_count": 169,
+    "luma_zero_count": 169,
+    "owner_zero_fraction": 1.0,
+    "coverage_zero_fraction": 1.0
+  },
+  "attribution": {
+    "classification": "edge_uncovered_owner_zero",
+    "passes_edge_attribution": true,
+    "native_qg_result_preserved": true
+  },
+  "conclusion": "The witness is an uncovered output edge with owner=0; this explains the empty source provenance at the point but does not erase the native boundary-stroke QG failure."
+}

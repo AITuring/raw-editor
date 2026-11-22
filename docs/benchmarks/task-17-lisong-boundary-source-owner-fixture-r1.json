@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_boundary_source_owner_fixture_r1",
+  "production_impact": "read-only bounded fixture; no production threshold, bounds, fallback or QG change",
+  "stack_report": "output/acceptance/task17/lisong-boundary-d3-r3/run/lisong-s0p25-task17-lisongboundaryd3r3-stack-reports/stack-report-e1e14a2d-10ab-461d-bec6-0c3efaf4f7ad.json",
+  "neighbourhood": "output/acceptance/task17/lisong-boundary-d3-r3/boundary-debug/failure-neighbourhood.json",
+  "legend": "output/acceptance/task17/lisong-boundary-d3-r3/failed-boundaries/boundary-000.json",
+  "witness": {
+    "world": {
+      "x": 2269.0,
+      "y": 1692.0
+    },
+    "output": {
+      "x": 3010,
+      "y": 1697
+    },
+    "measured": 1.7251570602550932,
+    "threshold": 1.5,
+    "crop_owner_counts": {
+      "30": 600,
+      "41": 22,
+      "44": 3
+    },
+    "coverage_zero_count": 0
+  },
+  "owners": [
+    {
+      "owner": 30,
+      "path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0910.NEF",
+      "station": 9
+    },
+    {
+      "owner": 41,
+      "path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF",
+      "station": 13
+    },
+    {
+      "owner": 44,
+      "path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0912.NEF",
+      "station": 13
+    }
+  ],
+  "stations": [
+    9,
+    13
+  ],
+  "accepted_station_relations": [
+    {
+      "left": 9,
+      "right": 13,
+      "evidence_kind": "virtual_tile",
+      "inliers": 275,
+      "spatial_support": 0.6589407508451456,
+      "scale_ratio": 1.0016057102844462,
+      "median_error_px": 0.28884385761913006,
+      "independent_support": 1
+    }
+  ],
+  "classification": "covered_geometry_pass_boundary_stroke_fail",
+  "interpretation": "All witness pixels are covered and owned by real sources. The station relation is accepted with geometric evidence, yet boundary stroke error remains above threshold; saved crop replay is boundary_low_contrast at 96px and cannot replace native evidence. This isolates a real source-owner/stroke mismatch rather than an uncovered crop edge.",
+  "next_step": "Compare source-owner RGB/stroke samples for the station 9↔13 pair in a bounded fixture; do not widen thresholds or bounds.",
+  "saved_crop_replay": {
+    "image": "output/acceptance/task17/lisong-boundary-d3-r3/failed-boundaries/boundary-000.visible.png",
+    "coordinate": [
+      48,
+      48
+    ],
+    "fits": "boundary_low_contrast",
+    "edge": "boundary_low_contrast",
+    "cargo_test": "passed"
+  }
+}

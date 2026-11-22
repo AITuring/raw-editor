@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_real_station_tone_fields_owner_plane_native_proof_replay_v1",
+  "production_impact": "cfg(test)-only 15-source capture and saved-native replay; no production runner, threshold, bound, fallback, or full acceptance change",
+  "original_stations": [34, 35, 36, 37, 38, 39],
+  "original_source_count": 15,
+  "source_subset_manifest": "/private/tmp/wenyuan-stations-34-39-tone-subset-r2.json",
+  "capture": {
+    "field_json_count": 6,
+    "native_field_pair_count": 6,
+    "run_local_station_indices": [0, 1, 2, 3, 4, 5],
+    "station_labels": [34, 35, 36, 37, 38, 39],
+    "owner_plane": "/private/tmp/wenyuan-tone-fields-34-39-r7/tone-owners.filtered.png",
+    "owner_plane_present": true,
+    "owner_plane_dimensions": [16134, 6170],
+    "filter_manifest": "/private/tmp/wenyuan-tone-fields-34-39-r7/tone-fields-filter-manifest.json",
+    "capture_audit": "/private/tmp/wenyuan-tone-fields-34-39-r7/capture-audit.json",
+    "diagnostic_only": true
+  },
+  "native_proof": {
+    "joint_production_input": "/private/tmp/wenyuan-native-proof-34-39-r7/joint-production-input.json",
+    "native_photometric_relations": "/private/tmp/wenyuan-native-proof-34-39-r7/native-photometric-relations.json",
+    "authoritative_relation_count": 13,
+    "records_have_native_verified_points": true
+  },
+  "saved_native_replay": {
+    "output": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary.json",
+    "command": "real_saved_local_tone_from_env",
+    "status": "failed_boundary_prediction",
+    "maximum_tone_prediction_delta": 10.857647310904358,
+    "fitted_relations": 13,
+    "iterations": 1000,
+    "production_bounds_unchanged": true,
+    "bound_scale": 1.0
+  },
+  "bounded_replay_ab": {
+    "variable": "RAW_EDITOR_TEST_TONE_LOCAL_BOUND_SCALE",
+    "control": {
+      "scale": 1.0,
+      "output": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary.json",
+      "maximum_tone_prediction_delta": 10.857647310904358,
+      "failed_window_count": 81
+    },
+    "candidate": {
+      "scale": 1.5,
+      "output": "/private/tmp/wenyuan-native-proof-34-39-r7/saved-local-tone-boundary-b15.json",
+      "maximum_tone_prediction_delta": 10.457657219451127,
+      "failed_window_count": 73,
+      "parameter_ranges": {
+        "gain": [0.7000000476837158, 1.375],
+        "offset": [-0.029999999329447746, 0.029999999329447746]
+      }
+    },
+    "max_delta_change": -0.399990091453231,
+    "relative_change": -0.03683948096670264,
+    "interpretation": "the saved real 34–39 residual responds weakly to the widened test-only box but remains far above a boundary pass; production bounds stay unchanged"
+  },
+  "run_gates": {
+    "density": "bypassed/nonidentity_world_residual (diagnostic run log)",
+    "qg": "not_emitted_by_capture_only_harness",
+    "source_contract": "not_emitted_by_capture_only_harness",
+    "memory_gate": "not_emitted_by_capture_only_harness",
+    "native_acceptance": "not_claimed"
+  },
+  "decision": {
+    "status": "owner_plane_and_native_proof_ready_replay_rejected",
+    "production_promotion": "none",
+    "next_step": "isolate the dominant 36↔38 and 36↔37 saved-native residuals with source/Jacobian diagnostics; do not change production bounds or thresholds"
+  },
+  "limitations": [
+    "run-local station indices are reindexed and map to original 34–39 through the source subset manifest",
+    "the replay failure is diagnostic evidence from the saved fields and owner plane, not a full 126-source acceptance verdict",
+    "no full run, production native acceptance, QG pass, source-contract pass, or memory-gate claim is made from this capture-only run"
+  ]
+}

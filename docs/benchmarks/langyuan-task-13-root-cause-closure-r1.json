@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "task": 13,
+  "dataset": "langyuan",
+  "status": "root_cause_diagnostic_closed_d3_not_reached",
+  "production_impact": "read_only and cfg_test evidence only; no production threshold, bounds, fallback, pose or scale1 change",
+  "baseline_evidence": {
+    "report": "output/acceptance/task-5/langyuan-baseline-r1/run/langyuan-s0p25-task-5-baseline-r1-stack-reports/stack-report-9ea87961-b839-4c85-986c-ffa29ee2c9d6.json",
+    "inputs": 84,
+    "qg": "fail",
+    "memory_gate": "pass",
+    "peak_rss_bytes": 15417229312
+  },
+  "full84_control_recheck": {
+    "directory": "output/acceptance/task-13/langyuan-station8-jacobian-control-r1",
+    "report": "output/acceptance/task-13/langyuan-station8-jacobian-control-r1/langyuan-s0p25-task13-station8-jacobian-control-r1-stack-reports/stack-report-44f011ec-2073-4124-864c-38297ff25348.json",
+    "binary": "output/acceptance/binaries/task-13-focus-scale-r1/candidate-release-binary",
+    "inputs": 84,
+    "qg": {
+      "verdict": "fail",
+      "local_scale_pixel_ratio": {"failed": 6, "measurable": 8},
+      "boundary_stroke_alignment": {"failed": 1, "measurable": 11},
+      "owner_sharpness_coverage": {"verdict": "pass", "measurable": 1}
+    },
+    "closure": {"status": "converged", "residual_median_px": 0.08091189155787022, "residual_p95_px": 1.2800639746874538, "max_corner_correction_px": 3.2907344767819584},
+    "density": {"status": "bypassed", "reason": "nonidentity_world_residual", "sample_count": 0},
+    "memory_gate": {"pass": true, "peak_rss_bytes": 13965426688, "threshold_bytes": 25769803776},
+    "runner_note": "Stack_Report completed, but acceptance metrics reference registration failed before summary; this is a measurement-contract failure, not a changed QG verdict."
+  },
+  "residual_root_cause": {
+    "support_intersection": 0,
+    "failure_points_outside_recorded_residual_regions": 15,
+    "decision": "residual identity or disabling residual cannot explain the current local-scale/boundary failures"
+  },
+  "scale_root_cause": {
+    "pixel_ratio_zero_sources": ["DSC_3733.NEF", "DSC_3711.NEF", "DSC_3681.NEF", "DSC_3731.NEF", "DSC_3708.NEF", "DSC_3727.NEF"],
+    "station_ids": [2, 3, 5, 7, 8, 12],
+    "required_local_factors": {"minimum": 1.0227992853623264, "maximum": 1.5093482446611677},
+    "accepted_relation_scale_range": [0.8324044, 1.2160185],
+    "decision": "factors are local and widely spread; no global geometry factor is supported"
+  },
+  "boundary_root_cause": {
+    "failed_count": 1,
+    "world": {"x": 7457.0, "y": 1848.5},
+    "stations": [16, 27],
+    "owners": [48, 82],
+    "measured_px": 4.0,
+    "threshold_px": 1.5,
+    "decision": "single covered station-boundary witness remains unresolved; no threshold or bounds change authorized"
+  },
+  "bounded_factor_evidence": {
+    "subset": "langyuan-10",
+    "source": "DSC_3681.NEF",
+    "factor": 1.5093482446611677,
+    "outcome": "closure_no_constraints_and_native_geometry_rejected",
+    "decision": "do not extrapolate the high-factor subset result to full84"
+  },
+  "decision": "diagnostic_closed_no_production_change",
+  "next_task": 14,
+  "next_step": "handoff to the existing Wenyuan task14 diagnostic card; retain all Langyuan evidence and do not start scale1 until a new, independently justified hypothesis exists",
+  "do_not_do": [
+    "do not disable residual identity to chase these failures",
+    "do not apply a global Jacobian factor",
+    "do not widen QG thresholds or output bounds",
+    "do not add owner fallback without Coverage evidence",
+    "do not treat the full84 control metric-registration failure as QG acceptance"
+  ]
+}

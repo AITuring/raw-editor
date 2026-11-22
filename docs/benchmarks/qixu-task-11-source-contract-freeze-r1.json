@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "task": 11,
+  "method": "qixu_task_11_source_contract_freeze_r1",
+  "production_impact": "test_only_read_only_source_contract_summary",
+  "dataset": "qixu-1",
+  "scale": 0.25,
+  "input_contract": {
+    "input_count": 75,
+    "source_bytes": 4516277858,
+    "aggregate_sha256": "c8225550cd0750da20d7afb573a3942382665bff256cdcb8feb4fdef74027ef9",
+    "aggregate_sha256_algorithm": "SHA-256 of lexicographically sorted records `${filename}\\0${file_sha256}\\n`",
+    "ordered_count": 72,
+    "ordered_names_sha256": "e23d5731817465c2193895993acf2d8cb9856c4c29365dc53305c3327f335a66",
+    "ordered_names_sha256_algorithm": "SHA-256 of ordered basenames joined with `\\n` and a trailing `\\n`",
+    "missing_from_order": [
+      "DSC_3842.NEF",
+      "DSC_3910.NEF",
+      "DSC_3911.NEF"
+    ],
+    "soft_skipped": [
+      "DSC_3879.NEF",
+      "DSC_3907.NEF"
+    ],
+    "detail_only": [
+      "DSC_3907.NEF"
+    ],
+    "composited_count": 70,
+    "runner_inputs_sha256": "a8512539353b33e3298ff371d443f428d008facda409e332e2b870a413e03460",
+    "manifest": {
+      "path": "tests/acceptance/focus-stack-datasets.json",
+        "sha256_at_baseline": "46b4f77fa6a41852223954aa9f6fe8eb92eee3b737b465fac1ff4e05d07e6173",
+        "sha256_at_r1_freeze": "d999373098491ebf8aecd6b3958461d135e2660a9dab4e645f7114e8698a43eb"
+    }
+  },
+  "baseline_evidence": {
+    "diagnostic": {
+      "path": "docs/benchmarks/qixu-1-baseline-r1-diagnostic.json",
+      "sha256": "f917ff7be3a969ed764402199926e147b62305d5efb97ebc8b8a28d016c1e2ef"
+    },
+    "source_alignment": {
+      "path": "output/acceptance/task-5/qixu-1-baseline-r1/source-alignment.json",
+      "sha256": "5651786705909747d6bad5bf452fb2a70bef9706e92c828fce6955d1a62cad4d"
+    },
+    "task11_source_alignment_r2": {
+      "path": "output/acceptance/task-11/qixu-1-diagnostics-r2/source-alignment.json",
+      "sha256": "9efdfd0f792345c296330e897079270ed97d0b61f787f23681ff7582ff8ee40f"
+    },
+    "execution": {
+      "path": "output/acceptance/task-5/qixu-1-baseline-r1/execution.json",
+      "sha256": "960432bc14f7a7a28691fb57406beb2281a932552198f3efbea349ab9f975525"
+    },
+    "analysis": {
+      "path": "output/acceptance/task-5/qixu-1-baseline-r1/analysis.json",
+      "sha256": "a7782d2edaf7d02c7a7e99395f9dd65cd6d96cb3d51937cc468cb380c7bef140"
+    }
+  },
+  "contract_revalidation": {
+    "mode": "reuse_artifacts_no_new_render",
+    "control": {
+      "summary": "output/acceptance/task-11/qixu-1-geometry-factor-correct-control-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-correct-control-r1.summary.json",
+      "source_contract": "pass",
+      "ordered": 72,
+      "streamed": 70,
+      "actual_soft_skipped": ["DSC_3879.NEF", "DSC_3907.NEF"]
+    },
+    "experiment": {
+      "summary": "output/acceptance/task-11/qixu-1-geometry-factor-correct-experiment-r1/qixu-1-s0p25-task11-qixu1-geometry-factor-correct-experiment-r1.summary.json",
+      "source_contract": "fail",
+      "ordered": 72,
+      "streamed": 69,
+      "actual_soft_skipped": ["DSC_3879.NEF", "DSC_3884.NEF", "DSC_3907.NEF"],
+      "unexpected_absent_stream": ["DSC_3884.NEF"]
+    },
+    "decision": "no_clean_bounded_ab_until_soft_skip_participation_is_frozen"
+  },
+  "superseded_by": "docs/benchmarks/qixu-task-11-geometry-factor-fixed-soft-ab-r1.json",
+  "conclusion": "defer_factor_rerun",
+  "decision": "Do not rerun the factor experiment until this qixu-1 source contract is explicitly reconciled; this artifact freezes the baseline evidence only.",
+  "next_step": "retain the diagnostic rejection and unchanged source contract; no factor, pose, threshold, bounds, fallback, or production write is authorized by this freeze"
+}

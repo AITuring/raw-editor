@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "zhaoji_station12_jacobian_bounded_ab_brief_v1",
+  "production_impact": "test_only_center_preserving_station_pose_scale; no production threshold, bounds, fallback, tone or source contract change",
+  "dataset": "zhaoji",
+  "scale": 0.25,
+  "binary": "task-16-station15-17-jacobian-r1",
+  "binary_sha256": "c809bbfed9f89ee1109d0e48caacad5a81dd9f5aadd9b7f8500ed0c2ba0d67a8",
+  "control_experiment_contract": {
+    "same_inputs": true,
+    "same_binary": true,
+    "same_runner": true,
+    "same_threads": 8,
+    "same_memory_gate_bytes": 25769803776,
+    "same_preview_only": true,
+    "source_contract": "47 sorted inputs; no excludes; no soft skips"
+  },
+  "hypothesis": {
+    "station": 12,
+    "worst_source_index": 46,
+    "worst_source": "DSC_4299.NEF",
+    "observed_minimum_scale": 0.7739037335,
+    "factor": 1.29296875,
+    "factor_selection": "single quantized inverse-Jacobian correction derived from the D1 worst station/source; no factor scan",
+    "center_preserving": true,
+    "env": "RAW_EDITOR_TEST_STATION_JACOBIAN_SCALE=12:1.29296875"
+  },
+  "success_contract": [
+    "compare output-density factor and direct-pair P95 against the same-binary control",
+    "require closure, source contract and memory evidence for interpretation",
+    "if density passes, inspect QG/tone/boundary but do not promote a 0.25 preview to native acceptance",
+    "stop after this single bounded A/B; do not widen thresholds or continue factor scanning"
+  ],
+  "evidence": [
+    "docs/benchmarks/task-17-zhaoji-diagnostic-r1.json",
+    "docs/artwork-lanes/S2-zhaoji.md"
+  ]
+}

@@ -83,8 +83,24 @@ pub(crate) fn highlight_supported_parameters(mut p: [f32; 6], low: [f32; 3]) -> 
     p
 }
 
+#[cfg(test)]
+fn local_tone_min_sample_luminance() -> f32 {
+    std::env::var("RAW_EDITOR_TEST_TONE_MIN_SAMPLE_LUMINANCE")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|value| {
+            value.is_finite() && (0.0001..=tone::TONE_MIN_SAMPLE_LUMINANCE).contains(value)
+        })
+        .unwrap_or(tone::TONE_MIN_SAMPLE_LUMINANCE)
+}
+
+#[cfg(not(test))]
+fn local_tone_min_sample_luminance() -> f32 {
+    tone::TONE_MIN_SAMPLE_LUMINANCE
+}
+
 fn usable(value: f32) -> bool {
-    (tone::TONE_MIN_SAMPLE_LUMINANCE..=tone::TONE_MAX_SAMPLE_LUMINANCE).contains(&value)
+    (local_tone_min_sample_luminance()..=tone::TONE_MAX_SAMPLE_LUMINANCE).contains(&value)
 }
 fn luminance(rgb: [f32; 3]) -> f32 {
     rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722
@@ -92,6 +108,31 @@ fn luminance(rgb: [f32; 3]) -> f32 {
 
 const LOCAL_FIT_MAX_TILE_CELLS: usize = 40_000_000;
 const LOCAL_FIT_MAX_STRIDE: u32 = 64;
+
+#[cfg(test)]
+fn local_tone_bounds() -> (f32, f32, f32) {
+    // This environment knob exists only in the ignored native replay test;
+    // release builds always use the fixed production bounds below.
+    let scale = std::env::var("RAW_EDITOR_TEST_TONE_LOCAL_BOUND_SCALE")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|value| value.is_finite() && (1.0..=2.0).contains(value))
+        .unwrap_or(1.0);
+    (
+        1.0 - (1.0 - tone::TONE_MIN_GAIN) * scale,
+        1.0 + (tone::TONE_MAX_GAIN - 1.0) * scale,
+        tone::TONE_MAX_ABS_OFFSET * scale,
+    )
+}
+
+#[cfg(not(test))]
+fn local_tone_bounds() -> (f32, f32, f32) {
+    (
+        tone::TONE_MIN_GAIN,
+        tone::TONE_MAX_GAIN,
+        tone::TONE_MAX_ABS_OFFSET,
+    )
+}
 
 fn local_fit_grid(
     output_width: u32,
@@ -399,6 +440,7 @@ pub(crate) fn fit_local_tone_with_identity_prior(
         degrees.push(degree);
     }
     let mut parameters = vec![vec![[0.0f32; 6]; count]; tiles.len()];
+    let (min_gain, max_gain, max_abs_offset) = local_tone_bounds();
     // Cells without an observation have a zero RHS and a positive identity
     // prior, so their unique minimizer stays exactly zero in every sweep.
     let active_cells = degrees
@@ -440,9 +482,12 @@ pub(crate) fn fit_local_tone_with_identity_prior(
                 for c in 0..3 {
                     let n = normal[tile][cell];
                     let r = rhs[cell];
-                    let (alpha, offset) = tone::bounded_low_frequency_affine_coordinate(
+                    let (alpha, offset) = tone::bounded_low_frequency_affine_coordinate_with_bounds(
                         [f64::from(n[c]), f64::from(n[c + 3]), f64::from(n[c + 6])],
                         [f64::from(r[c]), f64::from(r[c + 3])],
+                        min_gain,
+                        max_gain,
+                        max_abs_offset,
                     );
                     maximum = maximum
                         .max((parameters[tile][cell][c] - alpha as f32).abs())
@@ -472,6 +517,9 @@ pub(crate) fn fit_local_tone_with_identity_prior(
             &boundary_strength,
             width,
             height,
+            min_gain,
+            max_gain,
+            max_abs_offset,
         );
     }
     Some(LocalToneField {
@@ -524,13 +572,19 @@ fn extend_supported_parameters(
     boundary_strength: &[f32],
     width: usize,
     height: usize,
+    min_gain: f32,
+    max_gain: f32,
+    max_abs_offset: f32,
 ) {
     let mut missing = degree
         .iter()
         .zip(owned.iter().zip(mass))
         .map(|(d, (own, total))| d.map(|v| v < 1e-7 && total - own > 1e-7))
         .collect::<Vec<_>>();
-    for radius in [4, 8, 16, 32, 64] {
+    // The saved-native replay can bound this cross-support extension to
+    // separate a finite-radius extrapolation from the production path. The
+    // release build always retains the complete 4..64px sequence below.
+    for radius in support_extension_radii() {
         if missing.iter().all(|m| m.iter().all(|v| !*v)) {
             break;
         }
@@ -551,14 +605,33 @@ fn extend_supported_parameters(
                 if missing[cell][c] && support[cell][c] > 1e-6 {
                     let strength = boundary_strength[cell];
                     parameters[cell][c] = ((values[cell][c] / support[cell][c]) as f32 * strength)
-                        .clamp(tone::TONE_MIN_GAIN - 1.0, tone::TONE_MAX_GAIN - 1.0);
+                        .clamp(min_gain - 1.0, max_gain - 1.0);
                     parameters[cell][c + 3] = ((values[cell][c + 3] / support[cell][c]) as f32
                         * strength)
-                        .clamp(-tone::TONE_MAX_ABS_OFFSET, tone::TONE_MAX_ABS_OFFSET);
+                        .clamp(-max_abs_offset, max_abs_offset);
                     missing[cell][c] = false;
                 }
             }
         }
+    }
+}
+
+fn support_extension_radii() -> Vec<usize> {
+    #[cfg(test)]
+    {
+        let max_radius = std::env::var("RAW_EDITOR_TEST_TONE_SUPPORT_EXTENSION_MAX_RADIUS")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|value| *value <= 64)
+            .unwrap_or(64);
+        return [4usize, 8, 16, 32, 64]
+            .into_iter()
+            .take_while(|radius| *radius <= max_radius)
+            .collect();
+    }
+    #[cfg(not(test))]
+    {
+        vec![4, 8, 16, 32, 64]
     }
 }
 
@@ -832,6 +905,100 @@ mod tests {
             fit_local_tone(&tiles, &[(0, 1)], &owners, 512, 512).is_none(),
             "clipped pixels alone cannot establish a calibration model"
         );
+    }
+
+    #[test]
+    fn synthetic_tone_boundary_fixture_hits_bounds_and_records_delta_e() {
+        let base: [f32; 3] = [0.35, 0.4, 0.45];
+        let scales = [1.0f32, 1.2, 1.4, 1.6, 1.8, 2.0];
+        let tiles = scales
+            .into_iter()
+            .enumerate()
+            .map(|(index, scale)| {
+                let value = base.map(|channel| (channel * scale).min(0.96f32));
+                tone::world_aligned_native_tone_tile(
+                    34 + index,
+                    index as u16 + 1,
+                    (0, 0, 511, 511),
+                    move |_, _| Some(value),
+                )
+            })
+            .collect::<Vec<_>>();
+        let owners = (0..512 * 512)
+            .map(|index| ((index % 512) * 6 / 512) as u16 + 1)
+            .collect::<Vec<_>>();
+        let relations = (0..tiles.len() - 1)
+            .map(|index| (index, index + 1))
+            .collect::<Vec<_>>();
+        let before = scales
+            .windows(2)
+            .map(|pair| {
+                let left = base.map(|channel| (channel * pair[0]).min(0.96f32));
+                let right = base.map(|channel| (channel * pair[1]).min(0.96f32));
+                tone::delta_e00_rgb(left, right)
+            })
+            .fold(0.0f64, f64::max);
+        let field = fit_local_tone(&tiles, &relations, &owners, 512, 512)
+            .expect("strong synthetic mismatch should retain tone evidence");
+        let corrected = tiles
+            .iter()
+            .enumerate()
+            .map(|(index, _tile)| {
+                let source = base.map(|channel| (channel * scales[index]).min(0.96f32));
+                field.corrected(index, source, 255.5, 255.5)
+            })
+            .collect::<Vec<_>>();
+        let after = corrected
+            .windows(2)
+            .map(|pair| tone::delta_e00_rgb(pair[0], pair[1]))
+            .fold(0.0f64, f64::max);
+        let (min_gain, max_gain, max_abs_offset) = super::local_tone_bounds();
+        let mut gain_min = [f32::INFINITY; 3];
+        let mut gain_max = [f32::NEG_INFINITY; 3];
+        let mut offset_min = [f32::INFINITY; 3];
+        let mut offset_max = [f32::NEG_INFINITY; 3];
+        for parameters in field.parameters.iter().flatten() {
+            for channel in 0..3 {
+                gain_min[channel] = gain_min[channel].min(1.0 + parameters[channel]);
+                gain_max[channel] = gain_max[channel].max(1.0 + parameters[channel]);
+                offset_min[channel] = offset_min[channel].min(parameters[channel + 3]);
+                offset_max[channel] = offset_max[channel].max(parameters[channel + 3]);
+            }
+        }
+        let bound_hit = gain_min
+            .iter()
+            .chain(&gain_max)
+            .any(|value| (*value - min_gain).abs() < 1e-5 || (*value - max_gain).abs() < 1e-5)
+            || offset_min
+                .iter()
+                .chain(&offset_max)
+                .any(|value| value.abs() >= max_abs_offset - 1e-5);
+        assert!(bound_hit, "fixture did not reach a production tone bound");
+        assert!(
+            after < before,
+            "bounded correction should reduce the seam: {before} -> {after}"
+        );
+        if let Ok(path) = std::env::var("RAW_EDITOR_TEST_TONE_BOUNDARY_FIXTURE_OUTPUT") {
+            let payload = serde_json::json!({
+                "diagnostic_only": true,
+                "stations": [34, 35, 36, 37, 38, 39],
+                "before_delta_e00": before,
+                "after_delta_e00": after,
+                "bound_hit": bound_hit,
+                "bound_scale": std::env::var("RAW_EDITOR_TEST_TONE_LOCAL_BOUND_SCALE")
+                    .ok()
+                    .and_then(|value| value.parse::<f32>().ok())
+                    .unwrap_or(1.0),
+                "min_gain": min_gain,
+                "max_gain": max_gain,
+                "max_abs_offset": max_abs_offset,
+                "gain_min": gain_min,
+                "gain_max": gain_max,
+                "offset_min": offset_min,
+                "offset_max": offset_max,
+            });
+            std::fs::write(path, serde_json::to_vec_pretty(&payload).unwrap()).unwrap();
+        }
     }
 
     #[test]

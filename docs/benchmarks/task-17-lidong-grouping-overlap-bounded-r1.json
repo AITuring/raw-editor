@@ -1,0 +1,179 @@
+{
+  "schema": 1,
+  "analysis_type": "task17_lidong_grouping_overlap_bounded",
+  "production_impact": "test-only report; no source, threshold, bounds, fallback, or compositor changes",
+  "input_stack_report": "output/acceptance/task17/lidong-d1-r1/run/lidong-s0p25-task17-lidongd1r1-stack-reports/stack-report-739353a6-0b5f-488b-9d3c-f1eea7d5268e.json",
+  "selected_path": "layered_virtual_tile",
+  "component_count": 3,
+  "components": [
+    {
+      "component": 0,
+      "member_count": 2,
+      "virtual_members": [
+        "/Users/dp/Desktop/raw-editor/src-tauri/virtual://focus-group-3-19",
+        "/Users/dp/Desktop/raw-editor/src-tauri/virtual://focus-group-5-20,21"
+      ],
+      "relation_nodes": [
+        2,
+        4
+      ]
+    },
+    {
+      "component": 1,
+      "member_count": 7,
+      "virtual_members": [
+        "/Users/dp/Desktop/raw-editor/src-tauri/virtual://focus-group-1-0,1",
+        "/Users/dp/Desktop/raw-editor/src-tauri/virtual://focus-group-10-7,9,10",
+        "/Users/dp/Desktop/raw-editor/src-tauri/virtual://focus-group-2-2,3,4,5",
+        "/Users/dp/Desktop/raw-editor/src-tauri/virtual://focus-group-4-14,15,16,17",
+        "/Users/dp/Desktop/raw-editor/src-tauri/virtual://focus-group-6-18",
+        "/Users/dp/Desktop/raw-editor/src-tauri/virtual://focus-group-7-12,11,13",
+        "/Users/dp/Desktop/raw-editor/src-tauri/virtual://focus-group-9-6,8"
+      ],
+      "relation_nodes": [
+        0,
+        1,
+        3,
+        5,
+        6,
+        8,
+        9
+      ]
+    },
+    {
+      "component": 2,
+      "member_count": 2,
+      "virtual_members": [
+        "/Users/dp/Desktop/raw-editor/src-tauri/virtual://focus-group-11-22",
+        "/Users/dp/Desktop/raw-editor/src-tauri/virtual://focus-group-8-24,23"
+      ],
+      "relation_nodes": [
+        7,
+        10
+      ]
+    }
+  ],
+  "accepted_cross_component_edges": [],
+  "bridge_summary": [
+    {
+      "components": [
+        0,
+        1
+      ],
+      "candidate_count": 14,
+      "bridge": {
+        "left": 4,
+        "right": 5,
+        "model": "projective",
+        "selected": true,
+        "inliers": 111,
+        "median_error_px": 0.7887084078833636,
+        "scale_ratio": 1.2688866172186664,
+        "spatial_support": 0.6540069400803301,
+        "edge_strength_ratio": 0.8253179726712873,
+        "holdout_median_error_px": 0.7828236136915318,
+        "holdout_spatial_support": 0.649065948071811,
+        "scale_evidence_passes": false,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "failure_stage": "fitted",
+        "bidirectional_match_count": 111,
+        "measurable_patch_count": 154,
+        "predicted_overlap_area_px": 118583.56669691196,
+        "hull_support": 0.6540069400803301
+      },
+      "gate_passing_bridge_count": 0
+    },
+    {
+      "components": [
+        0,
+        2
+      ],
+      "candidate_count": 4,
+      "bridge": null,
+      "gate_passing_bridge_count": 0
+    },
+    {
+      "components": [
+        1,
+        2
+      ],
+      "candidate_count": 14,
+      "bridge": {
+        "left": 6,
+        "right": 10,
+        "model": "projective",
+        "selected": false,
+        "inliers": 130,
+        "median_error_px": 0.9867206998368977,
+        "scale_ratio": 1.3641993954255913,
+        "spatial_support": 0.6787060848306801,
+        "edge_strength_ratio": 0.7587026182512084,
+        "holdout_median_error_px": 1.809245104157931,
+        "holdout_spatial_support": 0.637024425381442,
+        "scale_evidence_passes": false,
+        "rejection_reasons": [
+          "station_relation_scale_out_of_range"
+        ],
+        "failure_stage": "fitted",
+        "bidirectional_match_count": 130,
+        "measurable_patch_count": 167,
+        "predicted_overlap_area_px": 95746.8500355844,
+        "hull_support": 0.6787060848306801
+      },
+      "gate_passing_bridge_count": 0
+    }
+  ],
+  "bounded_variants": [
+    {
+      "id": "baseline",
+      "injected_edges": [],
+      "remaining_component_count": 3,
+      "gate_compatible": true
+    },
+    {
+      "id": "force_best_c0_c1",
+      "injected_edges": [
+        [
+          0,
+          1
+        ]
+      ],
+      "remaining_component_count": 2,
+      "gate_compatible": false
+    },
+    {
+      "id": "force_best_c1_c2",
+      "injected_edges": [
+        [
+          1,
+          2
+        ]
+      ],
+      "remaining_component_count": 2,
+      "gate_compatible": false
+    },
+    {
+      "id": "force_both_cross_bridges",
+      "injected_edges": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "remaining_component_count": 1,
+      "gate_compatible": false
+    }
+  ],
+  "conclusion": {
+    "accepted_cross_component_edge_count": 0,
+    "gate_passing_bridge_count": 0,
+    "bounded_grouping_result": "three disconnected components remain; no measured cross-component edge passes the existing relation gates",
+    "next_experiment": "only test explicit source regrouping/overlap fixtures per component; do not relax station scale or edge-strength gates"
+  }
+}

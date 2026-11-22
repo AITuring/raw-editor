@@ -79,6 +79,8 @@
       "expectedSourceCount": 75,
       "sourceBytes": 4516277858,
       "sourceAggregateSha256": "c8225550cd0750da20d7afb573a3942382665bff256cdcb8feb4fdef74027ef9",
+      "expectedSkipped": ["DSC_3842.NEF", "DSC_3910.NEF", "DSC_3911.NEF"],
+      "expectedSoftSkipped": ["DSC_3879.NEF", "DSC_3884.NEF", "DSC_3907.NEF"],
       "baseline": false
     },
     {
@@ -176,6 +178,76 @@
       ],
       "baseline": true,
       "notes": "画身、头部、底部三个文件夹一起倒序传入，含 6 张 PS 导出的“未标题”JPEG，堆栈应把它们留在外面。"
+    },
+    {
+      "id": "chibi",
+      "label": "赤壁",
+      "directory": "赤壁",
+      "sourceExtensions": [
+        ".nef"
+      ],
+      "excludePatterns": [],
+      "expectedSourceCount": 48,
+      "sourceBytes": 2725524205,
+      "sourceAggregateSha256": "d41a9207807ea6bc6bb60d2d71491dbc2e02f77bb059746cd6104bd6ed20b0b8",
+      "baseline": false,
+      "notes": "任务17新增素材；首次登记，等待scale=0.25 D1摸底。"
+    },
+    {
+      "id": "lisong",
+      "label": "李嵩",
+      "directory": "李嵩",
+      "sourceExtensions": [
+        ".nef"
+      ],
+      "excludePatterns": [],
+      "expectedSourceCount": 46,
+      "sourceBytes": 2818722255,
+      "sourceAggregateSha256": "760a30788bd2555c260d3b246217ddaf098b3a0ab50cb826297d336b0d639007",
+      "baseline": false,
+      "notes": "任务17新增素材；首次登记，等待scale=0.25 D1摸底。"
+    },
+    {
+      "id": "xiagui",
+      "label": "夏圭",
+      "directory": "夏圭",
+      "sourceExtensions": [
+        ".nef"
+      ],
+      "excludePatterns": [],
+      "expectedSourceCount": 48,
+      "sourceBytes": 2903839002,
+      "sourceAggregateSha256": "338af8d29e488d8c4d772677ea3471ece805c3c7fa7ec5b5b1ec6f5a3672fc06",
+      "baseline": false,
+      "notes": "任务17新增素材；首次登记，等待scale=0.25 D1摸底。"
+    },
+    {
+      "id": "lidong",
+      "label": "李东",
+      "directory": "李东",
+      "sourceExtensions": [
+        ".nef"
+      ],
+      "excludePatterns": [],
+      "expectedSourceCount": 25,
+      "sourceBytes": 1484471346,
+      "sourceAggregateSha256": "17bedaf100ce2d06e001896b9dc373ad72b0cc80e8e5cbfbb54c4d0eddc76f85",
+      "baseline": false,
+      "notes": "任务17新增素材；首次登记，等待scale=0.25 D1摸底。"
+    },
+    {
+      "id": "zhaoji",
+      "label": "赵佶",
+      "directory": "赵佶",
+      "sourceExtensions": [
+        ".nef"
+      ],
+      "excludePatterns": [],
+      "expectedSourceCount": 47,
+      "sourceBytes": 2703135452,
+      "sourceAggregateSha256": "d839174b01b7ce9ee5e04d9bc2070f3e83d4047c7ab8bf59e327bebaaa2079a8",
+      "baseline": false,
+      "notes": "任务17新增素材；首次登记，等待scale=0.25 D1摸底。"
     }
   ]
 }

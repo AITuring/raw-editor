@@ -168,6 +168,22 @@ function parseLog(text) {
   // uncovered is not written; it lends its detail to the repair only.
   const lending = new Set();
   for (const match of text.matchAll(/Lending '(.+?)': covers no canvas/g)) lending.add(match[1]);
+  const softSkipped = new Set();
+  for (const match of text.matchAll(/Focus scan: leaving out \d+ mostly soft frame\(s\): ([^\n]+)/g)) {
+    for (const entry of match[1].split(/,\s+/)) {
+      const name = entry.match(/^(.*?)\s+\(\d+%/i)?.[1]?.trim();
+      if (name) softSkipped.add(path.basename(name));
+    }
+  }
+  const ordered = [];
+  const orderMatch = text.match(/Stitching order determined: (\[[^\n]*\])/);
+  if (orderMatch) {
+    try {
+      ordered.push(...JSON.parse(orderMatch[1]).map((value) => path.basename(value)));
+    } catch {
+      // Keep the order empty; the source-contract check below reports this as a failure.
+    }
+  }
   const result = text.match(/focus-stack result: (\d+)x(\d+)/);
   // The streaming compositor reports its exact counts; equal covered and owned
   // counts are the same per-pixel ownership claim as the older wording.
@@ -185,6 +201,8 @@ function parseLog(text) {
   return {
     streamed,
     lending,
+    softSkipped,
+    ordered,
     result: result ? { width: Number(result[1]), height: Number(result[2]) } : null,
     ownershipVerified: Boolean(ownership),
     reportPath: report?.[1] ?? null,
@@ -369,6 +387,8 @@ function main() {
   // Photos the stack is expected to leave out by itself (exports among the
   // RAWs, frames that align with nothing or were shot obliquely), by name.
   const expectedSkipped = new Set(limit ? [] : (dataset.expectedSkipped ?? []));
+  const expectedSoftSkipped = new Set(limit ? [] : (dataset.expectedSoftSkipped ?? []));
+  const hasExpectedSoftSkipped = !limit && Array.isArray(dataset.expectedSoftSkipped);
   const scaleTag = `s${String(options.scale).replace('.', 'p')}`;
   const runPrefix = subsetId?.startsWith(dataset.id) ? [subsetId] : [dataset.id, subsetId];
   const runId = [...runPrefix, scaleTag, options.label].filter(Boolean).join('-');
@@ -455,6 +475,7 @@ function main() {
   const report = log.reportPath ? readJson(log.reportPath) : null;
   const failures = [];
   const notices = [];
+  let sourceContractVerdict = 'pass';
 
   if (log.nativeRejection) {
     failures.push(`layered native acceptance failed: ${log.nativeRejection}`);
@@ -495,21 +516,55 @@ function main() {
   const missing = metrics?.inputs?.missing_from_order ?? [];
   const unexpectedMissing = missing.filter((name) => !expectedSkipped.has(name));
   if (unexpectedMissing.length > 0) {
+    sourceContractVerdict = 'fail';
     failures.push(`inputs missing from the stitching order: ${unexpectedMissing.join(', ')}`);
   }
   if (metrics) {
     const stitchedAnyway = [...expectedSkipped].filter((name) => !missing.includes(name));
     if (stitchedAnyway.length > 0) {
+      sourceContractVerdict = 'fail';
       failures.push(`inputs expected to be left out were stitched: ${stitchedAnyway.join(', ')}`);
     }
   }
-  const streamable = inputs.filter((input) => !expectedSkipped.has(path.basename(input)));
+  const orderNames = new Set(log.ordered);
+  const softSkippedOutsideOrder = [...expectedSoftSkipped].filter((name) => !orderNames.has(name));
+  if (softSkippedOutsideOrder.length > 0) {
+    sourceContractVerdict = 'fail';
+    failures.push(`expected soft-skipped inputs missing from the stitching order: ${softSkippedOutsideOrder.join(', ')}`);
+  }
+  const streamable = inputs.filter((input) => {
+    const name = path.basename(input);
+    return !expectedSkipped.has(name) && !expectedSoftSkipped.has(name);
+  });
   const absent = streamable
     .filter((input) => !log.streamed.has(input) && !log.lending.has(input))
     .map((input) => path.basename(input));
   if (log.streamed.size > 0 && absent.length > 0) {
+    sourceContractVerdict = 'fail';
     failures.push(
       `streaming compositor used ${log.streamed.size}/${streamable.length} inputs (${log.lending.size} lending detail only); absent: ${absent.join(', ')}`,
+    );
+  }
+  const sourceContract = {
+    expectedSkipped: [...expectedSkipped],
+    expectedSoftSkipped: [...expectedSoftSkipped],
+    actualSoftSkipped: [...log.softSkipped],
+    missingFromOrder: missing,
+    absentFromStream: absent,
+    ordered: log.ordered.length || metrics?.inputs?.ordered || null,
+    orderedNamesSha256: log.ordered.length
+      ? crypto.createHash('sha256').update(`${log.ordered.join('\n')}\n`, 'utf8').digest('hex')
+      : null,
+    streamed: log.streamed.size || null,
+    verdict: sourceContractVerdict,
+  };
+  const expectedSoftSkippedSorted = [...expectedSoftSkipped].sort();
+  const actualSoftSkippedSorted = [...log.softSkipped].sort();
+  if (hasExpectedSoftSkipped && JSON.stringify(expectedSoftSkippedSorted) !== JSON.stringify(actualSoftSkippedSorted)) {
+    sourceContractVerdict = 'fail';
+    sourceContract.verdict = sourceContractVerdict;
+    failures.push(
+      `soft-skipped source contract differs: expected ${expectedSoftSkippedSorted.join(', ') || '(none)'}; actual ${actualSoftSkippedSorted.join(', ') || '(none)'}`,
     );
   }
   if (referenceBefore && dataset.referenceSha256) {
@@ -561,6 +616,7 @@ function main() {
     elapsedSeconds,
     digests,
     metrics: metricSummary(metrics),
+    sourceContract,
   };
 
   const baselines = readBaselines();

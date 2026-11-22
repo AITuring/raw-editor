@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_lisong_saved_tone_relation_content_audit_r1",
+  "production_impact": "test_only/read_only relation-content audit; no production decision, threshold, bounds or fallback change",
+  "sampler": "docs/benchmarks/task-17-lisong-source-rgb-sampler-r3.json",
+  "station_relation_9_to_13": {
+    "scale_ratio": 1.0016057102844462,
+    "inliers": 275,
+    "spatial_support": 0.6589407508451456,
+    "median_error_px": 0.28884385761913006,
+    "accepted": true
+  },
+  "saved_tone": {
+    "station9_gain": [
+      0.9965487984783706,
+      0.9961867251517138,
+      0.9939249969820493
+    ],
+    "station13_gain": [
+      0.9960834613229171,
+      0.9959198957426233,
+      0.9949846188938034
+    ],
+    "station9_over_station13_gain": [
+      1.0004671668324214,
+      1.0002679225610727,
+      0.9989350368923972
+    ]
+  },
+  "pairwise_rows": [
+    {
+      "label": "station9_vs_station13",
+      "source_a": "DSC_0910",
+      "source_b": "DSC_0912",
+      "station_a": 9,
+      "station_b": 13,
+      "rgb_ratio_a_over_b": [
+        1.1856550099101135,
+        1.2330984391091648,
+        1.280751193872669
+      ],
+      "luma_ratio_a_over_b": 1.2255152879794213,
+      "max_channel_ratio": 1.280751193872669,
+      "saved_station_gain_relation_9_over_13": [
+        1.0004671668324214,
+        1.0002679225610727,
+        0.9989350368923972
+      ],
+      "ratio_exceeds_saved_gain_relation": true
+    },
+    {
+      "label": "station9_vs_station13_reference",
+      "source_a": "DSC_0910",
+      "source_b": "DSC_0905",
+      "station_a": 9,
+      "station_b": 13,
+      "rgb_ratio_a_over_b": [
+        1.2593967997354931,
+        1.2884515712088964,
+        1.3476527435490335
+      ],
+      "luma_ratio_a_over_b": 1.2857342846097042,
+      "max_channel_ratio": 1.3476527435490335,
+      "saved_station_gain_relation_9_over_13": [
+        1.0004671668324214,
+        1.0002679225610727,
+        0.9989350368923972
+      ],
+      "ratio_exceeds_saved_gain_relation": true
+    },
+    {
+      "label": "same_station13",
+      "source_a": "DSC_0912",
+      "source_b": "DSC_0905",
+      "station_a": 13,
+      "station_b": 13,
+      "rgb_ratio_a_over_b": [
+        1.0621949801662542,
+        1.0448894673321625,
+        1.0522361798266773
+      ],
+      "luma_ratio_a_over_b": 1.0491376951564346,
+      "max_channel_ratio": 1.0621949801662542,
+      "saved_station_gain_relation_9_over_13": [
+        1.0004671668324214,
+        1.0002679225610727,
+        0.9989350368923972
+      ],
+      "ratio_exceeds_saved_gain_relation": true
+    }
+  ],
+  "classification": {
+    "same_station13_luma_difference": 1.0491376951564346,
+    "cross_station_max_luma_ratio": 1.2857342846097042,
+    "saved_relation_is_near_unity": true,
+    "bounded_source_content_photometric_witness": true,
+    "production_promotion": "rejected",
+    "interpretation": "The center witness can be strongly different, but the surrounding same-station ring has a near-unity median with a broad spread. This is more consistent with localized content/boundary sensitivity than a stable uniform tone gain; no production tone change is justified.",
+    "ring_followup": "completed",
+    "localized_or_content_sensitive": true,
+    "ring_same_station13_luma_median": 1.0011309022234998,
+    "ring_same_station13_luma_range": [
+      0.9669417726461075,
+      1.1387743112322426
+    ]
+  },
+  "next_step": "Keep production tone bounds, thresholds and fallback unchanged. Treat the witness as localized source-content evidence and move to the next material unless a larger content-matched patch is specifically required.",
+  "ring_audit": "docs/benchmarks/task-17-lisong-source-rgb-ring-audit-r1.json"
+}

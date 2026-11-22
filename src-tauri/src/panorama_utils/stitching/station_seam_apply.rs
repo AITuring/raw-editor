@@ -16,7 +16,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::{
-    FocusTilePayload, NO_OWNER, SeamOrientation, StationSeamPlan, station_current_cross_at,
+    FocusTilePayload, NO_OWNER, SeamOrientation, StationSeamPlan, focus_stack_pixel_is_canvas_like,
+    focus_stack_pixel_is_tone_foreground, station_current_cross_at,
     station_current_transition_candidates, station_local_relation_resample_band_px,
     station_seam_cross_at, station_seam_pair_sample, station_seam_sample,
     station_transition_first_on_low_side,
@@ -545,7 +546,7 @@ where
                 } else {
                     cross >= seam
                 };
-                let desired_owner = if local_second_band {
+                let mut desired_owner = if local_second_band {
                     second_owner
                 } else if first_side {
                     first_owner
@@ -555,7 +556,7 @@ where
                 if desired_owner == current_owner && !local_second_band {
                     continue;
                 }
-                let sampled = if desired_owner == first_owner {
+                let mut sampled = if desired_owner == first_owner {
                     station_seam_sample(
                         first,
                         first_pixels,
@@ -597,6 +598,51 @@ where
                         offset_y,
                     )
                 };
+                // A seam plan can preserve a stale near-black/foreground
+                // owner even when the opposite side has a valid canvas sample.
+                // Prefer the valid canvas side at this bounded seam pixel; the
+                // tone model must not be asked to explain a wrong owner.
+                if let Some((pixel, _)) = sampled.as_ref()
+                    && (!focus_stack_pixel_is_canvas_like(&pixel.0)
+                        || focus_stack_pixel_is_tone_foreground(&pixel.0))
+                {
+                    let alternate_owner = if desired_owner == first_owner {
+                        second_owner
+                    } else {
+                        first_owner
+                    };
+                    let alternate = if alternate_owner == first_owner {
+                        station_seam_sample(
+                            first,
+                            first_pixels,
+                            &first_inverse,
+                            projection,
+                            residual,
+                            x,
+                            y,
+                            offset_x,
+                            offset_y,
+                        )
+                    } else {
+                        station_seam_sample(
+                            second,
+                            second_pixels,
+                            &second_inverse,
+                            projection,
+                            residual,
+                            x,
+                            y,
+                            offset_x,
+                            offset_y,
+                        )
+                    };
+                    if alternate.as_ref().is_some_and(|(candidate, _)| {
+                        focus_stack_pixel_is_canvas_like(&candidate.0)
+                    }) {
+                        desired_owner = alternate_owner;
+                        sampled = alternate;
+                    }
+                }
                 if let Some((mut pixel, source_point)) = sampled {
                     let originals = if desired_owner == first_owner {
                         first_payload.sources.as_ref()

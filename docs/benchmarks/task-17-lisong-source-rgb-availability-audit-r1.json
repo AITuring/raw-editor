@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_lisong_source_rgb_availability_audit_r1",
+  "production_impact": "test_only inventory derived from final Stack_Report; no production decision, threshold, bounds or fallback change",
+  "run_id": "lisong-s0p25-task17-lisongsourceRGBd7r7",
+  "source_rgb_sampler": "docs/benchmarks/task-17-lisong-source-rgb-sampler-r2.json",
+  "stack_report": "output/acceptance/task17/lisong-source-rgb-d7-r7/lisong-s0p25-task17-lisongsourceRGBd7r7-stack-reports/stack-report-b36556b7-39f3-4dd3-a76b-8fc8cd47bb70.json",
+  "request_world": [
+    2269.0,
+    1692.0
+  ],
+  "requested": [
+    {
+      "label": "owner30_station9",
+      "requested_owner": 30,
+      "requested_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0910.NEF",
+      "expected_station_id": 9,
+      "source_file_present_in_grouping": true,
+      "grouping": {
+        "station_index": 9,
+        "row": 9,
+        "column": 0,
+        "anchor": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0910.NEF"
+      },
+      "observed_in_quality_gate_roi": false,
+      "quality_gate_roi_occurrences": 0,
+      "classification": "qg_sparse_roi_unobserved"
+    },
+    {
+      "label": "owner41_station13",
+      "requested_owner": 41,
+      "requested_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF",
+      "expected_station_id": 13,
+      "source_file_present_in_grouping": true,
+      "grouping": {
+        "station_index": 13,
+        "row": 11,
+        "column": 0,
+        "anchor": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF"
+      },
+      "observed_in_quality_gate_roi": true,
+      "quality_gate_roi_occurrences": 1,
+      "classification": "qg_observed"
+    },
+    {
+      "label": "owner44_station13",
+      "requested_owner": 44,
+      "requested_path": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0912.NEF",
+      "expected_station_id": 13,
+      "source_file_present_in_grouping": true,
+      "grouping": {
+        "station_index": 13,
+        "row": 11,
+        "column": 0,
+        "anchor": "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF"
+      },
+      "observed_in_quality_gate_roi": false,
+      "quality_gate_roi_occurrences": 0,
+      "classification": "qg_sparse_roi_unobserved"
+    }
+  ],
+  "qg_observation": {
+    "roi_count": 8,
+    "roi_reference_count": 8,
+    "owner_source_decode_count": 7,
+    "roi_owner_paths": [
+      "/Users/dp/Downloads/书画拼图/李嵩/DSC_0901.NEF",
+      "/Users/dp/Downloads/书画拼图/李嵩/DSC_0903.NEF",
+      "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF",
+      "/Users/dp/Downloads/书画拼图/李嵩/DSC_0907.NEF",
+      "/Users/dp/Downloads/书画拼图/李嵩/DSC_0919.NEF",
+      "/Users/dp/Downloads/书画拼图/李嵩/DSC_0931.NEF",
+      "/Users/dp/Downloads/书画拼图/李嵩/DSC_0933.NEF"
+    ],
+    "station13_observed_paths": [
+      "/Users/dp/Downloads/书画拼图/李嵩/DSC_0905.NEF"
+    ]
+  },
+  "finding": "Requested DSC_0910 and DSC_0912 are present in grouping stations 9 and 13, but the final QG pass selected only DSC_0905 among the requested station-13/9 source paths for its 8 station-level ROIs. The missing RGB records are therefore sparse-QG-ROI evidence gaps; they do not prove owner-id mismatch, source absence, or photometric mismatch.",
+  "decision": "no_complete_three_owner_photometric_mismatch_claim",
+  "next_step": "If owner30/44 RGB values are required, add a bounded test-only ROI/owner availability or path-only sampling request that explicitly selects the witness world for those paths; keep production QG thresholds, tone bounds and fallback unchanged."
+}

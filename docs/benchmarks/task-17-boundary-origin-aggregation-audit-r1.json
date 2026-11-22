@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "task": 17,
+  "method": "task17_boundary_origin_aggregation_audit_r1",
+  "production_impact": "read-only test-only attribution; no quality gate or threshold change",
+  "stack_report": "output/acceptance/task17/lisong-boundary-d2-r2/run/lisong-s0p25-task17-lisongboundaryd2r2-stack-reports/stack-report-825c304f-72ba-4417-a90c-fb3048b664ea.json",
+  "neighbourhood": {
+    "output": {
+      "x": 0,
+      "y": 0
+    },
+    "owner_path": "",
+    "pixel_count": 169,
+    "owner_zero_count": 169,
+    "coverage_zero_count": 169,
+    "luma_zero_count": 169
+  },
+  "quality_gate": {
+    "verdict": "fail",
+    "criterion": "boundary_stroke_alignment",
+    "failed_count": 1
+  },
+  "origin": [
+    -741.0,
+    -5.0
+  ],
+  "failed_at_origin_count": 1,
+  "failed_at_origin_examples": [
+    {
+      "world": {
+        "x": -741.0,
+        "y": -5.0
+      },
+      "measured": 1.7251570602550932,
+      "owner_path": ""
+    }
+  ],
+  "classification": "boundary_origin_uncovered_aggregation",
+  "interpretation": "A native boundary failure is reported at the cropped world origin while the witness neighborhood is owner=0 and coverage=0. This is an attribution/crop semantic lead; it does not change the native QG verdict.",
+  "next_step": "Use a test-only criterion fixture or explicit crop-boundary exclusion audit before considering any production semantic change; do not widen thresholds or bounds."
+}

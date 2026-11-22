@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "task": 17,
+  "status": "new_material_batch_diagnostic_closed",
+  "updated": "2026-11-23",
+  "production_impact": "diagnostic and test_only evidence; no production threshold, bounds, fallback, tone model, source contract or pose change",
+  "datasets": {
+    "chibi": {
+      "inputs": 48,
+      "status": "diagnostic_rejected",
+      "root_cause": "tone/boundary and local-scale failures; station2↔5 source mapping remained native_source_sampling_unmapped",
+      "evidence": ["docs/artwork-lanes/S2-chibi.md", "docs/benchmarks/task-17-chibi-tone-source-mapping-audit-r3.json"]
+    },
+    "lisong": {
+      "inputs": 46,
+      "status": "diagnostic_rejected",
+      "root_cause": "covered station9↔13 boundary-stroke mismatch; saved-tone/source RGB relation is localized and content-sensitive",
+      "evidence": ["docs/artwork-lanes/S2-lisong.md", "docs/benchmarks/task-17-lisong-native-boundary-capture-r3.json", "docs/benchmarks/task-17-lisong-saved-tone-relation-content-audit-r1.json"]
+    },
+    "xiagui": {
+      "inputs": 48,
+      "status": "diagnostic_rejected",
+      "root_cause": "covered station3↔9 boundary-stroke failures remain after corrected witness attribution",
+      "evidence": ["docs/artwork-lanes/S2-xiagui.md", "docs/benchmarks/task-17-xiagui-native-boundary-capture-r3.json"]
+    },
+    "lidong": {
+      "inputs": 25,
+      "status": "diagnostic_rejected_structural",
+      "root_cause": "three disconnected geometry components with no gate-compatible cross-component bridge; fallback QG also fails",
+      "evidence": ["docs/artwork-lanes/S2-lidong.md", "docs/benchmarks/task-17-lidong-grouping-overlap-bounded-r1.json"]
+    },
+    "zhaoji": {
+      "inputs": 47,
+      "status": "diagnostic_rejected",
+      "root_cause": "output-density closure rejected at factor 1.292969/direct P95 3.579453px; station12-only Jacobian A/B improved to 1.244141/3.444277px but moved the worst group to station10/source32",
+      "evidence": ["docs/artwork-lanes/S2-zhaoji.md", "docs/benchmarks/task-17-zhaoji-diagnostic-r1.json", "docs/benchmarks/task-17-zhaoji-station12-jacobian-ab-r1.json"]
+    }
+  },
+  "shared_decision": {
+    "native_or_d3_acceptance": false,
+    "memory_gate": "passed for all recorded task17 D1/bounded runs",
+    "tone_or_qg_unmeasured_when_density_or_mapping_blocked": true,
+    "next_step": "close the current task17 material batch; reopen only for a newly registered material set or an explicit, independently justified source/content/geometry hypothesis",
+    "do_not_do": [
+      "do not widen tone, boundary or geometry thresholds",
+      "do not change production bounds or fallback",
+      "do not force disconnected components together",
+      "do not continue Jacobian factor scans after the zhaoji station12 A/B",
+      "do not treat preview, preflight-only source contract or derivative capture as native D3/QG acceptance"
+    ]
+  }
+}

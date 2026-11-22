@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "task": 14,
+  "method": "wenyuan_tone_boundary_bounded_ab_v1",
+  "production_impact": "test_only_read_only_comparison; no threshold, fallback, geometry, density, or production bound change",
+  "dataset": "wenyuan",
+  "scale": 1.0,
+  "variable": {
+    "name": "local_tone_affine_bound_scale",
+    "control": 1.0,
+    "candidate": 1.5,
+    "scope": "cfg(test) saved native replay only",
+    "hypothesis": "the remaining boundary residual is limited by the local gain/offset box"
+  },
+  "full_scale_context": {
+    "control": {
+      "report": "output/acceptance/task-14/wenyuan-excluded-source-scale1-r1/run/wenyuan-s1-task-14-excluded-source-scale1-r1-stack-reports/stack-report-d074efa8-394d-4bb2-976b-86fd9593942f.json",
+      "tone_model": "station_affine",
+      "tone_status": "degraded",
+      "boundary_max_delta_e00": 8.778901254993071,
+      "boundary_violation_count": 142,
+      "source_count": 126,
+      "station_count": 43,
+      "closure": "converged",
+      "density": "bypassed/nonidentity_world_residual",
+      "quality_gate": "pass",
+      "memory_gate": true,
+      "report_source_digests": true
+    },
+    "candidate": {
+      "report": "output/acceptance/task-14/wenyuan-tone-adaptive-r1/run/wenyuan-s1-task-14-tone-adaptive-r1-stack-reports/stack-report-ee0c224f-f94d-483a-a9d5-bed0521743f4.json",
+      "tone_model": "supported_spatial_affine",
+      "tone_status": "degraded",
+      "native_fitting_relation_count": 43,
+      "boundary_max_delta_e00": 5.447763017721433,
+      "boundary_violation_count": 52,
+      "residual_cluster": [34, 35, 36, 37, 38, 39],
+      "source_count": 126,
+      "station_count": 43,
+      "closure": "converged",
+      "density": "bypassed/nonidentity_world_residual",
+      "quality_gate": "pass",
+      "memory_gate": true,
+      "report_source_digests": true
+    },
+    "strict_single_variable": false,
+    "interpretation": "the historical full reports show adaptive local fit reduced the prior station-affine residual, but their frozen commits differ; use this as context, not causal A/B proof"
+  },
+  "bounded_replay_ab": {
+    "scope": "Wenyuan-10 saved native tone fields",
+    "control": {
+      "bound_scale": 1.0,
+      "maximum_delta_e00": 0.08591107428069629,
+      "failed_window_count": 0,
+      "fitted_relations": 3,
+      "iterations": 1000
+    },
+    "candidate": {
+      "bound_scale": 1.5,
+      "maximum_delta_e00": 0.08591107428069629,
+      "failed_window_count": 0,
+      "fitted_relations": 3,
+      "iterations": 1000
+    },
+    "changed": false,
+    "interpretation": "the saved control has no bound hit, so widening the box is non-discriminating for this subset"
+  },
+  "decision": {
+    "promotion": "rejected",
+    "reason": "the full-scale candidate still fails tone boundary and the bounded replay does not include the offending 34-39 station cluster",
+    "next_step": "keep production bounds and threshold unchanged; export test-only fields for the full cluster or create a synthetic bound-hit fixture before any new full run"
+  },
+  "evidence": {
+    "machine_summary": "output/acceptance/task-14/wenyuan-tone-boundary-ab-r1.json",
+    "driver": "scripts/stack-lab/wenyuan_tone_boundary_ab.py",
+    "control_analysis": "output/acceptance/task-14/wenyuan-excluded-source-scale1-r1/analysis.json",
+    "candidate_analysis": "output/acceptance/task-14/wenyuan-tone-adaptive-r1/analysis.json"
+  }
+}
