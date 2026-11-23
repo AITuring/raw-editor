@@ -3,7 +3,8 @@
 //! The deterministic candidate order, the ownership cost grid and its exact
 //! two-label cuts, the timeout clock and the whole-grid refinement sweeps.
 
-use super::super::super::seam_cut::cut_grid_weighted;
+pub(crate) use super::super::super::seam_cut::CutWork;
+use super::super::super::seam_cut::cut_grid_weighted_metered;
 use super::super::super::seam_cut::pairwise_weight;
 use super::super::degradation::DegradationLedger;
 use super::super::degradation::FUSION_GRAPH_CUT_TIMEOUT;
@@ -67,8 +68,30 @@ pub(crate) fn skips_graph_cut(candidate_count: usize) -> bool {
 /// Reserved ownership identifier of a cell no candidate covers (需求 3.7).
 pub(crate) const NO_OWNER: u16 = 0;
 
-/// Wall-clock budget of the multi-label loop (需求 3.5).
+/// Wall-clock budget of the whole-grid multi-label loop.
+///
+/// Only [`solve_ownership_with_clock`] still uses it; that solver is exercised
+/// by tests and the exhaustive-minimum comparison, never by the renderer. The
+/// production [`super::StationFusion`] uses the deterministic
+/// [`graph_cut_work_limit`] instead (需求 3.5, 2026-11-23 revision).
 pub(crate) const GRAPH_CUT_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Deterministic cut work allowed per ownership cell and per fold round
+/// (需求 3.5).
+///
+/// One unit is one residual edge examined or one traversal step of the
+/// bounded min-cut ([`CutWork`]), so the decision depends only on the cost
+/// grids, never on thread count, machine load or clock speed.
+pub(crate) const GRAPH_CUT_WORK_PER_CELL_ROUND: u64 = 1 << 20;
+
+/// Work budget of one Capture_Station: cells × rounds × the per-cell constant.
+/// A station with at most one frame never cuts, so its budget is irrelevant.
+pub(crate) fn graph_cut_work_limit(cells: usize, frame_count: usize) -> u64 {
+    let rounds = frame_count.saturating_sub(1).max(1) as u64;
+    (cells as u64)
+        .saturating_mul(rounds)
+        .saturating_mul(GRAPH_CUT_WORK_PER_CELL_ROUND)
+}
 
 /// Upper bound on expansion sweeps over the candidate set.
 ///
@@ -355,6 +378,19 @@ impl OwnershipCostGrid {
         candidate: usize,
         participates: impl Fn(u16) -> bool,
     ) -> Vec<u16> {
+        self.binary_move_metered(owners, candidate, participates, &mut CutWork::unlimited())
+            .expect("an unlimited meter never runs out")
+    }
+
+    /// [`Self::binary_move`] under a deterministic work budget (需求 3.5).
+    /// `None` means the cut ran out of budget; the result is otherwise identical.
+    pub(super) fn binary_move_metered(
+        &self,
+        owners: &[u16],
+        candidate: usize,
+        participates: impl Fn(u16) -> bool,
+        work: &mut CutWork,
+    ) -> Option<Vec<u16>> {
         let count = self.cell_count();
         let candidate_owner = owner_of(candidate);
         let mut preference = vec![0.0; count];
@@ -458,25 +494,28 @@ impl OwnershipCostGrid {
                 }
             }
         }
-        let cut = cut_grid_weighted(
+        let cut = cut_grid_weighted_metered(
             self.columns,
             self.rows,
             &preference,
             &self.disagreement,
             &fixed,
             &edge_weights,
-        );
-        cut.iter()
-            .enumerate()
-            .map(|(cell, &side)| {
-                let took_candidate = side > 0 && self.cost(cell, candidate).is_some();
-                if took_candidate {
-                    candidate_owner
-                } else {
-                    owners[cell]
-                }
-            })
-            .collect()
+            work,
+        )?;
+        Some(
+            cut.iter()
+                .enumerate()
+                .map(|(cell, &side)| {
+                    let took_candidate = side > 0 && self.cost(cell, candidate).is_some();
+                    if took_candidate {
+                        candidate_owner
+                    } else {
+                        owners[cell]
+                    }
+                })
+                .collect(),
+        )
     }
 
     /// One "current composite vs next candidate" cut over the whole grid
@@ -489,6 +528,16 @@ impl OwnershipCostGrid {
     /// sweep.
     pub(crate) fn fold_candidate(&self, owners: &[u16], candidate: usize) -> Vec<u16> {
         self.binary_move(owners, candidate, |_| true)
+    }
+
+    /// [`Self::fold_candidate`] charged to a deterministic work budget.
+    pub(crate) fn fold_candidate_metered(
+        &self,
+        owners: &[u16],
+        candidate: usize,
+        work: &mut CutWork,
+    ) -> Option<Vec<u16>> {
+        self.binary_move_metered(owners, candidate, |_| true, work)
     }
 
     /// Hand every cell `candidate` covers to `candidate`, leaving the rest as

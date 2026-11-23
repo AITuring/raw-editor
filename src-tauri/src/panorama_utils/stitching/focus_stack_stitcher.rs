@@ -880,13 +880,17 @@ where
         },
         solver_status: fusion.solver_status(),
         graph_cut_seconds: fusion.graph_cut_seconds(),
+        graph_cut_work: fusion.graph_cut_work().0,
+        graph_cut_work_limit: fusion.graph_cut_work().1,
         confidence: focus_fuser::confidence_summary(&confidence_values, merged_mask.as_raw()),
         low_sharpness_regions,
         ..FusionReport::default()
     };
     println!(
-        "  - Focus ownership solved in {:.2}s ({:?}); mean confidence {:.3}, below 0.05 {:.2}%",
+        "  - Focus ownership solved in {:.2}s, cut work {}/{} ({:?}); mean confidence {:.3}, below 0.05 {:.2}%",
         fusion_report.graph_cut_seconds,
+        fusion_report.graph_cut_work,
+        fusion_report.graph_cut_work_limit,
         fusion_report.solver_status,
         fusion_report.confidence.mean,
         fusion_report.confidence.below_0_05_ratio * 100.0

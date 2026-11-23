@@ -301,7 +301,8 @@ fn station_fusion_marks_the_below_percentile_cells() {
 #[test]
 fn an_exhausted_station_budget_falls_back_to_the_per_cell_minimum() {
     let (mut fusion, _, _, candidate) = two_frame_station();
-    fusion.timeout = Duration::ZERO;
+    // A zero work budget runs out on the first charged unit of the cut.
+    fusion.work = CutWork::with_limit(0);
     let took = fusion.fold(1, &candidate);
     assert_eq!(took, vec![false, false, false, true, true, true]);
     assert_eq!(fusion.solver_status(), FusionSolverStatus::PerCellFallback);
@@ -315,6 +316,75 @@ fn an_exhausted_station_budget_falls_back_to_the_per_cell_minimum() {
         },
     );
     assert_eq!(ledger.entries().len(), 1);
+}
+
+/// 需求 3.5 (2026-11-23): the station budget counts cut work, not seconds.
+/// The same station gives the same owners, status and charged work whether
+/// the fold runs on one thread or many, and however long it takes.
+#[test]
+fn the_station_budget_is_deterministic_cut_work() {
+    let fold_once = || {
+        let (mut fusion, _, _, candidate) = two_frame_station();
+        let took = fusion.fold(1, &candidate);
+        (
+            took,
+            fusion.owners().to_vec(),
+            fusion.solver_status(),
+            fusion.graph_cut_work(),
+        )
+    };
+    let reference = fold_once();
+    assert_eq!(reference.2, FusionSolverStatus::GraphCut);
+    assert!(reference.3.0 > 0, "a real cut charges work");
+    assert!(
+        reference.3.0 <= reference.3.1,
+        "the cut finished inside its budget"
+    );
+    let cells = two_frame_station().0.geometry().cell_count();
+    assert_eq!(reference.3.1, graph_cut_work_limit(cells, 2));
+    for threads in [1, 2, 5, 8] {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        assert_eq!(pool.install(fold_once), reference, "{threads} threads");
+    }
+
+    // A budget one unit short of the measured work falls back, every time,
+    // with the very same charged work: exhaustion is a property of the input.
+    let needed = reference.3.0;
+    let starved = || {
+        let (mut fusion, _, _, candidate) = two_frame_station();
+        fusion.work = CutWork::with_limit(needed - 1);
+        let took = fusion.fold(1, &candidate);
+        (took, fusion.solver_status(), fusion.graph_cut_work().0)
+    };
+    let first = starved();
+    assert_eq!(first.1, FusionSolverStatus::PerCellFallback);
+    assert_eq!(first, starved());
+    // And exactly the measured work is enough.
+    let (mut fusion, _, _, candidate) = two_frame_station();
+    fusion.work = CutWork::with_limit(needed);
+    assert_eq!(fusion.fold(1, &candidate), reference.0);
+    assert_eq!(fusion.solver_status(), FusionSolverStatus::GraphCut);
+}
+
+#[test]
+fn the_station_work_limit_scales_with_cells_and_rounds() {
+    assert_eq!(
+        graph_cut_work_limit(10, 2),
+        10 * GRAPH_CUT_WORK_PER_CELL_ROUND
+    );
+    assert_eq!(
+        graph_cut_work_limit(10, 5),
+        40 * GRAPH_CUT_WORK_PER_CELL_ROUND
+    );
+    // Single-frame stations never cut; their limit is a harmless one round.
+    assert_eq!(
+        graph_cut_work_limit(10, 1),
+        10 * GRAPH_CUT_WORK_PER_CELL_ROUND
+    );
+    assert_eq!(graph_cut_work_limit(usize::MAX, usize::MAX), u64::MAX);
 }
 
 /// The run scoped sink keeps one record per station, replaces a re-rendered

@@ -48,7 +48,14 @@ pub(crate) struct FusionReport {
     pub cell_size_px: u32,
     pub grid: OwnershipGridSize,
     pub solver_status: FusionSolverStatus,
+    /// Timing observation only; the budget is `graph_cut_work_limit`.
     pub graph_cut_seconds: f64,
+    /// Deterministic cut work charged by the station (需求 3.5).
+    #[serde(default)]
+    pub graph_cut_work: u64,
+    /// The station's deterministic cut budget (需求 3.5).
+    #[serde(default)]
+    pub graph_cut_work_limit: u64,
     pub owned_pixels: u64,
     pub uncovered_pixels: u64,
     pub low_sharpness_regions: Vec<LowSharpnessRegionRecord>,
@@ -63,6 +70,8 @@ impl Default for FusionReport {
             grid: OwnershipGridSize::default(),
             solver_status: FusionSolverStatus::NotRun,
             graph_cut_seconds: 0.0,
+            graph_cut_work: 0,
+            graph_cut_work_limit: 0,
             owned_pixels: 0,
             uncovered_pixels: 0,
             low_sharpness_regions: Vec::new(),

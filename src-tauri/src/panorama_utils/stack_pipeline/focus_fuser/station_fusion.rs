@@ -6,15 +6,13 @@
 use super::super::quality_gate;
 use super::super::report::FusionSolverStatus;
 use super::super::report::LowSharpnessRegionRecord;
-use std::time::Duration;
-
-use super::ownership_solver::GraphCutClock;
+use super::ownership_solver::{CutWork, GraphCutClock, graph_cut_work_limit};
 use super::{
-    CellSamplingPlan, GRAPH_CUT_TIMEOUT, MonotonicGraphCutClock, NO_OWNER,
-    OWNERSHIP_DISAGREEMENT_VETO, OwnershipCostGrid, OwnershipGridGeometry, SharpnessCellEvidence,
-    SharpnessEvidenceGrid, TEXTURED_PIXEL_SHARPNESS_FLOOR, cell_confidence, data_cost,
-    low_sharpness_region_records, low_sharpness_regions, low_sharpness_threshold, mismatch_penalty,
-    owner_of, quality_gate_decisive_cells, quality_region_decisive_cells, region_decisive_cells,
+    CellSamplingPlan, MonotonicGraphCutClock, NO_OWNER, OWNERSHIP_DISAGREEMENT_VETO,
+    OwnershipCostGrid, OwnershipGridGeometry, SharpnessCellEvidence, SharpnessEvidenceGrid,
+    TEXTURED_PIXEL_SHARPNESS_FLOOR, cell_confidence, data_cost, low_sharpness_region_records,
+    low_sharpness_regions, low_sharpness_threshold, mismatch_penalty, owner_of,
+    quality_gate_decisive_cells, quality_region_decisive_cells, region_decisive_cells,
 };
 
 // ---------------------------------------------------------------------------
@@ -83,8 +81,10 @@ pub(crate) struct StationFusion {
     pub(super) candidate_counts: Vec<u32>,
     pub(super) disagreement: Vec<f64>,
     pub(super) solver_status: FusionSolverStatus,
+    /// Timing observation only; it never decides anything (需求 3.5).
     pub(super) clock: MonotonicGraphCutClock,
-    pub(super) timeout: Duration,
+    /// Deterministic cut budget of the whole station (需求 3.5).
+    pub(super) work: CutWork,
     pub(super) graph_cut_seconds: f64,
     #[cfg(test)]
     pub(super) forced_owners: Option<Vec<u16>>,
@@ -112,7 +112,7 @@ impl StationFusion {
                 _ => FusionSolverStatus::GraphCut,
             },
             clock: MonotonicGraphCutClock::start(),
-            timeout: GRAPH_CUT_TIMEOUT,
+            work: CutWork::with_limit(graph_cut_work_limit(cells, frame_count)),
             graph_cut_seconds: 0.0,
             #[cfg(test)]
             forced_owners: None,
@@ -149,6 +149,11 @@ impl StationFusion {
 
     pub(crate) fn graph_cut_seconds(&self) -> f64 {
         self.graph_cut_seconds
+    }
+
+    /// Deterministic cut work charged so far and the station's limit.
+    pub(crate) fn graph_cut_work(&self) -> (u64, u64) {
+        (self.work.used, self.work.limit)
     }
 
     /// Record one candidate's Sharpness_Score in the cell's evidence, keeping
@@ -292,12 +297,20 @@ impl StationFusion {
         let data_term_only = false;
         let decided = if data_term_only {
             grid.per_cell_minimum()
-        } else if self.clock.elapsed() >= self.timeout {
+        } else if self.work.exhausted() {
             // 需求 3.5: an exhausted budget resolves the remaining rounds per cell.
             self.solver_status = FusionSolverStatus::PerCellFallback;
             grid.per_cell_minimum()
         } else {
-            grid.fold_candidate(&base_owners, CANDIDATE_LABEL)
+            // The budget counts cut work, not seconds, so the decision is the
+            // same on every thread count and machine load.
+            match grid.fold_candidate_metered(&base_owners, CANDIDATE_LABEL, &mut self.work) {
+                Some(decided) => decided,
+                None => {
+                    self.solver_status = FusionSolverStatus::PerCellFallback;
+                    grid.per_cell_minimum()
+                }
+            }
         };
         self.graph_cut_seconds = self.clock.elapsed().as_secs_f64();
         let candidate_owner = owner_of(CANDIDATE_LABEL);

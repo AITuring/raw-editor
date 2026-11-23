@@ -101,12 +101,14 @@ use cell_metrics::{sharpness_sample_step_px, sharpness_window_px};
 mod ownership_solver;
 
 #[cfg(test)]
+pub(crate) use ownership_solver::{
+    CutWork, GRAPH_CUT_TIMEOUT, GRAPH_CUT_WORK_PER_CELL_ROUND, graph_cut_work_limit,
+};
+#[cfg(test)]
 use ownership_solver::{
     FusionFrame, GraphCutClock, OwnershipSolution, candidate_order, record_solver_degradation,
 };
-pub(crate) use ownership_solver::{
-    GRAPH_CUT_TIMEOUT, MonotonicGraphCutClock, NO_OWNER, OwnershipCostGrid, owner_of,
-};
+pub(crate) use ownership_solver::{MonotonicGraphCutClock, NO_OWNER, OwnershipCostGrid, owner_of};
 #[cfg(test)]
 pub(crate) use ownership_solver::{skips_graph_cut, solve_ownership, solve_ownership_with_clock};
 

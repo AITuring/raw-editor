@@ -12,6 +12,44 @@ struct Graph {
     edges: Vec<Vec<Edge>>,
 }
 
+/// Deterministic work meter of a bounded min-cut (需求 3.5).
+///
+/// One unit is one residual edge examined by the level BFS or one advance /
+/// retreat step of the blocking-flow walk. The count is a pure function of the
+/// graph, so a budget expressed in these units gives the same decision on any
+/// thread count, machine load or clock speed — unlike a wall-clock deadline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CutWork {
+    pub used: u64,
+    pub limit: u64,
+}
+
+impl CutWork {
+    /// A meter that never runs out; used by callers without a budget.
+    pub(crate) fn unlimited() -> Self {
+        Self {
+            used: 0,
+            limit: u64::MAX,
+        }
+    }
+
+    pub(crate) fn with_limit(limit: u64) -> Self {
+        Self { used: 0, limit }
+    }
+
+    /// True once more work was charged than the limit allows.
+    pub(crate) fn exhausted(&self) -> bool {
+        self.used > self.limit
+    }
+
+    /// Charge `units`; `false` means the budget is now exceeded.
+    #[inline]
+    fn charge(&mut self, units: u64) -> bool {
+        self.used = self.used.saturating_add(units);
+        self.used <= self.limit
+    }
+}
+
 pub(super) const OWNERSHIP_PAIRWISE_BASE: f64 = 0.35;
 pub(super) const OWNERSHIP_PAIRWISE_DISAGREEMENT_WEIGHT: f64 = 12.0;
 
@@ -116,11 +154,47 @@ impl Graph {
         levels
     }
 
-    fn source_side(mut self, source: usize, sink: usize) -> Vec<bool> {
+    /// [`Self::levels`] that charges one unit per residual edge examined.
+    fn levels_metered(&self, source: usize, work: &mut CutWork) -> Option<Vec<i32>> {
+        let mut levels = vec![-1; self.edges.len()];
+        let mut queue = Vec::with_capacity(self.edges.len());
+        levels[source] = 0;
+        queue.push(source);
+        let mut head = 0;
+        while head < queue.len() {
+            let u = queue[head];
+            head += 1;
+            if !work.charge(self.edges[u].len() as u64) {
+                return None;
+            }
+            for e in &self.edges[u] {
+                if e.capacity > 1e-9 && levels[e.to] < 0 {
+                    levels[e.to] = levels[u] + 1;
+                    queue.push(e.to);
+                }
+            }
+        }
+        Some(levels)
+    }
+
+    fn source_side(self, source: usize, sink: usize) -> Vec<bool> {
+        self.source_side_metered(source, sink, &mut CutWork::unlimited())
+            .expect("an unlimited meter never runs out")
+    }
+
+    /// Dinic blocking flow under a deterministic work budget. `None` means the
+    /// budget ran out before the minimum cut was found. With an unlimited meter
+    /// the control flow, and so the cut, is identical to the unmetered solver.
+    fn source_side_metered(
+        mut self,
+        source: usize,
+        sink: usize,
+        work: &mut CutWork,
+    ) -> Option<Vec<bool>> {
         loop {
-            let mut levels = self.levels(source);
+            let mut levels = self.levels_metered(source, work)?;
             if levels[sink] < 0 {
-                return levels.into_iter().map(|level| level >= 0).collect();
+                return Some(levels.into_iter().map(|level| level >= 0).collect());
             }
             let mut next = vec![0usize; self.edges.len()];
             loop {
@@ -128,11 +202,17 @@ impl Graph {
                 let mut u = source;
                 while u != sink {
                     while next[u] < self.edges[u].len() {
+                        if !work.charge(1) {
+                            return None;
+                        }
                         let edge = self.edges[u][next[u]];
                         if edge.capacity > 1e-9 && levels[edge.to] == levels[u] + 1 {
                             break;
                         }
                         next[u] += 1;
+                    }
+                    if !work.charge(1) {
+                        return None;
                     }
                     if next[u] == self.edges[u].len() {
                         levels[u] = -1;
@@ -153,6 +233,9 @@ impl Graph {
                     .iter()
                     .map(|&(u, i)| self.edges[u][i].capacity)
                     .fold(f64::INFINITY, f64::min);
+                if !work.charge(path.len() as u64) {
+                    return None;
+                }
                 for (u, i) in path {
                     let edge = self.edges[u][i];
                     self.edges[u][i].capacity -= flow;
@@ -206,6 +289,32 @@ pub(super) fn cut_grid_weighted(
     fixed: &[i8],
     edge_weights: &[(Option<f64>, Option<f64>)],
 ) -> Vec<u8> {
+    cut_grid_weighted_metered(
+        width,
+        height,
+        preference,
+        disagreement,
+        fixed,
+        edge_weights,
+        &mut CutWork::unlimited(),
+    )
+    .expect("an unlimited meter never runs out")
+}
+
+/// [`cut_grid_weighted`] under a deterministic work budget (需求 3.5).
+///
+/// `None` means `work` ran out before the minimum cut was found; `work.used`
+/// then holds the charged units. Within the budget the result is bit-identical
+/// to [`cut_grid_weighted`], because the meter only observes the traversal.
+pub(super) fn cut_grid_weighted_metered(
+    width: usize,
+    height: usize,
+    preference: &[f64],
+    disagreement: &[f64],
+    fixed: &[i8],
+    edge_weights: &[(Option<f64>, Option<f64>)],
+    work: &mut CutWork,
+) -> Option<Vec<u8>> {
     let count = width * height;
     assert_eq!(preference.len(), count);
     assert_eq!(disagreement.len(), count);
@@ -243,12 +352,14 @@ pub(super) fn cut_grid_weighted(
             graph.connect(i, neighbour, weight, weight);
         }
     }
-    graph
-        .source_side(source, sink)
-        .into_iter()
-        .take(count)
-        .map(|new| u8::from(new) * 255)
-        .collect()
+    Some(
+        graph
+            .source_side_metered(source, sink, work)?
+            .into_iter()
+            .take(count)
+            .map(|new| u8::from(new) * 255)
+            .collect(),
+    )
 }
 
 /// Exact fixed-node elimination for the large native ownership revisit.
@@ -370,6 +481,26 @@ mod tests {
             cost
         };
         let labels = cut_grid(3, 2, &preference, &disagreement, &fixed);
+        // The metered cut is the same cut; a budget below its work fails.
+        let edges = vec![(None, None); 6];
+        let mut work = CutWork::unlimited();
+        let metered =
+            cut_grid_weighted_metered(3, 2, &preference, &disagreement, &fixed, &edges, &mut work);
+        assert_eq!(metered.as_deref(), Some(labels.as_slice()));
+        assert!(work.used > 0);
+        let mut short = CutWork::with_limit(work.used - 1);
+        assert!(
+            cut_grid_weighted_metered(3, 2, &preference, &disagreement, &fixed, &edges, &mut short)
+                .is_none()
+        );
+        assert!(short.exhausted());
+        let mut exact = CutWork::with_limit(work.used);
+        assert_eq!(
+            cut_grid_weighted_metered(3, 2, &preference, &disagreement, &fixed, &edges, &mut exact)
+                .as_deref(),
+            Some(labels.as_slice())
+        );
+        assert_eq!(exact.used, work.used);
         let selected = labels
             .iter()
             .enumerate()
