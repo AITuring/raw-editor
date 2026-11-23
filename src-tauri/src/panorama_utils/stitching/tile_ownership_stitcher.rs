@@ -14,7 +14,6 @@ use super::super::render_geometry::transformed_image_region;
 use super::super::stack_pipeline::degradation;
 use super::super::stack_pipeline::residual_warp;
 use super::super::stack_pipeline::tone;
-use super::layered_compositor::stale_owner_should_yield;
 use crate::panorama_utils::shared::ImageInfo;
 use image::GrayImage;
 use image::Rgb;
@@ -747,17 +746,7 @@ where
                             .clamp(1.0, 255.0) as u8;
                         let quality_slot = &mut quality_row[x as usize];
                         let candidate_owner = (index + 1).min(255) as u8;
-                        let current_rgb = &row[x as usize * 3..x as usize * 3 + 3];
-                        let stale_non_canvas_owner =
-                            stale_owner_should_yield(owner_row[x as usize], current_rgb);
                         let selected = if mask_row[x as usize] == 0 {
-                            true
-                        } else if stale_non_canvas_owner {
-                            // A prior station may have occupied this pixel with
-                            // dark foreground/near-black content. Do not let
-                            // that stale owner suppress a valid native canvas
-                            // candidate merely because the seam label prefers
-                            // the existing owner.
                             true
                         } else if let Some((step, columns, labels)) = seam.as_ref() {
                             labels[((y as u32 - top) / step) as usize * columns
@@ -1290,19 +1279,6 @@ where
                             let Some(color) = originals.sample(source) else {
                                 continue;
                             };
-                            let current_rgb = &row[x * 3..x * 3 + 3];
-                            if !crate::panorama_utils::stack_pipeline::compositor::native_revisit_candidate_should_replace(
-                                current_rgb,
-                                color.0.as_slice(),
-                            ) {
-                                // A native revisit may not replace a valid
-                                // canvas owner with a foreground/near-black
-                                // candidate. The seam pass already resolved
-                                // this bounded relation; preserve that owner
-                                // rather than reintroducing the photometric
-                                // mismatch during the final revisit.
-                                continue;
-                            }
                             row[x * 3..x * 3 + 3].copy_from_slice(&color.0);
                             source_row[x] = candidate;
                             owner_row[x] = candidate.min(255) as u8;

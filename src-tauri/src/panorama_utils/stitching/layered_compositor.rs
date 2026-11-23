@@ -17,7 +17,6 @@ use tauri::Runtime;
 
 use super::{
     CoverageMask, FocusSourceRefinement, NO_OWNER, NativeOwnerGeometry, OwnershipMap,
-    focus_stack_pixel_is_canvas_like, focus_stack_pixel_is_tone_foreground,
     focus_tile_ownership_stitcher_with_finishing, get_high_quality_interpolated_pixel,
     resolve_native_owner_geometry,
 };
@@ -35,14 +34,6 @@ pub(super) fn focus_tile_ownership_should_replace(
     current_owner == 0
         || candidate_quality > current_quality
         || (candidate_quality == current_quality && candidate_owner < current_owner)
-}
-
-/// A covered pixel owned by a prior station should yield when its RGB is
-/// clearly non-canvas/foreground content. This lets a valid native canvas
-/// sample replace stale near-black ownership without changing the tone bounds.
-pub(super) fn stale_owner_should_yield(current_owner: u8, pixel: &[f32]) -> bool {
-    current_owner > 0
-        && (!focus_stack_pixel_is_canvas_like(pixel) || focus_stack_pixel_is_tone_foreground(pixel))
 }
 
 /// Compose already-fused focus tiles in one ownership pass.
@@ -457,15 +448,4 @@ fn diagnostic_nearest_only() -> bool {
     *ENABLED.get_or_init(|| {
         std::env::var("RAW_EDITOR_DIAGNOSTIC_NATIVE_NEAREST_ONLY").as_deref() == Ok("1")
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::stale_owner_should_yield;
-
-    #[test]
-    fn stale_dark_owner_yields_to_a_native_candidate() {
-        assert!(stale_owner_should_yield(3, &[0.004, 0.0, 0.0]));
-        assert!(!stale_owner_should_yield(0, &[0.004, 0.0, 0.0]));
-    }
 }
