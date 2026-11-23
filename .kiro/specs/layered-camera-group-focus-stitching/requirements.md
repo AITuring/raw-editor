@@ -214,8 +214,20 @@
 4. THE Focus_Fuser SHALL 用图割在 ownership 网格上最小化由单元数据项（`1 − Sharpness_Score` 加不一致性
    惩罚）与相邻单元 owner 不同时按跨界像素差递增的平滑项组成的总代价，并使每个已覆盖单元得到恰好
    一个 owner。
-5. IF 图割求解在 120 秒内未收敛，THEN THE Focus_Fuser SHALL 回退为逐单元选取代价最低的候选作为
-   owner，并在 Stack_Report 中把该 Capture_Station 的 ownership 求解状态记录为降级。
+5. IF 图割求解在确定性计算量预算内未完成，THEN THE Focus_Fuser SHALL 回退为逐单元选取代价最低的候选
+   作为 owner，并在 Stack_Report 中把该 Capture_Station 的 ownership 求解状态记录为降级。计算量以
+   最小割遍历检查的残量边数和推进/回退步数计量，只取决于代价网格；每个 Capture_Station 的预算为
+   ownership 单元数 × 折叠轮数（帧数−1）× 16384。Stack_Report SHALL 记录每个 Capture_Station 的实际
+   计算量 `graph_cut_work` 与预算 `graph_cut_work_limit`；`graph_cut_seconds` 只作耗时观察，不参与判定。
+
+   说明（2026-11-23 修订，用户决定）：原文为“在 120 秒内未收敛”。墙钟预算使输出依赖线程数与机器负载：
+   睡觉9张 scale=1 下，station2 在 8/5 线程约 55/66 秒完成图割，2 线程 117.8/123.7 秒在 120 秒两侧，
+   同线程重复也得到不同 TIFF，1 线程约 217 秒必然回退（`docs/benchmarks/task-4b-sleeping9-determinism-r2.json`、
+   `docs/benchmarks/task-4b-sleeping9-determinism-r2-root-cause.json`），违反 D5 的同二进制两次一致要求。
+   改为计算量后，预算内的割与原实现逐位相同；同一素材实测每单元每轮 395–820 单位，16384 约留 20 倍余量
+   （`docs/benchmarks/2B12-graph-cut-work-budget-control-r1.json`）。降级标识 `fusion_graph_cut_timeout`
+   为保持报告兼容沿用原名。
+
 6. THE Focus_Fuser SHALL 直接复制被选中 Source_RAW 的像素作为该 ownership 单元的输出，不对来自不同
    owner 的任何细节频带做加权平均，也不在 owner 边界引入过渡混合带。
 7. IF 某些像素在投影后落在所有候选的有效覆盖之外，THEN THE Focus_Fuser SHALL 在 Coverage_Mask 中把

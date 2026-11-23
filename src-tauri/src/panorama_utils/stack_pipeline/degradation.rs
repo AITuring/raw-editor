@@ -77,7 +77,8 @@ pub const INTRA_STATION_LOCAL_BASELINE_INDETERMINATE: &str =
 pub const INTRA_STATION_REGISTRATION_FAILED: &str = "intra_station_registration_failed";
 /// Spatial support < 20% or median error > 0.01 long side; not joined to a station.
 pub const INTRA_STATION_REJECTED_FROM_GROUP: &str = "intra_station_rejected_from_group";
-/// Graph cut did not converge within 120 s; per cell minimum cost used.
+/// Graph cut exceeded its deterministic work budget; per cell minimum cost
+/// used. The identifier keeps its historical name for report stability.
 pub const FUSION_GRAPH_CUT_TIMEOUT: &str = "fusion_graph_cut_timeout";
 /// Every non anchor frame failed; the station degraded to a single frame.
 pub const FUSION_SINGLE_FRAME_DEGRADED: &str = "fusion_single_frame_degraded";

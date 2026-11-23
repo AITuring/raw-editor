@@ -67,7 +67,7 @@ impl CandidateCells {
 /// two label min-cut is the exact minimum of its energy.  What is given up is
 /// the cross-round refinement, which is also where 7.8 measured the cost — a
 /// 528×352 grid at the 48 frame bound would need hundreds of cuts and reach the
-/// 120 s budget of 需求 3.5 on its own.  One exact cut per candidate keeps the
+/// work budget of 需求 3.5 on its own.  One exact cut per candidate keeps the
 /// station at `frames − 1` cuts.
 pub(crate) struct StationFusion {
     pub(super) geometry: OwnershipGridGeometry,

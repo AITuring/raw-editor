@@ -16,7 +16,7 @@ use super::report_schema_core::*;
 pub(crate) enum FusionSolverStatus {
     /// Multi-label graph cut converged.
     GraphCut,
-    /// Graph cut timed out; per-cell minimum cost was used instead.
+    /// Graph cut exceeded its work budget; per-cell minimum cost was used.
     PerCellFallback,
     /// A single frame covers the station, so no cut was needed.
     SingleFrame,

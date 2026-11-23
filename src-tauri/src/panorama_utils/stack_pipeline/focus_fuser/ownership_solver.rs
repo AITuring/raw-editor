@@ -82,7 +82,12 @@ pub(crate) const GRAPH_CUT_TIMEOUT: Duration = Duration::from_secs(120);
 /// One unit is one residual edge examined or one traversal step of the
 /// bounded min-cut ([`CutWork`]), so the decision depends only on the cost
 /// grids, never on thread count, machine load or clock speed.
-pub(crate) const GRAPH_CUT_WORK_PER_CELL_ROUND: u64 = 1 << 20;
+///
+/// Calibration (2026-11-23, sleeping-9-6479 at scale 1): the three stations
+/// used 395, 579 and 820 units per cell and round. 16384 leaves about 20×
+/// headroom over the largest measurement, see
+/// `docs/benchmarks/2B12-graph-cut-work-budget-control-r1.json`.
+pub(crate) const GRAPH_CUT_WORK_PER_CELL_ROUND: u64 = 1 << 14;
 
 /// Work budget of one Capture_Station: cells × rounds × the per-cell constant.
 /// A station with at most one frame never cuts, so its budget is irrelevant.
@@ -656,7 +661,7 @@ impl OwnershipSolution {
     }
 }
 
-/// Record the degraded path of 需求 3.5 when the cut ran out of time.
+/// Record the degraded path of 需求 3.5 when the cut ran out of budget.
 pub(crate) fn record_solver_degradation(
     ledger: &mut DegradationLedger,
     solution: &OwnershipSolution,

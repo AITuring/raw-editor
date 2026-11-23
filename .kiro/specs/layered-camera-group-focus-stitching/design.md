@@ -400,8 +400,12 @@ pub struct FusionOutcome {
    - `fixed[i]` 用于把未被候选覆盖的单元钉在当前 owner 上，
      把只有候选覆盖的单元钉在候选上，从而满足需求 3.11。
      每轮结束后单元的 owner 唯一，循环结束后每个已覆盖单元恰好一个 owner。
-6. **120 秒超时降级（需求 3.5）**：在多标签循环外挂单调时钟；超时后剩余候选改为逐单元取
-   最低代价，`solver_status = PerCellFallback`。
+6. **计算量预算降级（需求 3.5，2026-11-23 起替代 120 秒墙钟超时）**：`StationFusion` 持有一个
+   `CutWork` 计数器，预算 = 单元数 × (帧数−1) × `GRAPH_CUT_WORK_PER_CELL_ROUND`（16384）；每轮的
+   最小割（`seam_cut::cut_grid_weighted_metered`）按检查的残量边和遍历步数扣减。预算用尽时该轮及其后
+   各轮改为逐单元取最低代价，`solver_status = PerCellFallback`。预算内结果与不计量的割逐位相同，
+   判定与线程数、负载无关。`graph_cut_seconds` 仅作观察。仅供测试的整网格求解器
+   `solve_ownership_with_clock` 仍保留可注入时钟。
 7. **单帧机位短路（需求 3.10）**：`members.len() == 1` 或只有 1 帧配准成功时跳过图割，
    `solver_status = SingleFrame`。
 8. **硬归属写入（需求 3.6）**：像素写入阶段严格按 `owner` 复制。
@@ -2098,7 +2102,7 @@ _对于任意_ Stack_Report，Acceptance_Harness 判定该次运行为失败当�
 | `intra_station_local_fallback`      | 某帧局部配准不优于全局，整帧回退                  | Degraded |
 | `intra_station_registration_failed` | 某帧内点空间覆盖率 <20%                           | Degraded |
 | `intra_station_rejected_from_group` | 空间支持 <20% 或中位误差 >0.01 长边，拒绝并入机位 | Degraded |
-| `fusion_graph_cut_timeout`          | 图割 120 秒未收敛，回退逐单元                     | Degraded |
+| `fusion_graph_cut_timeout`          | 图割超出确定性计算量预算，回退逐单元（沿用原名） | Degraded |
 | `fusion_single_frame_degraded`      | 全部非锚点帧失败，降级为单帧                      | Degraded |
 | `fusion_low_sharpness_region`       | 存在全候选低于 P10 的低清晰度区域                 | Degraded |
 
@@ -2699,11 +2703,9 @@ flowchart LR
 8% 调整为 16%；站位关系的内点、重投影误差、尺度、覆盖和结构判据保持不变。搜索仍受
 固定上限和瓦片尺寸共同约束，不转为无界搜索。
 
-
 2026-10-12 原尺寸镜头几何补充：`/Volumes/2023西安/152` 的 61 张 NEF 使用 Nikon Z 7_2、NIKKOR Z 24-120mm f/4 S、24mm。共同 RAW 加载入口此前只执行默认显色，没有应用镜头畸变标定；原尺寸 station 2→3 的匹配点存在随位置变化的残差，最终仅 579 点和 8.98% 空间支持。用自带 `mil-nikon.xml` 的真实 PTLens 标定做诊断对照后，5 个原先失败的连接全部通过原有几何/像素门槛，2→3 为 1,429 点、1.93px 中位误差。
 
 `StackLensCalibration` 只接受精确型号和相同传感器裁切、画幅比例、有效焦段及单调 rectilinear PTLens 标定，半径单位为原图短边一半，无艺术倍率。共同 `load_prepared_stack_source` 在 RAW 显色后执行一次 Catmull-Rom 光学校正，分析及重新加载的渲染参考使用同一结果。依据原片全部边界逆映射扩展画布；无物理样本的外角保持无覆盖黑值，由既有有效采样判据排除。此光学校正属于原片准备，Virtual_Tile→世界坐标仍只进行一次采样；完整输出质量必须重新与相同准备流程的 owner 参考验证。缓存管线版本提升为 `stack-2026.10.12.3`。该对照只证明候选修复，完整原尺寸复测仍在执行。
-
 
 线性 RAW 准备补充：仅在整批 RAW 的相机型号一致且曝光元数据完整时，用准确有理数
 `exposure_time × ISO / f_number²` 的中位数作为统一参考，在 gamma 前应用曝光增益。
@@ -2715,12 +2717,10 @@ flowchart LR
 要求往返误差不超过 1 个原生像素，再拟合单应性并复核原有内点与空间支持门槛。
 降采样关系只能提供搜索初值，不能把低分辨率往返精度当作原生配准精度。
 
-
 质量参考映射补充：`FocusStackTileMasks` 记录各 Source_RAW 实际应用的站内平移、原生局部场
 和前景移动。质量参考先逆前景移动，再取原生局部场、撤销站内平移并加回机位采样原点，
 最后调用与 `render_focus_layer` 共用的单应性/局部边带逆映射取得原片坐标。
 该记录只用于来源参考采样，不改变融合像素或允许的残差对齐上限；不保留额外全尺寸 RGB 副本。
-
 
 原生精修采样补充：先用投影层测量站内平移和局部场，最终候选像素将这些逆映射合并到原片
 坐标，直接采样准备后的 Source_RAW 一次；不再对已投影层做双线性二次变形。
