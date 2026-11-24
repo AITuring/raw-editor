@@ -289,19 +289,21 @@ flowchart LR
   - 演示：§3.1 兰亭为 D5，复看队列 0/3。
   - 验收：会话中展示整图与 C1–C6 原生裁片（原 README 绝对路径在编辑器预览中无法显示，另建 `README-preview.md` 与 `view/` 8位浏览副本），用户回复“通过”。独立 `shasum` 复算4份TIFF均为 `29852099…`（task-6 r2 两次、2B.13 与 2B.12 中等层各一次）。R20261118-1 已关闭；§3.1 记 D5。未覆盖：兰亭走 legacy 路径，线程矩阵只在睡觉9张上运行；乱序/并发/取消/OOM 仍归任务22。
 
-- [ ] 2B.4 harness 修复：参考配准指标失败不中断原生判定（线B）
+- [x] 2B.4 harness 修复：参考配准指标失败不中断原生判定（线B，2026-11-23）
   - 目标：参考配准失败时仍输出 result 行并执行原生验收判定，失败原因如实记录。
   - 做法：`focus_stack_fixture.rs` 的 `write_acceptance_metrics` 调用处，参考配准失败时在 metrics 写 `reference.status="registration_failed"` 与原因，不 panic；其他写入错误仍报错。`tests/focus-stack-regression.mjs` 在 `log.result` 缺失时单独报“缺少 result 行”，只在有 result 行时比较尺寸。不改任何质量判据。
   - 修改：`src-tauri/src/panorama_stitching/acceptance_tests/focus_stack_fixture.rs`、`src-tauri/src/panorama_acceptance_metrics.rs`（参考配准错误类型）、`tests/focus-stack-regression.mjs`。资源：少量 `build`。依赖：2B.1。冲突：无（不碰生产路径）。
   - 测试：Rust 单元测试（不可配准的参考图下 fixture 仍输出 result 行、metrics 记录失败）；Node 测试（用4C真实日志片段喂 `parseLog`，得到“缺少 result 行”而不是尺寸不一致）；快速层；中等层5/5 TIFF 不变。
   - 演示：用 4C 日志重放 runner，失败原因正确。不重跑84张。
+  - 验收：提交 `5dc60ce6`。参考配准失败写入 `reference.status="registration_failed"` 与原因，成功时为 `measured`；解码/写入错误仍报错。runner 缺 result 行只报一次，有 result 行才比尺寸；配准失败作为显式失败（floor 比较会跳过 null，不能静默通过）。Rust 新测试与模块4项通过；Node 13/13（新增 4C 形态的 metrics-panic 与 registration-failed 场景）。冻结 `2B4-metrics-reference-r1`：快速层通过，中等层5/5、TIFF不变（`output/acceptance/2B.4/matrix-2b4-r2-medium`；首轮因 `task-2` lane 输出达20GiB上限被 runner 拒绝启动，非代码问题）。
 
-- [ ] 2B.5 QG what-if 重放工具（线B，只读离线）
+- [x] 2B.5 QG what-if 重放工具（线B，只读离线，2026-11-23）
   - 目标：对已有 Stack_Report 在当前规则和各候选规则下重算判定，量化每个决策条目的影响。
   - 做法：新增 `scripts/stack-lab/qg_whatif.py`，读 criteria 记录、closure/density 报告与 tone 报告，用 Python 复刻 `criterion_verdict`、`overall_verdict`（`quality_gate_runner/criteria.rs`）、`validate_output_closure`（`output_density.rs`）和 `verify_layered_native_acceptance`（`focus_stack_fixture.rs`），并为 C1、C3、C5、C6 加开关；C2、C4、C7 需要新测量，只标记“需重跑”。
   - 修改：`scripts/stack-lab/qg_whatif.py`、`tests/stack-lab/`。资源：无（不编译、不跑素材）。依赖：2B.1。冲突：无。
   - 测试：合成报告单元测试；在 13 套素材最新报告上按当前规则重算的判定必须与记录完全一致，否则先修工具。
   - 演示：`docs/benchmarks/qg-whatif-r1.json`，含“当前规则判定”与“各条目单独开启时的判定”两张表。
+  - 验收：提交 `ef0f565a`，`scripts/stack-lab/qg_whatif.py` + `qg_whatif_cases.json`（13套素材20个用例）+ 9项单元测试。当前规则重放与全部记录的判据、QG、density 判定一致。可算条目结果：C1 使马远2/睡觉45/赵佶（0.25）的 density 由 rejected 变 applied，QG 需重跑；C3 使李嵩 QG 变 pass（0.25 下 native 仍因 local_scale 诊断项拒绝），马远2 scale=1 QG 由 fail 变 insufficient_evidence（剩 effective_pixel_count/owner）。C2、C4–C7 标为 needs_rerun 并列出所需证据。见[r1输出](../../../docs/benchmarks/qg-whatif-r1.json)。
 
 - [ ] 2B.6 QG 合同决策清单（线B，纯文档）
   - 目标：给用户一份可逐条批准的清单。
