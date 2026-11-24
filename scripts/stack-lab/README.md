@@ -98,3 +98,17 @@ python3 scripts/stack-lab/matrix.py --tier full --binary base-2026-11-12 --label
 输出为`output/acceptance/<lane>/matrix-<label>-<tier>/matrix.json`及每个case的attempt目录；保存完整预期快照和预期文件SHA。可用`--case <id>`限定层内case，或`--matrix <copy.json>`验证独立预期；工具不会写回预期文件。复现负向验证时只改副本中一项TIFF SHA，预期是两轮实际运行后返回1，而不是修改正式基线。
 
 限额修复与旧版本兼容范围见 [任务4记录](../../docs/artwork-lanes/4-two-slots.md)。`base-2026-11-12`仍是像素比较基准；其旧预处理池不受全局Rayon上限约束，所以从本版本起实际运行自动独占。共享两槽场景使用经过探针与真实回归的新冻结版本。
+
+## 确定性矩阵（任务4B）
+
+在一次原生全量试跑或性能计时前，先对同一冻结二进制执行有界独占矩阵：
+
+```sh
+python3 scripts/stack-lab/determinism.py \
+  --binary <frozen-label> --lane task-22 --dataset langyuan \
+  --scale 1 --label r1 --threads 1,2,5,8 --repeat 2
+```
+
+每次尝试都通过 `run.py --exclusive` 取得独占槽，比较 `status`、`acceptance_state`、QG、闭环、来源计数、输出元数据和输出 SHA；wall、RSS 和报告路径只保留为资源观察。若 slot supervisor 在 native 启动前因 required nice/setpriority 无法建立进程，矩阵状态记为 `blocked` 并记录 `native_runs_started=false`，不将其当作确定性失败或通过。改名/乱序、并发、取消、OOM 与 provider fallback 目前明确标为 `not_run`，不计入确定性通过。
+
+环境权限阻断应另存探针结果；不得通过删除 `nice`、降低资源门或直接调用 native 绕过 slot 合同。

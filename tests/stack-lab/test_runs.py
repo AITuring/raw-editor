@@ -126,6 +126,7 @@ class RunsTest(fixtures.ToolsTest):
         execution=json.loads((dest/'execution.json').read_text());actual=json.loads((dest/'analysis.json').read_text())
         self.assertEqual(execution['resource_contract']['status'],'verified')
         self.assertEqual(actual['status'],'quality_accepted')
+        self.assertEqual(actual['acceptance_state'], 'accepted')
         self.assertTrue(actual['memory_gate_pass'])
         self.assertGreater(actual['peak_rss_bytes'],0)
         self.assertTrue(all(actual['checks'].values()))
@@ -159,6 +160,30 @@ class RunsTest(fixtures.ToolsTest):
             self.assertNotEqual(code,0)
             self.assertEqual(json.loads((dest/'analysis.json').read_text())['status'],'rejected')
 
+    def test_empty_source_is_rejected_before_native_run(self):
+        (self.data / 'sleeping' / '1.NEF').write_bytes(b'')
+        (code, _, err), dest = self.run_one('empty-source')
+        self.assertEqual(code, 1, err)
+        execution = json.loads((dest / 'execution.json').read_text())
+        analysis = json.loads((dest / 'analysis.json').read_text())
+        self.assertEqual(execution['state'], 'preflight_failed')
+        self.assertEqual(analysis['status'], 'not_run')
+        self.assertEqual(analysis['reason_code'], 'input_preflight_failed')
+        self.assertEqual(analysis['outcome'], 'rejected')
+        self.assertEqual(analysis['input_preflight']['failures'][0]['code'], 'source_empty')
+        self.assertFalse((dest / 'run.log').exists())
+
+    def test_manifest_inventory_mismatch_is_structured_not_run(self):
+        self.manifest['datasets'][0]['expectedSourceCount'] = 4
+        (self.root / 'tests/acceptance/focus-stack-datasets.json').write_text(json.dumps(self.manifest))
+        (code, _, err), dest = self.run_one('inventory-mismatch')
+        self.assertEqual(code, 1, err)
+        execution = json.loads((dest / 'execution.json').read_text())
+        analysis = json.loads((dest / 'analysis.json').read_text())
+        self.assertEqual(execution['state'], 'preflight_failed')
+        self.assertEqual(analysis['status'], 'not_run')
+        self.assertEqual(analysis['input_preflight']['failures'][0]['code'], 'dataset_inventory_invalid')
+
     def test_schema8_excluded_source_contract_filters_active_digest_check(self):
         self.manifest['datasets'][0]['expectedSkipped'] = ['2.NEF']
         (self.root/'tests/acceptance/focus-stack-datasets.json').write_text(json.dumps(self.manifest))
@@ -171,6 +196,19 @@ class RunsTest(fixtures.ToolsTest):
         self.assertEqual(analysis['status'], 'quality_accepted')
         self.assertTrue(analysis['checks']['report_source_digests'])
         self.assertEqual(analysis['sources']['expected_skipped'], ['2.NEF'])
+
+    def test_expected_empty_skip_is_recorded_without_blocking_run(self):
+        self.manifest['datasets'][0]['expectedSkipped'] = ['2.NEF']
+        (self.root / 'tests/acceptance/focus-stack-datasets.json').write_text(json.dumps(self.manifest))
+        (self.data / 'sleeping' / '2.NEF').write_bytes(b'')
+        code, _, err = self.run_tool(
+            'run.py', '--binary', 'fixture', '--lane', 'task-2', '--dataset', 'sleeping',
+            '--label', 'empty-expected-skip', '--env', 'RAW_EDITOR_TEST_MODE=excluded_source_contract')
+        self.assertEqual(code, 0, err)
+        dest = self.root / 'output/acceptance/task-2/sleeping-empty-expected-skip'
+        execution = json.loads((dest / 'execution.json').read_text())
+        self.assertEqual(execution['input_preflight']['status'], 'pass')
+        self.assertEqual(execution['input_preflight']['explicit_exclusions'][0]['name'], '2.NEF')
 
     def test_select_measured_report_and_reject_ambiguous_evidence(self):
         self.assertEqual(self.run_one('aux','aux_report')[0][0],0)

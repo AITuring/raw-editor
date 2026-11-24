@@ -206,10 +206,15 @@ def analyse(dest, execution, build, directory, entry):
          'runner_exit_zero', 'native_child_exit_zero', 'runner_summary_present', 'runner_failures_empty'))
     status = ('cancelled' if cancelled else 'resource_failed' if not memory_ok else
               'quality_accepted' if passed else 'rendered_without_quality_acceptance' if preview_success else 'rejected')
+    acceptance_state = ('cancelled' if cancelled else 'resource_failed' if not memory_ok else
+                        'accepted' if passed else 'preview_only' if preview_success else
+                        'rejected' if status == 'rejected' else
+                        'degraded' if (report.get('degradation') or {}).get('result') == 'degraded' else 'rejected')
     comp = report.get('composition') or {}
     input_report = report.get('input') or {}
     contention_with = contention(execution['slot'], time.time())
-    return dict(status=status, checks=checks, exit_code=execution['exit_code'], runner_failures=(summary or {}).get('failures'),
+    return dict(schema=2, status=status, acceptance_state=acceptance_state,
+                input_preflight=execution.get('input_preflight'), checks=checks, exit_code=execution['exit_code'], runner_failures=(summary or {}).get('failures'),
                 runner_verdict=(summary or {}).get('verdict'), binary_sha256=build['sha256'], commit=build['commit'],
                 selected_path=report.get('selected_path'), station_count=(report.get('grouping') or {}).get('station_count'),
                 quality_gate={'verdict': qg.get('verdict'), 'roi_count': qg.get('roi_count'), 'criteria': criteria,
@@ -250,13 +255,102 @@ def check_disk(lane):
         raise ValueError('lane output reached 20 GiB; pause new runs')
 
 
+def input_preflight(files, entry, subset=None):
+    """Validate selected source files before starting the native harness.
+
+    Explicit ``expectedSkipped`` entries are allowed to be empty because the
+    production report must be able to record them as excluded sources. Any
+    other missing, non-file, or zero-byte source is a hard preflight failure;
+    no native process is started for that run.
+    """
+    expected_skipped = set() if subset else set(entry.get('expectedSkipped', []))
+    explicit_exclusions = []
+    failures = []
+    for path in files:
+        name = Path(path).name
+        try:
+            stat = Path(path).stat()
+        except OSError as exc:
+            failures.append({'path': str(path), 'code': 'source_unreadable', 'detail': str(exc)})
+            continue
+        if not Path(path).is_file():
+            failures.append({'path': str(path), 'code': 'source_not_file'})
+            continue
+        if stat.st_size == 0:
+            if name in expected_skipped:
+                explicit_exclusions.append({'path': str(path), 'name': name, 'code': 'empty_expected_skip'})
+            else:
+                failures.append({'path': str(path), 'code': 'source_empty', 'bytes': 0})
+    return {
+        'status': 'fail' if failures else 'pass',
+        'selected_count': len(files),
+        'expected_skipped': sorted(expected_skipped),
+        'explicit_exclusions': explicit_exclusions,
+        'failures': failures,
+    }
+
+
+def preflight_analysis(execution, preflight):
+    """Write a machine-readable non-run result without weakening rejection semantics."""
+    return {
+        'schema': 2,
+        'status': 'not_run',
+        'acceptance_state': 'not_run',
+        'reason_code': 'input_preflight_failed',
+        'outcome': 'rejected',
+        'exit_code': 1,
+        'runner_failures': [
+            f"{item['code']}: {item.get('path') or item.get('detail', '')}" for item in preflight['failures']
+        ],
+        'checks': {'input_preflight': False},
+        'input_preflight': preflight,
+        'memory_gate_pass': False,
+        'quality_gate': {'verdict': 'not_run', 'roi_count': 0, 'criteria': {}},
+        'execution_state': execution.get('state'),
+        'dataset': execution.get('dataset'),
+        'subset': execution.get('subset'),
+        'scale': execution.get('scale'),
+        'binary_sha256': execution.get('binary_sha256'),
+        'commit': execution.get('commit'),
+        'inputs': len(execution.get('inputs', [])),
+    }
+
+
+def finish_preflight(dest, execution, preflight):
+    execution['state'] = 'preflight_failed'
+    execution['exit_code'] = 1
+    execution['finished_epoch'] = time.time()
+    write(dest / 'execution.json', execution)
+    analysis = preflight_analysis(execution, preflight)
+    write(dest / 'analysis.json', analysis)
+    print(json.dumps({'directory': str(dest), 'status': analysis['status'],
+                      'reason_code': analysis['reason_code']}, ensure_ascii=False), flush=True)
+    return 1
+
+
 def run(args):
     directory, build = verify_binary(args.binary)
-    entry, files = dataset_files(args.dataset, args.subset)
     dest = destination(args)
     check_disk(args.lane)
     dest.mkdir(parents=True, exist_ok=False)
+    try:
+        entry, files = dataset_files(args.dataset, args.subset)
+    except (OSError, StopIteration, SystemExit) as exc:
+        preflight = {
+            'status': 'fail', 'selected_count': 0, 'expected_skipped': [],
+            'explicit_exclusions': [],
+            'failures': [{'code': 'dataset_inventory_invalid', 'detail': str(exc)}],
+        }
+        execution = {
+            'schema': 2, 'dataset': args.dataset, 'subset': args.subset, 'scale': args.scale,
+            'framed': args.framed, 'preview_only': args.preview_only, 'lane': args.lane,
+            'label': args.label, 'binary': args.binary, 'binary_sha256': build['sha256'],
+            'commit': build['commit'], 'inputs': [], 'input_preflight': preflight,
+            'state': 'running', 'started_epoch': time.time(),
+        }
+        return finish_preflight(dest, execution, preflight)
     inputs = [{'path': str(p), 'sha256': sha(p), 'bytes': p.stat().st_size} for p in files]
+    preflight = input_preflight(files, entry, args.subset)
     reference_path = DATA / (entry.get('directory') or entry['directories'][0]) / entry['referenceOutput'] if entry.get('referenceOutput') else None
     if reference_path and not reference_path.is_file():
         raise ValueError(f'reference missing: {reference_path}')
@@ -283,16 +377,19 @@ def run(args):
     if args.preview_only:
         command += ['--preview-only']
     slot = read(Path(os.environ['STACK_LAB_HOLDER']))
-    execution = dict(schema=1, dataset=args.dataset, subset=args.subset, scale=args.scale, framed=args.framed,
+    execution = dict(schema=2, dataset=args.dataset, subset=args.subset, scale=args.scale, framed=args.framed,
                      streaming_diagnostics=args.streaming_diagnostics,
                      resource_contract=build.get('resource_contract'), preview_only=args.preview_only, lane=args.lane, label=args.label, binary=args.binary,
                      binary_sha256=build['sha256'], commit=build['commit'], inputs=inputs, inputs_sha256=sha_of(inputs),
                      reference=reference, command=command, runner_root=str(root), runner_sha256=sha(root / 'tests/focus-stack-regression.mjs'),
                      manifest_sha256=sha(root / 'tests/acceptance/focus-stack-datasets.json'), slot=slot,
-                     environment={k: v for k, v in env.items() if k.startswith(('RAW_EDITOR_', 'RAYON_'))}, state='running',
+                     environment={k: v for k, v in env.items() if k.startswith(('RAW_EDITOR_', 'RAYON_'))},
+                     input_preflight=preflight, state='running',
                      started_epoch=time.time(), tool_sha256={name: sha(HERE / name) for name in
                          ('run.py', 'monitor.py', 'common.py', 'lanting_audit.py')})
     write(dest / 'execution.json', execution)
+    if preflight['status'] == 'fail':
+        return finish_preflight(dest, execution, preflight)
     execution.update(execute(command, cwd=root, env=env, log_path=dest / 'run.log'))
     execution['state'] = 'finished'
     write(dest / 'execution.json', execution)
@@ -305,11 +402,13 @@ def run(args):
             analysis['guard'] = {'strict': guard(dest), 'regression_only': guard(dest, True)}
             if not all(v.get('pass') is True for v in analysis['guard'].values()):
                 analysis['status'] = 'rejected'
+                analysis['acceptance_state'] = 'rejected'
                 analysis['checks']['lanting_guard'] = False
             else:
                 analysis['checks']['lanting_guard'] = True
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
-        analysis = dict(status='analysis_error', error=str(exc), exit_code=execution['exit_code'], memory_gate_pass=False)
+        analysis = dict(schema=2, status='analysis_error', acceptance_state='rejected',
+                        reason_code='analysis_error', error=str(exc), exit_code=execution['exit_code'], memory_gate_pass=False)
     write(dest / 'analysis.json', analysis)
     print(json.dumps({'directory': str(dest), 'status': analysis['status'], 'qg': (analysis.get('quality_gate') or {}).get('verdict'),
                       'peak_rss_bytes': analysis.get('peak_rss_bytes'), 'sha256': analysis.get('output_sha256')}, ensure_ascii=False), flush=True)

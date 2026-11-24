@@ -68,7 +68,8 @@
           "first": 10
         }
       ],
-      "expectedSkipped": ["DSC_4885.NEF"]
+      "expectedSkipped": ["DSC_4885.NEF"],
+      "notes": "DSC_4885.NEF 当前为0字节；作为显式expectedSkipped由输入预检记录explicit_exclusions，不计入active source contract；恢复非空源前不得授予native/D3。"
     },
     {
       "id": "qixu-1",
@@ -191,7 +192,7 @@
       "sourceBytes": 2725524205,
       "sourceAggregateSha256": "d41a9207807ea6bc6bb60d2d71491dbc2e02f77bb059746cd6104bd6ed20b0b8",
       "baseline": false,
-      "notes": "任务17新增素材；首次登记，等待scale=0.25 D1摸底。"
+      "notes": "任务17已完成scale=0.25 D1与bounded诊断；tone/boundary、local-scale与source mapping仍拒绝，不授予native/D3。"
     },
     {
       "id": "lisong",
@@ -205,7 +206,7 @@
       "sourceBytes": 2818722255,
       "sourceAggregateSha256": "760a30788bd2555c260d3b246217ddaf098b3a0ab50cb826297d336b0d639007",
       "baseline": false,
-      "notes": "任务17新增素材；首次登记，等待scale=0.25 D1摸底。"
+      "notes": "任务17已完成scale=0.25 D1与bounded诊断；covered boundary-stroke与content-sensitive tone关系仍拒绝，不授予native/D3。"
     },
     {
       "id": "xiagui",
@@ -219,7 +220,7 @@
       "sourceBytes": 2903839002,
       "sourceAggregateSha256": "338af8d29e488d8c4d772677ea3471ece805c3c7fa7ec5b5b1ec6f5a3672fc06",
       "baseline": false,
-      "notes": "任务17新增素材；首次登记，等待scale=0.25 D1摸底。"
+      "notes": "任务17已完成scale=0.25 D1与bounded诊断；covered boundary-stroke witness仍拒绝，不授予native/D3。"
     },
     {
       "id": "lidong",
@@ -233,7 +234,7 @@
       "sourceBytes": 1484471346,
       "sourceAggregateSha256": "17bedaf100ce2d06e001896b9dc373ad72b0cc80e8e5cbfbb54c4d0eddc76f85",
       "baseline": false,
-      "notes": "任务17新增素材；首次登记，等待scale=0.25 D1摸底。"
+      "notes": "任务17已完成scale=0.25 D1与bounded诊断；三项几何分量断开且fallback QG失败，不强行连桥。"
     },
     {
       "id": "zhaoji",
@@ -247,7 +248,7 @@
       "sourceBytes": 2703135452,
       "sourceAggregateSha256": "d839174b01b7ce9ee5e04d9bc2070f3e83d4047c7ab8bf59e327bebaaa2079a8",
       "baseline": false,
-      "notes": "任务17新增素材；首次登记，等待scale=0.25 D1摸底。"
+      "notes": "任务17已完成scale=0.25 D1与station12 Jacobian A/B；output-density closure仍拒绝，不授予native/D3。"
     }
   ]
 }

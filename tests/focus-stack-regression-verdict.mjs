@@ -81,6 +81,7 @@ test('verified native export succeeds without a baseline', (t) => {
   const run = f.invoke('valid');
   assert.equal(run.status, 0, run.stderr + run.stdout);
   assert.equal(f.result().summary.artifactContract, 'pass');
+  assert.equal(f.result().summary.acceptanceState, 'accepted');
   assert.equal(f.result().verdict, 'no-baseline');
 });
 
@@ -90,6 +91,7 @@ for (const scenario of ['missing-report-export', 'unverified-report-export', 'mi
     assert.equal(f.invoke(scenario).status, 1);
     assert.equal(f.result().summary.qualityGate, 'pass');
     assert.equal(f.result().summary.artifactContract, 'fail');
+    assert.equal(f.result().summary.acceptanceState, 'rejected');
     assert.equal(f.result().verdict, 'failed');
   });
 }
@@ -106,6 +108,7 @@ test('preview-only does not claim a verified TIFF export', (t) => {
   const f = fixture(t);
   assert.equal(f.invoke('valid', ['--preview-only']).status, 0);
   assert.equal(f.result().summary.artifactContract, 'not-run-preview');
+  assert.equal(f.result().summary.acceptanceState, 'preview_only');
   assert.equal(fs.existsSync(path.join(f.out, 'fixture-s1-test.tiff')), false);
 });
 

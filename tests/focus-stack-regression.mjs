@@ -618,6 +618,15 @@ function main() {
     metrics: metricSummary(metrics),
     sourceContract,
   };
+  // Keep the historical fields above for baseline compatibility, while
+  // exposing one machine-readable acceptance state for all new reports.
+  summary.acceptanceState = previewOnly
+    ? 'preview_only'
+    : summary.outcome === 'rejected' || !log.passed || run.status !== 0 || summary.artifactContract !== 'pass'
+      ? 'rejected'
+      : summary.outcome === 'degraded'
+        ? 'degraded'
+        : 'accepted';
 
   const baselines = readBaselines();
   const baseline = baselines.baselines.find((entry) => baselineKey(entry) === baselineKey(summary));

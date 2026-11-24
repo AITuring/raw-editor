@@ -53,6 +53,32 @@ Add `--hash-inputs` when a stage changes source preparation, caching, decoding, 
 this verifies the frozen aggregate digest for the catalogued source sets. The contract never writes beside
 the source images and never replaces the 兰亭 reference output.
 
+`scripts/stack-lab/run.py` performs an input preflight before starting the native harness. Missing,
+non-file, unreadable, or zero-byte inputs fail closed and produce `execution.json`/`analysis.json` with
+schema 2, `status=not_run`, `acceptance_state=not_run`, `reason_code=input_preflight_failed`, and
+`outcome=rejected`; no `run.log` or native process is created. A zero-byte file named in
+`expectedSkipped` is retained as an explicit `input_preflight.explicit_exclusions` record and remains
+outside the active source contract. This records the exclusion without turning an absent source into a
+quality pass. Normal runs keep the legacy `status` field and additionally record one of
+`accepted`, `preview_only`, `degraded`, `rejected`, `resource_failed`, or `cancelled` in
+`acceptance_state`.
+
+Before a real full-scale run, use the bounded exclusive determinism matrix. It compares the stable
+acceptance signature across threads and repeats while ignoring wall time, RSS and run-specific paths:
+
+```sh
+python3 scripts/stack-lab/determinism.py \
+  --binary <label> \
+  --lane task-22 --dataset langyuan --scale 1 \
+  --label <run> --threads 1,2,5,8 --repeat 2
+```
+
+Use `--dry-run` to validate the matrix without starting a material run. The JSON report records the
+binary/manifest digests, every attempt, stable signature and explicit `not_run` entries for order
+permutation, concurrent load, cancellation, OOM and provider fallback; these omissions never count as
+passed coverage. If the slot supervisor cannot establish required nice/setpriority before native starts,
+the matrix is `blocked` with `native_runs_started=false`, rather than a determinism verdict.
+
 For any production behavior change, run the mandatory 兰亭 protection regression with the dataset runner.
 It writes only to `/private/tmp/raw-editor-regression` (override with `--out-dir`); the reference JPEG is
 read-only and its manifest digest is re-checked before and after the run.
