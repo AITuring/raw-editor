@@ -339,7 +339,7 @@ flowchart LR
   - 测试：test-only 代码有单元测试；快速层通过。
   - 演示：两份 benchmark JSON，作为 C4、C7 的数据依据。
   - (b) 完成（2026-11-23，分支 `lane/2B.9/probe-tone-diagnostics` 提交 `9d0647d7`，test-only）：文苑 34–39 已保存数据重放，23 个 tone 超限窗口（max 8.425）都没有纸面单元；纸面口径在其他窗口新增不稳定超限（max 3.122 / 4.878）。结论：C4 选项 B 不可取。见[摘要](../../../docs/benchmarks/2B9-tone-paper-split-r1.json)。
-  - (a) 进行中：冻结 `2B9-probe-tone-r1`，阆苑84张 scale=1 独占运行并导出 82 个无效探针的位置与类型（折叠 / 塌缩 / 非有限 / 邻点无映射）。
+  - (a) 探针结果（2026-11-23，`2B9-probe-tone-r1`）：82 个全部为“折叠”，全部在源图右缘竖条（源 x 为宽度的 96.8%–98.8%，贯穿全高）；只有 x 方向导数异常（−0.01 至 −205），y 方向正常（0.857–1.011），多数是映射跳变而非平滑折叠；22 个没有原生残差位移。未验证的假设：`FocusSourceSampling::mapping` 在全局与局部带模型之间切换造成 x 方向不连续。见[摘要](../../../docs/benchmarks/2B9-langyuan-invalid-probes-r1.json)。同一次运行仍在跑后续阶段，因 2B.4 已修 harness，将首次得到阆苑84张 scale=1 的原生判定。
 
 - [ ] 2B.10 实施已批准的合同变更（线B）
   - 目标：每次只落地一条已批准条目，用真实运行验证 what-if 预测。

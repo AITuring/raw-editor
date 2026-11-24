@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "task": "2B.9 (a) langyuan 84 scale=1 invalid native Jacobian probes",
+  "date": "2026-11-23",
+  "run": "output/acceptance/2B.9/langyuan-probes-s1-r1",
+  "binary": "2B9-probe-tone-r1 (commit 9d0647d7; cfg(test) recorder only)",
+  "export": "output/acceptance/2B.9/langyuan-invalid-probes-r1/invalid-probes.jsonl",
+  "count": 82,
+  "matches_task_4c_count": true,
+  "reasons": {
+    "folded": 82
+  },
+  "sources": {
+    "4": 3,
+    "5": 2,
+    "6": 3,
+    "11": 5,
+    "13": 8,
+    "14": 4,
+    "15": 7,
+    "16": 19,
+    "20": 3,
+    "21": 6,
+    "23": 5,
+    "27": 12,
+    "30": 5
+  },
+  "station_point_x_range": [
+    7969.0,
+    8193.0
+  ],
+  "station_point_y_range": [
+    257.0,
+    5377.0
+  ],
+  "source_point_x_range": [
+    7991.7,
+    8154.5
+  ],
+  "source_width_px": 8256,
+  "source_point_x_fraction_range": [
+    0.968,
+    0.9877
+  ],
+  "d_source_x_d_station_x_range": [
+    -205.47,
+    -0.01
+  ],
+  "d_source_y_d_station_y_range": [
+    0.857,
+    1.011
+  ],
+  "with_native_displacement": 60,
+  "findings": [
+    "all 82 are 'folded' (negative determinant); none is collapsed, non-finite or unmapped",
+    "every one lies in a vertical strip near the right sensor edge: source x 7992-8155 of 8256 (96.8-98.8% of the width), station x 7969-8193, across the full height",
+    "only the x derivative is wrong: d(source x)/d(station x) is -0.01 to -205, while d(source y)/d(station y) stays 0.857-1.011. Values far below -1 over a 1 px central difference are a jump in the mapping, not a smooth fold",
+    "22 of the 82 have no native residual displacement, so the jump is not only from the displacement field"
+  ],
+  "hypothesis_unverified": "FocusSourceSampling::mapping (stitching/focus_layers.rs) switches between the global inverse and per-band local inverses; a band candidate is dropped once its normalized source x leaves [min-0.02, max+0.02]. A vertical-edge / long-edge consensus band ending near the right sensor edge would make the source mapping discontinuous in x exactly in this strip. Band ranges were not exported, so this is not yet proven",
+  "implications": [
+    "the langyuan scale=1 density bypass (invalid_native_jacobian_probes) comes from a source-sampling discontinuity in a narrow edge strip, not from a real fold of the station geometry",
+    "C7 / C2: a residual-aware density planner would hit the same discontinuity; it needs either a continuous band transition in production sampling (changes pixels) or an explicit, recorded exclusion of such probes (contract change)"
+  ],
+  "production_change": false
+}
