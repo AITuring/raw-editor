@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "task": "2B.7 effective_pixel_count insufficient evidence root cause",
+  "date": "2026-11-23",
+  "method": "read-only: Stack_Report survey across the 15 layered what-if cases plus code-path reading; no build, no material run",
+  "evidence_report": "output/acceptance/task-16/mayuan-2-mayuan-2-native-scale1-control-r1/run/mayuan-2-s1-task-16-mayuan-2-native-scale1-control-r1-stack-reports/stack-report-5f1ba6c4-7ba0-4eeb-8c50-a9c706e0d8a0.json",
+  "correlation": "of 15 layered reports, effective_pixel_count is insufficient_evidence exactly in the two runs that contain intra-station 'failed' frames (mayuan-2 scale=1 control and stencil5, 5 failed frames each); every run without failed frames measures the native domain and passes",
+  "failed_frames": [
+    {
+      "station": 0,
+      "path": "DSC_5435.NEF",
+      "inlier_area_coverage": 0.16376460216001765,
+      "median_error": null
+    },
+    {
+      "station": 0,
+      "path": "DSC_5434.NEF",
+      "inlier_area_coverage": 0.1361757668044377,
+      "median_error": null
+    },
+    {
+      "station": 5,
+      "path": "DSC_5422.NEF",
+      "inlier_area_coverage": 0.15789473684210525,
+      "median_error": null
+    },
+    {
+      "station": 10,
+      "path": "DSC_5337.NEF",
+      "inlier_area_coverage": 0.18663883089770356,
+      "median_error": null
+    },
+    {
+      "station": 11,
+      "path": "DSC_5426.NEF",
+      "inlier_area_coverage": 0.09582522171749946,
+      "median_error": null
+    }
+  ],
+  "code_path": [
+    "panorama_utils/stitching/focus_stack_stitcher.rs ~466-485: a frame rejected by intra-station registration is marked Failed and the loop continues before source_refinements.insert (~550), so it has no FocusSourceRefinement/source_sampling",
+    "the frame stays in the ownership legend with zero owned pixels; tile_payload.rs validated_owner_slots requires sampling only for owned_pixels > 0, so the slot keeps member=Some, refinement=None",
+    "panorama_stitching/stitch_images.rs ~4044-4073: every slot with a member becomes a QualitySource; native_registration is None because the refinement is missing",
+    "quality_gate_runner/native_coverage.rs measure(): any source without native_registration returns QUALITY_GATE_INSUFFICIENT_EVIDENCE for the whole criterion"
+  ],
+  "classification": "not missing metadata of a legitimate participant: the frames failed registration, own no pixels and have no verified footprint. Requirement 11.4 says missing sampling metadata SHALL be recorded as insufficient evidence, so current behaviour follows the contract literally; changing it is decision C6, not an engineering fix",
+  "c6_options": [
+    "a: exclude zero-owned, registration-failed sources from the native domain and record their count/paths in effective_source_domain (recommended; their station anchor covers the same view)",
+    "b: keep the contract; any station with a failed frame keeps effective_pixel_count insufficient_evidence",
+    "c: give failed frames the anchor's sampling geometry (rejected here: unverified geometry would define the denominator)"
+  ],
+  "production_change": false
+}

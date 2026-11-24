@@ -305,18 +305,20 @@ flowchart LR
   - 演示：`docs/benchmarks/qg-whatif-r1.json`，含“当前规则判定”与“各条目单独开启时的判定”两张表。
   - 验收：提交 `ef0f565a`，`scripts/stack-lab/qg_whatif.py` + `qg_whatif_cases.json`（13套素材20个用例）+ 9项单元测试。当前规则重放与全部记录的判据、QG、density 判定一致。可算条目结果：C1 使马远2/睡觉45/赵佶（0.25）的 density 由 rejected 变 applied，QG 需重跑；C3 使李嵩 QG 变 pass（0.25 下 native 仍因 local_scale 诊断项拒绝），马远2 scale=1 QG 由 fail 变 insufficient_evidence（剩 effective_pixel_count/owner）。C2、C4–C7 标为 needs_rerun 并列出所需证据。见[r1输出](../../../docs/benchmarks/qg-whatif-r1.json)。
 
-- [ ] 2B.6 QG 合同决策清单（线B，纯文档）
+- [ ] 2B.6 QG 合同决策清单（线B，纯文档；2026-11-23 草稿已提交，待用户逐条决定）
   - 目标：给用户一份可逐条批准的清单。
   - 做法：新建 `docs/qg-contract-decisions-2026-11.md`。C1–C7 每条写：当前规则（需求编号与代码位置）、各素材实测数据、候选选项及取舍（正确性、可逆性、对“输出不劣于原图”的影响、画布和 RSS 增长）、what-if 预测哪些素材判定会变、风险、推荐项，并留“用户决定”栏。C1 须写明：即使闭环按基础世界像素计算，QG 的 `boundary_stroke_alignment` 仍按输出像素独立检查可见错位。
   - 资源：无。依赖：2B.5；吸收 2B.7–2B.9 的结论。冲突：无。
   - 完成标准：每个数字都附 benchmark 或 what-if 输出路径；用户逐条填写批准 / 拒绝 / 暂缓，只有批准条目进入 2B.10。
+  - 草稿：[决策清单](../../../docs/qg-contract-decisions-2026-11.md)。推荐 C1 批准、C3 拒绝、C5 有条件批准（先做同二进制A/B）、C6 选a；C2、C4、C7 暂缓，等 2B.8/2B.9 数据。
 
-- [ ] 2B.7 `effective_pixel_count` 元数据缺失根因（线B）
+- [x] 2B.7 `effective_pixel_count` 元数据缺失根因（线B，2026-11-23，转 C6）
   - 目标：查清马远2 `effective_pixel_count=insufficient_evidence` 来自哪些来源及原因。`native_coverage.rs` 的规则是任一来源缺 `native_registration` 即整项证据不足；该素材有33个 `fusion_single_frame_degraded`。
   - 做法：test-only 导出缺 `native_registration`/`source_sampling` 的来源及其站类型（单帧降级、组内被拒等）。若这些来源是合法参与者、只是缺元数据（例如单帧站应得到恒等原生配准），补齐元数据，属工程修复；若确无可校准足迹，转 C6。
   - 修改：`quality_gate_runner/native_coverage.rs` 及原生配准元数据生成处。资源：`build`；验证用 0.25 `run`，scale=1 留到 2B.10。依赖：2B.1。冲突：2B.10（同区域）。
   - 测试：合成单元测试（单帧站来源得到有效原生配准，有效像素域按需求11.4计算）；快速层；中等层 TIFF 不变。
   - 演示：马远2 来源清单 JSON，及修复前后 `effective_pixel_count` 判定。
+  - 结论（只读，无生产改动）：15个分层报告中，只有含机位内配准失败帧的两次运行（马远2 scale=1 control/stencil5，各5帧）证据不足，其余全部测得并通过。失败帧在 `focus_stack_stitcher.rs` 被跳过、没有 `source_sampling`，但仍作为零像素图例成员进入 QG 来源列表，`native_coverage::measure` 因此整项判证据不足。这符合需求11.4“缺失采样元数据时记录证据不足”的字面规定，不是工程缺陷，转决策 C6。见[根因摘要](../../../docs/benchmarks/2B7-effective-pixel-root-cause-r1.json)。
 
 - [ ] 2B.8 残差形变雅可比合同审计与修复（线B，站点求解组；2026-11-23 已派发给另一 agent，详细 brief 见 [2B.8 brief](../../../.agents/tasks/2B.8-residual-jacobian-brief-2026-11-23.md)，基于 `bcddb6a6`）
   - 目标：让 `ResidualWarp` 局部雅可比满足需求8.3/8.4/8.9推出的界限，并为 C7 准备可审计的 residual-aware 密度规划器。
