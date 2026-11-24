@@ -209,8 +209,22 @@ fn reference_metrics(
 ) -> Result<Value, String> {
     let reference = decode_reference_luma(path)?;
     let (reference_width, reference_height) = reference.dimensions();
+    // A reference that cannot be registered is a measurement outcome, not a
+    // harness failure: record it so the caller still reaches the native
+    // verdict. Decode and write errors above and below remain hard errors.
     let registration =
-        register_output_to_reference(output_luma, output_analysis_scale, &reference)?;
+        match register_output_to_reference(output_luma, output_analysis_scale, &reference) {
+            Ok(registration) => registration,
+            Err(reason) => {
+                return Ok(json!({
+                    "file": path.file_name().map(|name| name.to_string_lossy().into_owned()),
+                    "width": reference_width,
+                    "height": reference_height,
+                    "status": "registration_failed",
+                    "reason": reason,
+                }));
+            }
+        };
 
     // Bring the reference to the output analysis content scale: one output
     // analysis pixel covers `local_scale / output_analysis_scale` reference
@@ -323,6 +337,7 @@ fn reference_metrics(
         "file": path.file_name().map(|name| name.to_string_lossy().into_owned()),
         "width": reference_width,
         "height": reference_height,
+        "status": "measured",
         "registration": {
             "matches": registration.matches,
             "inliers": registration.inliers,
@@ -778,6 +793,60 @@ mod tests {
         assert_eq!(summary["count"], 2);
         assert_eq!(summary["ordered"], 1);
         assert_eq!(summary["missing_from_order"], json!(["one.jpg"]));
+    }
+
+    /// 2B.4: a reference that cannot be registered (here a flat image with no
+    /// features) is recorded as `registration_failed` instead of aborting the
+    /// metrics pass, so the acceptance harness still reaches its native
+    /// verdict. A reference that cannot be decoded remains a hard error.
+    #[test]
+    fn an_unregistrable_reference_is_recorded_not_fatal() {
+        let directory = tempfile::tempdir().unwrap();
+        let flat = directory.path().join("flat-reference.png");
+        GrayImage::from_pixel(512, 384, Luma([128]))
+            .save(&flat)
+            .unwrap();
+        let output = DynamicImage::ImageLuma16(ImageBuffer::from_fn(512, 384, |x, y| {
+            Luma([if ((x / 16) + (y / 16)) % 2 == 0 {
+                9_000
+            } else {
+                52_000
+            }])
+        }));
+        let inputs = vec!["/a/one.jpg".to_string()];
+        let request = AcceptanceMetricsRequest {
+            image: &output,
+            coverage: None,
+            input_paths: &inputs,
+            ordered_paths: &inputs,
+            reference: Some(&flat),
+            analysis_long_side: None,
+        };
+        let metrics = acceptance_metrics(&request).expect("registration failure is not fatal");
+        assert_eq!(metrics["reference"]["status"], "registration_failed");
+        assert_eq!(metrics["reference"]["file"], "flat-reference.png");
+        assert!(
+            metrics["reference"]["reason"]
+                .as_str()
+                .is_some_and(|reason| reason.contains("reference registration failed")),
+            "{}",
+            metrics["reference"]
+        );
+        assert!(metrics["reference"].get("ratio").is_none());
+        assert_eq!(
+            metrics["self"]["content_tiles"].as_u64().map(|n| n > 0),
+            Some(true)
+        );
+
+        let missing = directory.path().join("missing.png");
+        let request = AcceptanceMetricsRequest {
+            reference: Some(&missing),
+            ..request
+        };
+        assert!(
+            acceptance_metrics(&request).is_err(),
+            "decode errors stay fatal"
+        );
     }
 }
 

@@ -236,6 +236,9 @@ function metricSummary(metrics) {
     reference: reference
       ? {
           file: reference.file,
+          // Older metrics have no status; a present registration means measured.
+          status: reference.status ?? (reference.registration ? 'measured' : 'unknown'),
+          reason: reference.reason ?? null,
           inliers: reference.registration?.inliers ?? 0,
           localScale: reference.registration?.local_scale ?? null,
           contentTiles: reference.tiles?.content ?? 0,
@@ -260,7 +263,9 @@ function compareFloors(current, baseline, failures) {
     if (value === null || value === undefined || floor === null || floor === undefined) return;
     if (value < floor) failures.push(`${name} ${value.toFixed(4)} < floor ${floor.toFixed(4)}`);
   };
-  if (baseline.reference && current.reference) {
+  // The floors skip null values, so only a measured reference is compared;
+  // an unmeasured one is reported as a failure by main().
+  if (baseline.reference && current.reference && current.reference.status === 'measured') {
     const base = baseline.reference;
     const now = current.reference;
     atLeast('reference ratio median', now.ratioMedian, base.ratioMedian * FLOORS.referenceRatioMedian);
@@ -485,6 +490,11 @@ function main() {
   }
   if (!log.result) failures.push('no focus-stack result line in the log');
   if (!metrics) failures.push('acceptance metrics were not written');
+  // A configured reference that could not be registered is a measurement gap,
+  // never a pass. The native verdict above is still evaluated (2B.4).
+  if (metrics?.reference && metrics.reference.status === 'registration_failed') {
+    failures.push(`reference registration failed: ${metrics.reference.reason ?? 'no reason recorded'}`);
+  }
   const artifactFailures = [];
   if (!previewOnly) {
     if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
@@ -499,7 +509,9 @@ function main() {
     ) {
       artifactFailures.push('the Stack_Report has no verified TIFF export at the requested path');
     }
-    if (!log.result || output?.width !== log.result.width || output?.height !== log.result.height) {
+    // Without a result line there is nothing to compare; that failure is
+    // reported once above ("no focus-stack result line in the log").
+    if (log.result && (output?.width !== log.result.width || output?.height !== log.result.height)) {
       artifactFailures.push('verified TIFF dimensions do not match the rendered result');
     }
     if (output?.bit_depth !== 16 || output?.icc !== 'sRGB') {

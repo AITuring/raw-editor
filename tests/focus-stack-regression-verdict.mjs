@@ -58,9 +58,19 @@ if (scenario === 'unverified-report-export') delete report.output.artifact_valid
 if (scenario === 'missing-alpha-tag') report.output.tiff_extra_samples = null;
 if (!previewOnly) fs.writeFileSync(output, 'fake TIFF: CLI contract test only');
 fs.writeFileSync(reportPath, JSON.stringify(report));
-fs.writeFileSync(env.RAW_EDITOR_STACK_ACCEPTANCE_METRICS,
-  JSON.stringify({inputs:{ordered:2,missing_from_order:[]},self:{}}));
+const metrics = {inputs:{ordered:2,missing_from_order:[]},self:{}};
+if (scenario === 'reference-registration-failed') metrics.reference = {file:'ref.jpg', width:4, height:6,
+  status:'registration_failed', reason:'reference registration failed: 66 descriptor matches, fewer than 40 inliers'};
+if (scenario !== 'metrics-panic') fs.writeFileSync(env.RAW_EDITOR_STACK_ACCEPTANCE_METRICS, JSON.stringify(metrics));
 console.log('Stack report written to '+reportPath);
+if (scenario === 'metrics-panic') {
+  // The 2026-11-23 task-4C failure shape: TIFF written, then the metrics
+  // step panicked before the result line and the native verdict.
+  console.log("thread 'fixture' panicked at focus_stack_fixture.rs:750:10:\\nacceptance metrics should be measurable and writable: reference registration failed");
+  console.log('test result: FAILED. 0 passed; 1 failed');
+  process.exitCode=101;
+  process.exit();
+}
 console.log('focus-stack result: 2x3');
 if (scenario === 'native-rejected') {
   console.log("thread 'fixture' panicked at fixture.rs:1:1:\\nnative artifact alpha declaration failed; report: "+reportPath);
@@ -102,6 +112,27 @@ test('native rejection remains a hard failure even with --rebaseline', (t) => {
   assert.match(f.result().failures.join('\n'), /native artifact alpha declaration failed/);
   assert.equal(f.result().verdict, 'failed');
   assert.equal(fs.readFileSync(f.baseline, 'utf8'), f.initialBaseline);
+});
+
+test('a missing result line is not reported as a TIFF dimension mismatch', (t) => {
+  const f = fixture(t);
+  assert.equal(f.invoke('metrics-panic').status, 1);
+  const failures = f.result().failures;
+  assert.ok(failures.includes('no focus-stack result line in the log'), failures.join('; '));
+  assert.ok(!failures.some((failure) => failure.includes('TIFF dimensions')), failures.join('; '));
+  assert.equal(f.result().summary.acceptanceState, 'rejected');
+});
+
+test('an unregistrable reference fails explicitly but keeps the native verdict', (t) => {
+  const f = fixture(t);
+  assert.equal(f.invoke('reference-registration-failed').status, 1);
+  const result = f.result();
+  assert.ok(result.failures.some((failure) => failure.startsWith('reference registration failed:')),
+    result.failures.join('; '));
+  assert.ok(!result.failures.some((failure) => failure.includes('TIFF dimensions')));
+  assert.ok(!result.failures.includes('no focus-stack result line in the log'));
+  assert.equal(result.summary.metrics.reference.status, 'registration_failed');
+  assert.equal(result.summary.artifactContract, 'pass');
 });
 
 test('preview-only does not claim a verified TIFF export', (t) => {
