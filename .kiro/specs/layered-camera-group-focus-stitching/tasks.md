@@ -311,6 +311,7 @@ flowchart LR
   - 资源：无。依赖：2B.5；吸收 2B.7–2B.9 的结论。冲突：无。
   - 完成标准：每个数字都附 benchmark 或 what-if 输出路径；用户逐条填写批准 / 拒绝 / 暂缓，只有批准条目进入 2B.10。
   - 草稿：[决策清单](../../../docs/qg-contract-decisions-2026-11.md)。推荐 C1 批准、C3 拒绝、C5 有条件批准（先做同二进制A/B）、C6 选a；C2、C4、C7 暂缓，等 2B.8/2B.9 数据。
+  - 用户决定（2026-11-23）：C1 批准，C3 拒绝，C5 有条件批准，C6 选 a；C2、C4、C7 暂缓。批准项进入 2B.10。
 
 - [x] 2B.7 `effective_pixel_count` 元数据缺失根因（线B，2026-11-23，转 C6）
   - 目标：查清马远2 `effective_pixel_count=insufficient_evidence` 来自哪些来源及原因。`native_coverage.rs` 的规则是任一来源缺 `native_registration` 即整项证据不足；该素材有33个 `fusion_single_frame_degraded`。
@@ -337,6 +338,8 @@ flowchart LR
   - 资源：`build`；`run` 以 0.25 为主。依赖：2B.1。冲突：无（不改生产路径）。
   - 测试：test-only 代码有单元测试；快速层通过。
   - 演示：两份 benchmark JSON，作为 C4、C7 的数据依据。
+  - (b) 完成（2026-11-23，分支 `lane/2B.9/probe-tone-diagnostics` 提交 `9d0647d7`，test-only）：文苑 34–39 已保存数据重放，23 个 tone 超限窗口（max 8.425）都没有纸面单元；纸面口径在其他窗口新增不稳定超限（max 3.122 / 4.878）。结论：C4 选项 B 不可取。见[摘要](../../../docs/benchmarks/2B9-tone-paper-split-r1.json)。
+  - (a) 进行中：冻结 `2B9-probe-tone-r1`，阆苑84张 scale=1 独占运行并导出 82 个无效探针的位置与类型（折叠 / 塌缩 / 非有限 / 邻点无映射）。
 
 - [ ] 2B.10 实施已批准的合同变更（线B）
   - 目标：每次只落地一条已批准条目，用真实运行验证 what-if 预测。

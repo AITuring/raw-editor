@@ -1,0 +1,227 @@
+{
+  "schema": 1,
+  "task": "2B.9 (b) tone boundary Delta E: all pixels vs paper-only",
+  "date": "2026-11-23",
+  "method": "test-only replay real_saved_tone_paper_split_from_env on the saved wenyuan stations 34-39 capture; same local tone model as real_saved_local_tone_from_env; paper cells = tile native quadrature samples that are focus_stack_pixel_is_canvas_like and not focus_stack_pixel_is_tone_foreground (production classifiers); paper pair fields rebuilt from paper-only cell means; a cell is a paper sample when its paper fraction >= min_fraction",
+  "inputs": {
+    "capture": "/private/tmp/wenyuan-tone-fields-34-39-r10",
+    "relations": "/private/tmp/wenyuan-native-proof-34-39-r7/joint-production-input.json (13 authoritative records)",
+    "owners": "refined from the saved owner plane (production refine_station_ownership)"
+  },
+  "calibration": {
+    "control": "real_saved_local_tone_from_env with identical inputs",
+    "maximum": 8.42537091381972,
+    "failed_windows": 23,
+    "matches_all_side": true,
+    "note": "the task-14 record 9.420790/95 used extra photometric relations from a candidate report; this replay uses the 13 authoritative records only"
+  },
+  "results": {
+    "1.0": {
+      "all": {
+        "maximum": 8.42537091381972,
+        "over_threshold": 23,
+        "samples": 1550410,
+        "windows": 259
+      },
+      "paper": {
+        "maximum": 3.121801414450126,
+        "over_threshold": 1,
+        "samples": 166494,
+        "windows": 64
+      },
+      "failed_windows_all": 23,
+      "failed_windows_with_paper_samples": 0,
+      "worst_paper_windows": [
+        {
+          "first": 2,
+          "second": 4,
+          "x": 4096,
+          "y": 4864,
+          "paper_delta_e00": 3.121801414450126,
+          "paper_samples": 352,
+          "all_delta_e00": 0.09446522695757704,
+          "all_samples": 3584
+        },
+        {
+          "first": 1,
+          "second": 4,
+          "x": 6144,
+          "y": 4864,
+          "paper_delta_e00": 0.8386419970308396,
+          "paper_samples": 968,
+          "all_delta_e00": 0.10313937521417542,
+          "all_samples": 4096
+        },
+        {
+          "first": 1,
+          "second": 5,
+          "x": 3328,
+          "y": 4864,
+          "paper_delta_e00": 0.7052827205096032,
+          "paper_samples": 540,
+          "all_delta_e00": 0.062114697109228914,
+          "all_samples": 8192
+        },
+        {
+          "first": 4,
+          "second": 5,
+          "x": 6144,
+          "y": 4864,
+          "paper_delta_e00": 0.6469773126070594,
+          "paper_samples": 116,
+          "all_delta_e00": 0.015543436605010964,
+          "all_samples": 9728
+        },
+        {
+          "first": 0,
+          "second": 1,
+          "x": 8448,
+          "y": 1024,
+          "paper_delta_e00": 0.6263876527628667,
+          "paper_samples": 1018,
+          "all_delta_e00": 0.05695100264574962,
+          "all_samples": 12288
+        },
+        {
+          "first": 1,
+          "second": 4,
+          "x": 4096,
+          "y": 4864,
+          "paper_delta_e00": 0.5456953737133874,
+          "paper_samples": 488,
+          "all_delta_e00": 0.046742885628896516,
+          "all_samples": 10240
+        },
+        {
+          "first": 0,
+          "second": 1,
+          "x": 8448,
+          "y": 4096,
+          "paper_delta_e00": 0.5130226364374637,
+          "paper_samples": 256,
+          "all_delta_e00": 0.04141054341650347,
+          "all_samples": 10752
+        },
+        {
+          "first": 1,
+          "second": 4,
+          "x": 5120,
+          "y": 4864,
+          "paper_delta_e00": 0.48671840806685096,
+          "paper_samples": 640,
+          "all_delta_e00": 0.033430245674705046,
+          "all_samples": 7168
+        }
+      ]
+    },
+    "0.5": {
+      "all": {
+        "maximum": 8.42537091381972,
+        "over_threshold": 23,
+        "samples": 1550410,
+        "windows": 259
+      },
+      "paper": {
+        "maximum": 4.878227065406108,
+        "over_threshold": 13,
+        "samples": 601742,
+        "windows": 127
+      },
+      "failed_windows_all": 23,
+      "failed_windows_with_paper_samples": 0,
+      "worst_paper_windows": [
+        {
+          "first": 2,
+          "second": 4,
+          "x": 6400,
+          "y": 4864,
+          "paper_delta_e00": 4.878227065406108,
+          "paper_samples": 32,
+          "all_delta_e00": 0.224418557159476,
+          "all_samples": 1024
+        },
+        {
+          "first": 1,
+          "second": 5,
+          "x": 6400,
+          "y": 4864,
+          "paper_delta_e00": 4.624792856503714,
+          "paper_samples": 852,
+          "all_delta_e00": 0.2949350011952359,
+          "all_samples": 2560
+        },
+        {
+          "first": 2,
+          "second": 5,
+          "x": 6400,
+          "y": 4864,
+          "paper_delta_e00": 4.100351203922871,
+          "paper_samples": 192,
+          "all_delta_e00": 0.6186473998206911,
+          "all_samples": 2048
+        },
+        {
+          "first": 2,
+          "second": 5,
+          "x": 2304,
+          "y": 5120,
+          "paper_delta_e00": 3.51778313111763,
+          "paper_samples": 288,
+          "all_delta_e00": 0.15510143650145466,
+          "all_samples": 3072
+        },
+        {
+          "first": 2,
+          "second": 5,
+          "x": 3328,
+          "y": 4864,
+          "paper_delta_e00": 3.0060022067091863,
+          "paper_samples": 960,
+          "all_delta_e00": 0.08572737095215124,
+          "all_samples": 3072
+        },
+        {
+          "first": 2,
+          "second": 4,
+          "x": 4096,
+          "y": 4864,
+          "paper_delta_e00": 2.733544944025756,
+          "paper_samples": 2848,
+          "all_delta_e00": 0.09446522695757704,
+          "all_samples": 3584
+        },
+        {
+          "first": 0,
+          "second": 3,
+          "x": 9472,
+          "y": 4864,
+          "paper_delta_e00": 2.2433448829356237,
+          "paper_samples": 1824,
+          "all_delta_e00": 0.14008616270846033,
+          "all_samples": 15360
+        },
+        {
+          "first": 2,
+          "second": 5,
+          "x": 2304,
+          "y": 4864,
+          "paper_delta_e00": 2.056954685719676,
+          "paper_samples": 3520,
+          "all_delta_e00": 0.06042065863209767,
+          "all_samples": 8192
+        }
+      ]
+    }
+  },
+  "station_labels": "run-local station index + 34 (e.g. 3 = station 37)",
+  "findings": [
+    "all 23 failing windows (Delta E 1.515-8.425) contain no paper cell even at a 50% paper threshold. They lie in one horizontal band (window y 5120-5632); the 10 largest (>= 3.0) are at x 6656-7936 8 of them between run-local station 3 and stations 2/4/5 (stations 37 with 36/38/39) and 2 between station 1 and 4/5 (35 with 38/39), the content region task 14 attributed to witness-local content/photometric mismatch; the smaller ones extend to x 1536-2304 (2 with 4/5) and 11776 (0 with 3)",
+    "measuring on paper only therefore does not fix these windows; it makes them unmeasurable, i.e. it exempts exactly the boundaries that fail",
+    "where paper cells exist, the paper-only measurement creates new violations at windows the full measurement passes (strict: max 3.122 at 2/4 (4096,4864) with all 0.094; 50%: 13 windows over, max 4.878 with all 0.224, some on only 32-192 samples), because the tone model is fitted on full-content fields and paper-only means are small, biased samples"
+  ],
+  "c4_implication": "option B (paper-only Delta E) is not a stable or honest metric for this material: it hides the failing content boundaries and adds unstable paper violations. Remaining choices are A (keep the hard gate) or C (record degraded and let the user judge at D4)",
+  "not_run": [
+    "chibi 2<->5 and langyuan 84 0.25: no saved tone capture exists; a capture run (0.25, exclusive) plus relation input would be needed. Not run because the wenyuan result already decides the metric question for C4-B"
+  ],
+  "production_change": false
+}
