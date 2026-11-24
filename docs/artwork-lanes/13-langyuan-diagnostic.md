@@ -1,6 +1,6 @@
 # 任务13：阆苑84张到 D2/D3 诊断边界
 
-- 更新：2026-11-22；状态：残差/尺度/boundary 根因诊断收口，D3 未通过；原生推进未开始，交接任务14；分支 `lane/task-13/langyuan-diagnostic`。
+- 更新：2026-11-23；状态：残差/尺度/boundary 根因诊断收口；scale=1 独占资源试跑完成但 D3 未通过，保留拒绝语义；分支 `lane/task-13/langyuan-diagnostic`。
 - 任务12交接（2026-11-22）：枫鹰 fallback、resampling 与 geometry factor 诊断已收口且无生产合入；本卡继续沿用 exclusive 资源和不把 scale=0.25 结果外推到 native 的边界。
 - 输入：阆苑女仙全量84张，scale=0.25；沿用任务5冻结 `base-2026-11-12`，不改生产代码、阈值、矩阵或正式基线。
 - 依据：任务5输出 `/Users/dp/Desktop/raw-editor/output/acceptance/task-5/langyuan-baseline-r1` 及 [S2-langyuan](S2-langyuan.md)。
@@ -25,7 +25,7 @@ closure 虽然收敛，但 `residual_median_px=0.0809119`、`residual_p95_px=1.2
 
 ## 结论与下一步
 
-本任务不跑 scale=1，也不把 10 张历史通过替代84张全量验收。下一轮应先做一个只读/test-only 的 station/residual 单变量实验：固定上述 world 坐标，记录 residual 前后、local scale、boundary、source relation 和 density-bypass 状态；在 0.25 重新验证后，才决定是否值得推进原生。参考图/导出后配准链不得反馈修改生产几何。
+诊断阶段曾不把 scale=0.25 外推到 native，也不把10张历史通过替代84张全量验收。后续的 scale=1 资源试跑已按独占槽完成；参考图/导出后配准链不得反馈修改生产几何。
 
 ## residual 支持域审计
 
@@ -49,6 +49,32 @@ closure 虽然收敛，但 `residual_median_px=0.0809119`、`residual_p95_px=1.2
 
 full-84 test-only control 重跑复现了同一 QG：6/8 local-scale pixel-ratio 失败、唯一 boundary witness 为 station16↔27 / owner48↔82 的 4px，owner coverage 通过；closure 仍 converged，residual median/P95 `0.0809/1.2801px`，density 仍因 `nonidentity_world_residual` bypass。该重跑的 Stack_Report 已写出，但参考注册失败导致 acceptance metrics 未写出，因此不把它当作新的验收记录；QG 与 baseline 报告一致。
 
-综合 residual support、station scale sensitivity、boundary witness 和既有 station5 高倍率子集证据，任务13结论是：当前失败点不在记录的 residual 支持域内；尺度因子分散于 `1.0228–1.5093`，不支持全局倍率；boundary 是独立的 station16↔27 覆盖描线问题。停止继续扫描 factor、禁用 residual、放宽阈值、bounds 或 fallback，不启动 scale=1。
+综合 residual support、station scale sensitivity、boundary witness 和既有 station5 高倍率子集证据，任务13诊断结论是：当前失败点不在记录的 residual 支持域内；尺度因子分散于 `1.0228–1.5093`，不支持全局倍率；boundary 是独立的 station16↔27 覆盖描线问题。停止继续扫描 factor、禁用 residual、放宽阈值、bounds 或 fallback；scale=1 仅作为资源可行性试跑，不能转化为生产验收。
 
 机器摘要：[`langyuan-task-13-root-cause-closure-r1.json`](../benchmarks/langyuan-task-13-root-cause-closure-r1.json)。下一项交接任务14文苑，沿用不把 scale=0.25 诊断外推到 native 的约束。
+
+## scale=1独占资源试跑
+
+2026-11-23 使用已验证的 `task-13-focus-scale-r1` 冻结二进制（commit `1b638eb278f2749795b87a8780a86f91b757086b`，binary SHA `20a54e35e02586dd030b4cef0c8131417da24c7dbebae539d3d75c9ba4dc4b27`）对阆苑84张、scale=1执行一次 `exclusive` 运行。84/84输入预检通过，没有空源或物理缺失源；资源合同为 preparation/Rayon `1/1`，内存门阈值24GiB。
+
+运行完成但被原生验收拒绝：wall `9829.78s`，峰值 RSS `13,631,864,832B`（12.69GiB），内存门通过；TIFF已写出且RGBA16/sRGB/alpha和artifact validation通过，尺寸 `34670×10560`，输出 SHA `6c4e297bfa507c8d82909d2a0ab53a622af15b8439d7c9e2820e78a7272787c2`，运行目录约 `2.9GiB`。但 harness 报告 verified TIFF 尺寸与渲染结果不一致，整体输出合同不接受；原生 harness exit `101`，没有 acceptance metrics；closure 为 `unreliable`，max direct-pair p95 `3.5276637618px`，fallback `closure_unreliable_pair_p95`；output density 因 `invalid_native_jacobian_probes`（`sample_count=0`、`invalid_probe_count=82`）bypass。QG fail：`local_scale_median`、`local_scale_pixel_ratio` fail，`effective_pixel_count`、gradient、noise、ΔE、owner coverage pass；统一 `analysis.json` 状态为 `rejected`，不授予D2/D3。
+
+证据：[机器摘要](../benchmarks/task-4c-langyuan-scale1-pilot-r1.json)、[execution.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-4c/langyuan-scale1-r1/execution.json)、[analysis.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-4c/langyuan-scale1-r1/analysis.json)、[Stack_Report](/Users/dp/Desktop/raw-editor/output/acceptance/task-4c/langyuan-scale1-r1/run/langyuan-s1-task-4c-scale1-r1-stack-reports/stack-report-c8bf6f03-56f1-4603-a5b6-bf55b1173c5c.json)。本次结果只完成资源可行性测量，不放宽门禁、不修改生产阈值/bounds/fallback，不把TIFF写出当作验收通过。
+
+### 试跑后的只读复核
+
+使用现有 `langyuan_residual_support_audit.py` 对本次 `analysis.json` 与 `Stack_Report` 做交集审计：10 个 local-scale 失败点全部在记录的 residual 支持区域之外（inside `0`、outside `10`；本报告 `residual_warp.regions=[]`、`identity=true`）。这排除了“禁用 residual/强制 residual identity”作为当前失败解释。只读汇总见 [task-4c follow-up audit](../benchmarks/task-4c-langyuan-scale1-followup-audit-r1.json)。下一步只保留 station/source Jacobian 与 closure offending-pair witness 的 test-only 审计，完成前不重复 native 全量运行。
+
+source-to-world sensitivity 随后完成：4 个非零 local-scale failure 点达到 `0.95` 所需的理论各向同性因子为 `1.08615–1.76232`；0 值 pixel-ratio 点不能反推倍率，跨度不支持全局倍率修复。结果仅作为几何假设证据，不写入 pose、bounds、阈值或 fallback：[scale1 geometry sensitivity](../benchmarks/task-4c-langyuan-scale1-geometry-sensitivity-r1.json)。
+
+closure offender witness 审计也已完成：station `0↔17` 的候选为 fitted projective relation，`174` 个 fitted inliers、selected scale ratio `1.17565`，但 spatial support 仅 `0.42051`；其 direct closure P95 仍为 `3.52766px`，超过 `3px` 门。该候选不是生产 pose 修正证据；后续只审计这一对的 correspondence support 与 source/Jacobian 关系，不放宽 closure 门禁：[closure offender audit](../benchmarks/task-4c-langyuan-scale1-closure-offender-r1.json)。
+
+与同一报告的 27 条 accepted relation 对照后，offender 的 spatial support `0.42051` 和 median error `1.26287px` 落在 accepted 分布内，但 fitted inliers `174` 低于 accepted 最小值 `249`，scale ratio `1.17565` 高于 accepted 最大值 `1.11199`。这把后续问题收敛到低支持量与异常尺度关系的 source/Jacobian 证据，不授权扩大 scale bounds：[support comparison](../benchmarks/task-4c-langyuan-scale1-closure-support-comparison-r1.json)。
+
+进一步复核两个 station 的 `tile_to_world` Jacobian：station 0 的 `sqrt(|det|)=1.0000`，station 17 为 `0.84775`，其倒数 `1.17960` 与拟合 relation scale `1.17565` 接近；两站都标为 `topology_index_ambiguous`。这说明尺度差异具有稳定几何证据，不能按随机 correspondence 漂移处理；当前仍受低 inlier 支持和 topology ambiguity 阻断：[station Jacobian audit](../benchmarks/task-4c-langyuan-scale1-station-jacobian-r1.json)。
+
+至此本轮 bounded correspondence-support 与 source/Jacobian witness 审计闭合，未产生 pose、bounds、阈值或 fallback 修改；除非有新的拓扑或来源证据，否则不再重跑该 84 张全量 native。
+
+随后完成 topology/source correspondence 只读审计：station 0 与 17 的成员集合均与 `source-alignment.json` 的 capture group 精确一致，排除了漏源或错分组解释；但 station 17 的组内 center drift median/max 为 `139.21/211.43px`，station 0 为 `50.25/55.54px`（约 `2.77x/3.81x`），两站仍标记 `topology_index_ambiguous`。这进一步支持“拓扑/物理倍率诊断”而非全局 scale 修正：[topology correspondence audit](../benchmarks/task-4c-langyuan-scale1-topology-correspondence-r1.json)。
+
+本轮统一收口摘要：[scale=1 closure](../benchmarks/task-4c-langyuan-scale1-closure-r1.json)。

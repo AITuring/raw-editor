@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "method": "langyuan_scale1_closure_correspondence_support_comparison_v1",
+  "production_impact": "test_only_read_only_relation_distribution_comparison_no_pose_write_no_threshold_change",
+  "analysis": "output/acceptance/task-4c/langyuan-scale1-r1/analysis.json",
+  "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4c/langyuan-scale1-r1/run/langyuan-s1-task-4c-scale1-r1-stack-reports/stack-report-c8bf6f03-56f1-4603-a5b6-bf55b1173c5c.json",
+  "pair": {
+    "left": 0,
+    "right": 17,
+    "closure_p95_px": 3.5276637618161684,
+    "closure_gate_px": 3.0
+  },
+  "selected_candidate": {
+    "model": "projective",
+    "inliers": 174,
+    "median_error_px": 1.262869124455242,
+    "scale_ratio": 1.175650731336273,
+    "spatial_support": 0.42051223982515223,
+    "holdout_count": 78,
+    "holdout_median_error_px": 1.4111894917548746,
+    "holdout_spatial_support": 0.3543258364760211,
+    "scale_evidence": {
+      "contract_version": 1,
+      "passes": true,
+      "fit_count": 85,
+      "holdout_count": 89,
+      "holdout_median_error_px": 1.213597375171724,
+      "holdout_spatial_support": 0.40119349716323055,
+      "region_counts": [
+        30,
+        27,
+        20,
+        12
+      ],
+      "region_median_error_px": [
+        1.5235953041487427,
+        1.1133975452464469,
+        1.0513093080420397,
+        1.9441793272378514
+      ],
+      "grid_probe_count": 81,
+      "positive_jacobians": true,
+      "minimum_scale": 1.16177413785091,
+      "maximum_scale": 1.2188546938267992,
+      "scale_variation": 1.0491322315725489,
+      "maximum_anisotropy": 1.045102493037355,
+      "maximum_refit_scale_difference": 0.00045512456815299807
+    }
+  },
+  "accepted_relation_distribution": {
+    "spatial_support": {
+      "accepted_min": 0.2516564873883286,
+      "accepted_median": 0.47832398943892324,
+      "accepted_max": 0.8032004661463127,
+      "offender": 0.42051223982515223,
+      "offender_below_min": false,
+      "offender_above_max": false
+    },
+    "inliers": {
+      "accepted_min": 249,
+      "accepted_median": 513,
+      "accepted_max": 941,
+      "offender": 174,
+      "offender_below_min": true,
+      "offender_above_max": false
+    },
+    "median_error_px": {
+      "accepted_min": 0.92370978921178,
+      "accepted_median": 1.433234828241029,
+      "accepted_max": 2.998047823365093,
+      "offender": 1.262869124455242,
+      "offender_below_min": false,
+      "offender_above_max": false
+    },
+    "scale_ratio": {
+      "accepted_min": 0.8786064668682785,
+      "accepted_median": 0.9882227772578289,
+      "accepted_max": 1.1119920717264737,
+      "offender": 1.175650731336273,
+      "offender_below_min": false,
+      "offender_above_max": true
+    }
+  },
+  "interpretation": "The offender has acceptable-looking correspondence error and spatial support relative to accepted relations, but its fitted inlier count is below the accepted minimum and its scale ratio is above the accepted relation maximum. This explains why it cannot be treated as an ordinary accepted relation without changing the geometry contract; no threshold change is authorized.",
+  "next_action": "Keep the rejection; isolate source/Jacobian or correspondence support for station 0↔17 in test-only work. Do not widen scale bounds or closure gate."
+}

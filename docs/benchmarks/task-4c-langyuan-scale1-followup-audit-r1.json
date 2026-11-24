@@ -1,0 +1,154 @@
+{
+  "schema": 1,
+  "method": "langyuan_scale1_followup_read_only_audit_v1",
+  "production_impact": "test_only_read_only_no_pixel_write_no_pose_write_no_threshold_change",
+  "analysis": "output/acceptance/task-4c/langyuan-scale1-r1/analysis.json",
+  "analysis_sha256": "dbe199fe4795dd0df51d54d01917eed4ef3168ac6443bf16fa52f2d20e8a3695",
+  "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4c/langyuan-scale1-r1/run/langyuan-s1-task-4c-scale1-r1-stack-reports/stack-report-c8bf6f03-56f1-4603-a5b6-bf55b1173c5c.json",
+  "report_sha256": "b6b71d476f33c4ef740ad3d48c0895efe9a503a45bc5a11f6146070ed54719d6",
+  "input_preflight": {
+    "status": "pass",
+    "selected_count": 84,
+    "expected_skipped": [],
+    "explicit_exclusions": [],
+    "failures": []
+  },
+  "closure": {
+    "status": "unreliable",
+    "max_direct_pair_p95_px": 3.5276637618161684,
+    "residual_median_px": 9.41045684952688e-09,
+    "max_corner_correction_px": 0.0,
+    "fallback_reason": "closure_unreliable_pair_p95",
+    "offending_pair": {
+      "left": 0,
+      "left_row": 0,
+      "left_column": 5,
+      "right": 17,
+      "right_row": 2,
+      "right_column": 5,
+      "p95_px": 3.5276637618161684
+    }
+  },
+  "existing_limits": {
+    "direct_pair_p95_px": 3.0,
+    "residual_median_px": 2.0
+  },
+  "density": {
+    "status": "bypassed",
+    "factor": 1.0,
+    "sample_count": 0,
+    "invalid_probe_count": 82,
+    "boundary_probe_count": 101167,
+    "bypass_reason": "invalid_native_jacobian_probes",
+    "direct_pair_p95_output_px": null,
+    "residual_median_output_px": null,
+    "max_corner_correction_output_px": null
+  },
+  "local_scale_failures": [
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 11846.0,
+        "y": 772.0
+      },
+      "measured": 0.9653864688162495,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3734.NEF"
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 15558.0,
+        "y": 900.0
+      },
+      "measured": 0.9767112706654713,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3711.NEF"
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 23878.0,
+        "y": 1156.0
+      },
+      "measured": 0.8634956754527121,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3690.NEF"
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 28358.0,
+        "y": 1156.0
+      },
+      "measured": 0.7952391942245147,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3680.NEF"
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 22086.0,
+        "y": 1284.0
+      },
+      "measured": 0.8746460590769363,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3708.NEF"
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 9158.0,
+        "y": 2820.0
+      },
+      "measured": 0.9500206850738352,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3747.NEF"
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": 23878.0,
+        "y": 1156.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3690.NEF"
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": 28358.0,
+        "y": 1156.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3680.NEF"
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": 22086.0,
+        "y": 1284.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3708.NEF"
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": 9158.0,
+        "y": 2820.0
+      },
+      "measured": 0.5390625,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3747.NEF"
+    }
+  ],
+  "residual_support_audit": {
+    "regions": [],
+    "failure_points_inside": 0,
+    "failure_points_outside": 10,
+    "decision": "residual support cannot explain these local-scale failures; do not disable residual or alter pose based on this run"
+  },
+  "decision": {
+    "next_action": "stop native reruns; open a test-only station/source Jacobian and closure witness audit before any 0.25 or scale=1 rerun",
+    "do_not_do": [
+      "do not relax 3px closure gate",
+      "do not treat density bypass as proof",
+      "do not apply global scale factor",
+      "do not change bounds/fallback/rejection semantics"
+    ]
+  }
+}

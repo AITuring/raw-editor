@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "method": "langyuan_scale1_station_jacobian_scale_audit_v1",
+  "production_impact": "test_only_read_only_station_scale_comparison_no_pose_write_no_threshold_change",
+  "analysis": "output/acceptance/task-4c/langyuan-scale1-r1/analysis.json",
+  "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4c/langyuan-scale1-r1/run/langyuan-s1-task-4c-scale1-r1-stack-reports/stack-report-c8bf6f03-56f1-4603-a5b6-bf55b1173c5c.json",
+  "pair": {
+    "left_station": 0,
+    "left_members": [
+      "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3751.NEF",
+      "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3752.NEF",
+      "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3753.NEF"
+    ],
+    "left_topology_status": "topology_index_ambiguous",
+    "right_station": 17,
+    "right_members": [
+      "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3757.NEF",
+      "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3758.NEF",
+      "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3759.NEF"
+    ],
+    "right_topology_status": "topology_index_ambiguous",
+    "selected_relation_scale_ratio": 1.175650731336273,
+    "selected_relation_inliers": 174,
+    "selected_relation_spatial_support": 0.42051223982515223,
+    "left_tile": {
+      "dimensions": [
+        8302,
+        5590
+      ],
+      "effective_bounds": [
+        108,
+        8,
+        8096,
+        5544
+      ],
+      "linear": [
+        1.0,
+        -4.163336342344337e-17,
+        -1.6263032587282567e-18,
+        0.9999999999999999
+      ],
+      "determinant": 0.9999999999999999,
+      "sqrt_abs_det": 0.9999999999999999
+    },
+    "right_tile": {
+      "dimensions": [
+        8466,
+        5615
+      ],
+      "effective_bounds": [
+        116,
+        4,
+        8256,
+        5580
+      ],
+      "linear": [
+        0.8455625878669478,
+        -0.029567595844254106,
+        0.03208395100209638,
+        0.8488135097038154
+      ],
+      "determinant": 0.7186735931779017,
+      "sqrt_abs_det": 0.8477461844077516
+    },
+    "inverse_right_over_left_sqrt_det": 1.179598349591647,
+    "direct_closure_p95_px": 3.5276637618161684
+  },
+  "accepted_neighbors": [
+    {
+      "left": 0,
+      "right": 1,
+      "inliers": 249,
+      "spatial_support": 0.4472003697291706,
+      "scale_ratio": 0.9937060819881558,
+      "median_error_px": 1.3568049441366565
+    },
+    {
+      "left": 0,
+      "right": 9,
+      "inliers": 363,
+      "spatial_support": 0.40050179693479027,
+      "scale_ratio": 0.9494220308693538,
+      "median_error_px": 1.8863545382519429
+    },
+    {
+      "left": 9,
+      "right": 17,
+      "inliers": 437,
+      "spatial_support": 0.5247321728164122,
+      "scale_ratio": 1.1119920717264737,
+      "median_error_px": 1.433234828241029
+    },
+    {
+      "left": 17,
+      "right": 19,
+      "inliers": 411,
+      "spatial_support": 0.8032004661463127,
+      "scale_ratio": 1.0230477703304273,
+      "median_error_px": 2.998047823365093
+    },
+    {
+      "left": 17,
+      "right": 25,
+      "inliers": 592,
+      "spatial_support": 0.2847192758791901,
+      "scale_ratio": 0.919645838777387,
+      "median_error_px": 1.2461439629809177
+    }
+  ],
+  "interpretation": "The fitted relation scale ratio is close to the inverse right/left tile Jacobian area scale (1.17565 vs 1.17960), so the scale difference is stable geometry evidence rather than a random fit artifact. Both stations are topology_index_ambiguous and the relation has only 174 inliers; this remains a diagnosis of topology/support and physical magnification, not a production correction.",
+  "next_action": "Audit topology ambiguity and source correspondence support for stations 0 and 17 in test-only work. Do not normalize the scale, widen bounds, or relax closure."
+}

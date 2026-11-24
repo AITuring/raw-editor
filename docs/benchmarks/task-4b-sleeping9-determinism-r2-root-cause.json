@@ -1,0 +1,243 @@
+{
+  "schema": 1,
+  "task": "4B / tasks.md 2B.2",
+  "date": "2026-11-23",
+  "matrix": "output/acceptance/task-4b/determinism-sleeping9-r2-escalated/determinism.json",
+  "matrix_status": "fail",
+  "binary": "base-2026-11-12",
+  "binary_sha256": "39bfe6f2aecc8a7ebc154efb94ba4b1f1a26257c825a676a0e54e8cde9cef03b",
+  "dataset": "sleeping",
+  "subset": "sleeping-9-6479",
+  "scale": 1.0,
+  "slot": "exclusive",
+  "environment": "non-sandboxed (escalated) shell; slot.py lower_priority/setpriority succeeded; supervisor released slots normally",
+  "runs": [
+    {
+      "run": "t1-r1",
+      "rayon_threads": 1,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "qg": "pass",
+      "output_sha256": "0c40966c4994225d2f2ecd3901e6d55cc4ea348e50dfd1ea994ce299a595df10",
+      "signature_sha256": "662824c9daf247ce7c863c739cd275289691af16068c4369509019980efc525f",
+      "fusion_solver_status": [
+        "per_cell_fallback",
+        "graph_cut",
+        "per_cell_fallback"
+      ],
+      "graph_cut_seconds": [
+        145.77,
+        71.44,
+        216.59
+      ],
+      "peak_rss_bytes": 9446506496,
+      "wall_seconds": 1205.9
+    },
+    {
+      "run": "t1-r2",
+      "rayon_threads": 1,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "qg": "pass",
+      "output_sha256": "0c40966c4994225d2f2ecd3901e6d55cc4ea348e50dfd1ea994ce299a595df10",
+      "signature_sha256": "662824c9daf247ce7c863c739cd275289691af16068c4369509019980efc525f",
+      "fusion_solver_status": [
+        "per_cell_fallback",
+        "graph_cut",
+        "per_cell_fallback"
+      ],
+      "graph_cut_seconds": [
+        144.75,
+        69.72,
+        221.48
+      ],
+      "peak_rss_bytes": 8744386560,
+      "wall_seconds": 1204.4
+    },
+    {
+      "run": "t2-r1",
+      "rayon_threads": 2,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "qg": "pass",
+      "output_sha256": "4b8016d3c76230534dbe61dea3aceef573a07ac6c1203725af21009699c72183",
+      "signature_sha256": "aadb8d9a074b88307efec1ef330d366b4ed6b5087c47d312d11cbca0938473ae",
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "per_cell_fallback"
+      ],
+      "graph_cut_seconds": [
+        83.58,
+        41.01,
+        123.72
+      ],
+      "peak_rss_bytes": 9553674240,
+      "wall_seconds": 695.4
+    },
+    {
+      "run": "t2-r2",
+      "rayon_threads": 2,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "qg": "pass",
+      "output_sha256": "04ee459b669ed8bd9f6c633ee16b69e57287367a51e898f9f36d7329c4651f2b",
+      "signature_sha256": "3bd3214df1bce5321c7a564010671ec60b800850c1676ea9ef4e0ef87f96b7f1",
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_seconds": [
+        77.57,
+        40.14,
+        117.81
+      ],
+      "peak_rss_bytes": 10770202624,
+      "wall_seconds": 682.0
+    },
+    {
+      "run": "t5-r1",
+      "rayon_threads": 5,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "qg": "pass",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "signature_sha256": "11eead2082a9b178d634159921f5a8473ffd17f6f74d4985333688a7d267fe33",
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_seconds": [
+        43.13,
+        23.68,
+        65.58
+      ],
+      "peak_rss_bytes": 10203480064,
+      "wall_seconds": 453.7
+    },
+    {
+      "run": "t5-r2",
+      "rayon_threads": 5,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "qg": "pass",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "signature_sha256": "11eead2082a9b178d634159921f5a8473ffd17f6f74d4985333688a7d267fe33",
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_seconds": [
+        47.68,
+        22.22,
+        68.09
+      ],
+      "peak_rss_bytes": 10434117632,
+      "wall_seconds": 466.5
+    },
+    {
+      "run": "t8-r1",
+      "rayon_threads": 8,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "qg": "pass",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "signature_sha256": "11eead2082a9b178d634159921f5a8473ffd17f6f74d4985333688a7d267fe33",
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_seconds": [
+        40.21,
+        17.78,
+        56.92
+      ],
+      "peak_rss_bytes": 9842982912,
+      "wall_seconds": 403.3
+    },
+    {
+      "run": "t8-r2",
+      "rayon_threads": 8,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "qg": "pass",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "signature_sha256": "11eead2082a9b178d634159921f5a8473ffd17f6f74d4985333688a7d267fe33",
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_seconds": [
+        34.38,
+        17.76,
+        54.72
+      ],
+      "peak_rss_bytes": 9846931456,
+      "wall_seconds": 379.2
+    }
+  ],
+  "findings": {
+    "v28_tiff_reproduced_at": [
+      "t5-r1",
+      "t5-r2",
+      "t8-r1",
+      "t8-r2"
+    ],
+    "repeat_identical": {
+      "t1": true,
+      "t2": false,
+      "t5": true,
+      "t8": true
+    },
+    "v28_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+    "pixel_diff_vs_t5_r1": {
+      "t1-r1": {
+        "diff_pixels": 70782836,
+        "ratio": 0.6625879,
+        "max_rgb16": 65535,
+        "alpha_diff": 14334
+      },
+      "t2-r1": {
+        "diff_pixels": 64892587,
+        "ratio": 0.6074501,
+        "max_rgb16": 65535,
+        "alpha_diff": 2438
+      },
+      "t2-r2": {
+        "diff_pixels": 64831687,
+        "ratio": 0.6068801,
+        "max_rgb16": 65535,
+        "alpha_diff": 2393
+      }
+    },
+    "pixel_diff_t2_r1_vs_t2_r2": {
+      "diff_pixels": 6143896,
+      "ratio": 0.0575121,
+      "max_rgb16": 33100,
+      "alpha_diff": 59
+    },
+    "report_diff": {
+      "t5-r1_vs_t8-r1": "only timing/RSS/worker_threads",
+      "t2-r1_vs_t2-r2": "fusion[2].solver_status per_cell_fallback vs graph_cut, then tone and quality_gate statistics",
+      "t1-r1_vs_t5-r1": "fusion, station_relations, closure, composition, tone and quality_gate all differ"
+    },
+    "root_cause": "Requirement 3.5 graph-cut budget is wall-clock (120 s). Graph-cut time scales with Rayon threads (station2: t8 ~55 s, t5 ~66 s, t2 ~118-124 s, t1 ~217 s). When elapsed >= 120 s the solver returns grid.per_cell_minimum() with PerCellFallback (focus_fuser/ownership_solver.rs ~833-857, station_fusion.rs ~296). Different owners change Virtual_Tile pixels, then station relations, closure, tone and output. t2 straddles the budget, so even same-thread repeats differ.",
+    "hypothesis_not_verified": "Same mechanism may explain defect #6 (I1f warm run under concurrent fengying load had different station-relation inliers): CPU contention can push graph cut past 120 s.",
+    "qg_impact": "all 8 runs quality_accepted / QG pass; determinism fails on output_sha256 only",
+    "d5_impact": "D5 criterion (same binary, two runs identical) holds empirically at 5 and 8 threads for this subset; any dataset whose graph cut runs near 120 s at the slot thread count, or under contention, can violate it"
+  },
+  "decision": {
+    "determinism_verdict": "fail",
+    "classification": "N8.2 defect",
+    "thresholds_changed": false,
+    "rerun_to_mask": false,
+    "needs_user_decision": true
+  },
+  "method": "determinism_r2_root_cause_supplement_v1",
+  "primary_summary": "docs/benchmarks/task-4b-sleeping9-determinism-r2.json"
+}

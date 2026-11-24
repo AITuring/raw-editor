@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "method": "langyuan_scale1_closure_offender_witness_audit_v1",
+  "production_impact": "test_only_read_only_relation_witness_no_pose_write_no_threshold_change",
+  "analysis": "output/acceptance/task-4c/langyuan-scale1-r1/analysis.json",
+  "report": "/Users/dp/Desktop/raw-editor/output/acceptance/task-4c/langyuan-scale1-r1/run/langyuan-s1-task-4c-scale1-r1-stack-reports/stack-report-c8bf6f03-56f1-4603-a5b6-bf55b1173c5c.json",
+  "closure": {
+    "status": "unreliable",
+    "fallback_reason": "closure_unreliable_pair_p95",
+    "max_direct_pair_p95_px": 3.5276637618161684,
+    "gate_limit_px": 3.0,
+    "offending_pair": {
+      "left": 0,
+      "left_row": 0,
+      "left_column": 5,
+      "right": 17,
+      "right_row": 2,
+      "right_column": 5,
+      "p95_px": 3.5276637618161684
+    },
+    "residual_median_px": 9.41045684952688e-09,
+    "residual_p95_px": 0.05542036751425579,
+    "balanced_retry_attempted": true,
+    "balanced_retry_accepted": false
+  },
+  "stations": {
+    "left": {
+      "index": 0,
+      "members": [
+        "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3751.NEF",
+        "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3752.NEF",
+        "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3753.NEF"
+      ]
+    },
+    "right": {
+      "index": 17,
+      "members": [
+        "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3757.NEF",
+        "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3758.NEF",
+        "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3759.NEF"
+      ]
+    }
+  },
+  "relation_candidate": {
+    "left": 0,
+    "right": 17,
+    "predicted_overlap_area_px": 524055.7136241549,
+    "grid_probe_count": 2090,
+    "measurable_patch_count": 1855,
+    "bidirectional_match_count": 176,
+    "occupied_grid_cells": 16,
+    "residual_magnitude_px": {
+      "count": 174,
+      "min": 0.06652479802035566,
+      "p10": 0.6298901919049299,
+      "median": 1.262869124455242,
+      "p90": 2.672010492823058,
+      "max": 4.0957560434447275
+    },
+    "residual_translation": {
+      "candidate_inliers": 108,
+      "final_support": 0.3904973986451395,
+      "bounded_correction": true,
+      "rejection_reason": "accepted"
+    },
+    "residual_affine": {
+      "candidate_inliers": 107,
+      "final_support": 0.38827246312753405,
+      "bounded_correction": true,
+      "rejection_reason": "accepted"
+    },
+    "residual_projective": {
+      "candidate_inliers": 107,
+      "final_support": 0.38771973332689413,
+      "bounded_correction": true,
+      "rejection_reason": "accepted"
+    },
+    "residual_model": "native_polished_projective",
+    "fitted_inliers": 174,
+    "hull_support": 0.41931737161522786,
+    "median_prefit_structural_orientation_difference_degrees": 6.0446669357529315,
+    "median_fitted_orientation_difference_degrees": 5.632860916779594,
+    "failure_stage": "fitted",
+    "measurement_factor": 1,
+    "seed": "rendering_prior",
+    "selected_hypothesis": {
+      "model": "projective",
+      "selected": true,
+      "inliers": 174,
+      "median_error_px": 1.262869124455242,
+      "scale_ratio": 1.175650731336273,
+      "spatial_support": 0.42051223982515223,
+      "low_frequency_mean_relative_difference": 0.006665440485654646,
+      "edge_strength_ratio": 0.81951323036841,
+      "median_edge_orientation_difference_degrees": 4.841771680495767,
+      "preserves_convex_orientation": true,
+      "rejection_reasons": [],
+      "canonical_source": 0,
+      "canonical_target": 17,
+      "correspondence_count": 174
+    }
+  },
+  "decision": {
+    "native_acceptance": false,
+    "interpretation": "The offender has a fitted projective relation candidate, but measured support is limited and the direct closure p95 remains over the existing gate; this is diagnostic evidence, not a production pose correction.",
+    "next_action": "Use this pair for a bounded source/Jacobian and correspondence-support audit; do not relax the 3px gate or promote the candidate."
+  }
+}

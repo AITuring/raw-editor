@@ -1,0 +1,103 @@
+{
+  "task": "4C",
+  "label": "task-4c-langyuan-scale1-pilot-r1",
+  "date": "2026-11-23",
+  "dataset": "langyuan",
+  "inputs": 84,
+  "scale": 1.0,
+  "lane": "task-4c",
+  "slot": "exclusive",
+  "input_preflight": {
+    "status": "pass",
+    "selected_count": 84,
+    "expected_skipped": [],
+    "explicit_exclusions": [],
+    "failures": []
+  },
+  "binary": {
+    "label": "task-13-focus-scale-r1",
+    "commit": "1b638eb278f2749795b87a8780a86f91b757086b",
+    "sha256": "20a54e35e02586dd030b4cef0c8131417da24c7dbebae539d3d75c9ba4dc4b27"
+  },
+  "manifest_sha256": "a6730443d5628acb1e43cf1bab5791928e05f2eca25ddd8a5517af5050ecabda",
+  "inputs_sha256": "04b1c9537e69bbfad0524e165e38bea80f2901f18e2260efcfc36ce4b9c8b3d4",
+  "resource_contract": {
+    "preparation_threads": 1,
+    "rayon_threads": 1,
+    "memory_threshold_bytes": 25769803776,
+    "memory_gate_pass": true,
+    "peak_rss_bytes": 13631864832,
+    "peak_rss_gib": 12.694,
+    "wall_seconds": 9829.781429,
+    "native_wall_seconds": 9828.814703,
+    "contended": false,
+    "artifact_directory_bytes": 3127390208,
+    "artifact_directory_human": "~2.9 GiB"
+  },
+  "result": {
+    "status": "rejected",
+    "acceptance_state": "rejected",
+    "runner_verdict": "failed",
+    "runner_exit_code": 1,
+    "native_child_exit_code": 101,
+    "runner_failures": [
+      "harness failed (exit 101)",
+      "no focus-stack result line; acceptance metrics were not written",
+      "verified TIFF dimensions do not match the rendered result",
+      "Stack_Report degradation.result is rejected"
+    ],
+    "outcome": "rejected",
+    "closure": "unreliable",
+    "closure_fallback_reason": "closure_unreliable_pair_p95",
+    "closure_max_direct_pair_p95_px": 3.5276637618161684,
+    "quality_gate": "fail",
+    "quality_gate_non_pass": [
+      "local_scale_median:fail",
+      "local_scale_pixel_ratio:fail",
+      "mtf50_normalized:not_applicable",
+      "boundary_stroke_alignment:not_applicable"
+    ],
+    "output_contract": "artifact_validation_pass_but_harness_contract_fail",
+    "output": {
+      "format": "TIFF",
+      "width": 34670,
+      "height": 10560,
+      "bit_depth": 16,
+      "icc": "sRGB",
+      "alpha_preserved": true,
+      "path": "output/acceptance/task-4c/langyuan-scale1-r1/run/langyuan-s1-task-4c-scale1-r1.tiff",
+      "sha256": "6c4e297bfa507c8d82909d2a0ab53a622af15b8439d7c9e2820e78a7272787c2"
+    },
+    "output_density": {
+      "status": "bypassed",
+      "bypass_reason": "invalid_native_jacobian_probes",
+      "sample_count": 0,
+      "invalid_probe_count": 82,
+      "boundary_probe_count": 101167
+    }
+  },
+  "evidence": {
+    "execution": "output/acceptance/task-4c/langyuan-scale1-r1/execution.json",
+    "analysis": "output/acceptance/task-4c/langyuan-scale1-r1/analysis.json",
+    "stack_report": "output/acceptance/task-4c/langyuan-scale1-r1/run/langyuan-s1-task-4c-scale1-r1-stack-reports/stack-report-c8bf6f03-56f1-4603-a5b6-bf55b1173c5c.json",
+    "stack_report_sha256": "b6b71d476f33c4ef740ad3d48c0895efe9a503a45bc5a11f6146070ed54719d6",
+    "run_log": "output/acceptance/task-4c/langyuan-scale1-r1/run/langyuan-s1-task-4c-scale1-r1.log"
+  },
+  "decision": {
+    "native_acceptance": false,
+    "d2": false,
+    "d3": false,
+    "thresholds_changed": false,
+    "bounds_changed": false,
+    "fallback_changed": false,
+    "rejection_semantics_changed": false,
+    "next_step": "保持现有门禁和拒绝语义；若要继续，先解决 closure/local-scale/density 证据链，再单独设计 test-only 诊断，不把 TIFF 写出当作验收通过。"
+  },
+  "correction": {
+    "date": "2026-11-23",
+    "field": "failures[verified TIFF dimensions do not match the rendered result]",
+    "finding": "false positive: Stack_Report output and canvas are both 34670x10560; the harness found no 'focus-stack result' line because focus_stack_fixture.rs:750 panicked on acceptance metrics reference registration (66 descriptor matches, fewer than 40 inliers) after the TIFF was written and before the result line and native verdict",
+    "unchanged": "closure unreliable, density invalid_native_jacobian_probes bypass, QG local-scale fail, acceptance_state rejected",
+    "follow_up": "tasks.md 2B.4"
+  }
+}

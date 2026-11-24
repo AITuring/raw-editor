@@ -1,0 +1,236 @@
+{
+  "schema": 1,
+  "method": "langyuan_failure_geometry_sensitivity_audit_v1",
+  "production_impact": "test_only_read_only_jacobian_sensitivity_no_pose_write_no_threshold_change",
+  "analysis": "output/acceptance/task-4c/langyuan-scale1-r1/analysis.json",
+  "alignment": "output/acceptance/task-4c/langyuan-scale1-r1/source-alignment.json",
+  "failures": [
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 11846.0,
+        "y": 772.0
+      },
+      "measured": 0.9653864688162495,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3734.NEF",
+      "source_id": 54,
+      "source_to_world": [
+        0.968059319408369,
+        -0.37987288872584263,
+        -15109.000221482314,
+        0.04573162361933045,
+        1.0794977874463827,
+        -579.2216264005139,
+        2.588463487767886e-06,
+        5.970013693019961e-06,
+        0.9999946381590016
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 15558.0,
+        "y": 900.0
+      },
+      "measured": 0.9767112706654713,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3711.NEF",
+      "source_id": 31,
+      "source_to_world": [
+        0.9774765861151605,
+        -0.16539127500394343,
+        -8654.79189612212,
+        0.01727351270926234,
+        1.031703253629883,
+        -28.20517144059862,
+        4.2584766702625397e-07,
+        -7.983828633582177e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 23878.0,
+        "y": 1156.0
+      },
+      "measured": 0.8634956754527121,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3690.NEF",
+      "source_id": 10,
+      "source_to_world": [
+        0.9965195823506636,
+        -0.0707358630171354,
+        -2394.4372880342776,
+        0.004650972007003428,
+        0.9954122119965199,
+        -82.45697492027062,
+        -2.0223179256006677e-06,
+        -7.053798779165619e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": 1.1001792215136867
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 28358.0,
+        "y": 1156.0
+      },
+      "measured": 0.7952391942245147,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3680.NEF",
+      "source_id": 0,
+      "source_to_world": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": 1.1946091275423136
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 22086.0,
+        "y": 1284.0
+      },
+      "measured": 0.8746460590769363,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3708.NEF",
+      "source_id": 28,
+      "source_to_world": [
+        0.9450799598489773,
+        -0.09181444718603446,
+        -4350.706046364335,
+        0.028906938703944764,
+        1.0034429379587988,
+        209.4252004870018,
+        2.852036917293295e-07,
+        -8.061200240802242e-07,
+        0.9999427008901062
+      ],
+      "required_isotropic_scale_to_0_95": 1.086153639110418
+    },
+    {
+      "criterion": "local_scale_median",
+      "world": {
+        "x": 9158.0,
+        "y": 2820.0
+      },
+      "measured": 0.9500206850738352,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3747.NEF",
+      "source_id": 67,
+      "source_to_world": [
+        0.9197737244873582,
+        -0.3491502863309408,
+        -20074.305955008673,
+        0.017733550764220205,
+        0.9973534803754889,
+        1193.8256015091013,
+        2.5136646818381534e-06,
+        9.869197546943484e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": 23878.0,
+        "y": 1156.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3690.NEF",
+      "source_id": 10,
+      "source_to_world": [
+        0.9965195823506636,
+        -0.0707358630171354,
+        -2394.4372880342776,
+        0.004650972007003428,
+        0.9954122119965199,
+        -82.45697492027062,
+        -2.0223179256006677e-06,
+        -7.053798779165619e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": 28358.0,
+        "y": 1156.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3680.NEF",
+      "source_id": 0,
+      "source_to_world": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": 22086.0,
+        "y": 1284.0
+      },
+      "measured": 0.0,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3708.NEF",
+      "source_id": 28,
+      "source_to_world": [
+        0.9450799598489773,
+        -0.09181444718603446,
+        -4350.706046364335,
+        0.028906938703944764,
+        1.0034429379587988,
+        209.4252004870018,
+        2.852036917293295e-07,
+        -8.061200240802242e-07,
+        0.9999427008901062
+      ],
+      "required_isotropic_scale_to_0_95": null
+    },
+    {
+      "criterion": "local_scale_pixel_ratio",
+      "world": {
+        "x": 9158.0,
+        "y": 2820.0
+      },
+      "measured": 0.5390625,
+      "owner_path": "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3747.NEF",
+      "source_id": 67,
+      "source_to_world": [
+        0.9197737244873582,
+        -0.3491502863309408,
+        -20074.305955008673,
+        0.017733550764220205,
+        0.9973534803754889,
+        1193.8256015091013,
+        2.5136646818381534e-06,
+        9.869197546943484e-07,
+        1.0
+      ],
+      "required_isotropic_scale_to_0_95": 1.76231884057971
+    }
+  ],
+  "summary": {
+    "failure_points": 10,
+    "points_below_0_95": 4,
+    "minimum_required_scale_factor": 1.086153639110418,
+    "maximum_required_scale_factor": 1.76231884057971,
+    "decision": "sensitivity_only; required scale factors are evidence for a geometry hypothesis, not an instruction to alter source poses"
+  }
+}

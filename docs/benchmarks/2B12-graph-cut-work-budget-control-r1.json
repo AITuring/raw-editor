@@ -1,0 +1,144 @@
+{
+  "schema": 1,
+  "task": "2B.12 graph-cut work budget (N8.2, user decision a)",
+  "date": "2026-11-23",
+  "dataset": "sleeping",
+  "subset": "sleeping-9-6479",
+  "scale": 1.0,
+  "rayon_threads": 8,
+  "slot": "exclusive",
+  "runs": {
+    "candidate": {
+      "binary": "2B12-work-budget-m1",
+      "commit": "e3530e440b907d00611d0469cb71a0d86afa7982",
+      "binary_sha256": "7b385c4afc6c7160df831586ffd6440bdee32257d4c6a8f34acb6510b205c9c6",
+      "output_sha256": "6b7a5b26756ec59e2fd6eb0257714ac4153175b7ea02492a26245747d7ab0750",
+      "status": "quality_accepted",
+      "dir": "output/acceptance/2B.12/sleeping-9-6479-m1-t8"
+    },
+    "control_v1_head": {
+      "binary": "2B12-control-v1-0b6147b1",
+      "commit": "0b6147b147e7143462d585aade3bb0f7eba34dd1",
+      "binary_sha256": "ed22796050fb113970582d1b27a717de9acb29b7a0d187539135e2d8301574dc",
+      "output_sha256": "6b7a5b26756ec59e2fd6eb0257714ac4153175b7ea02492a26245747d7ab0750",
+      "status": "quality_accepted",
+      "peak_rss_bytes": 9186508800,
+      "dir": "output/acceptance/2B.12/sleeping-9-6479-control-t8"
+    }
+  },
+  "candidate_vs_control": {
+    "tiff_identical": true,
+    "stack_report_differences": "timing fields, run/result ids, output path, RSS, and the new fusion.graph_cut_work / graph_cut_work_limit fields only"
+  },
+  "measured_cut_work": [
+    {
+      "station": 0,
+      "cells": 184100,
+      "rounds": 2,
+      "work": 213320380,
+      "per_cell_round": 579
+    },
+    {
+      "station": 1,
+      "cells": 186204,
+      "rounds": 1,
+      "work": 73557822,
+      "per_cell_round": 395
+    },
+    {
+      "station": 2,
+      "cells": 197813,
+      "rounds": 3,
+      "work": 486364851,
+      "per_cell_round": 820
+    }
+  ],
+  "v1_head_drift_from_v28": {
+    "v28_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+    "v28_reference_run": "output/acceptance/task-4b/determinism-sleeping9-r2-escalated/sleeping-t5-r1 (base-2026-11-12)",
+    "v1_head_sha256": "6b7a5b26756ec59e2fd6eb0257714ac4153175b7ea02492a26245747d7ab0750",
+    "pixel_diff": {
+      "diff_pixels": 44771036,
+      "ratio": 0.419095,
+      "max_rgba16": 52753,
+      "bbox_x": [
+        1,
+        9523
+      ],
+      "bbox_y": [
+        0,
+        6451
+      ],
+      "hist": {
+        "1": 15850458,
+        "2-16": 15054231,
+        "17-256": 7721819,
+        "257-4096": 4053158,
+        ">4096": 2091370
+      }
+    },
+    "stack_report_sections_differing": {
+      "tone": 58,
+      "quality_gate": 494,
+      "performance": 7,
+      "schema": 1,
+      "input": 1,
+      "degradation": 1
+    },
+    "stack_report_sections_identical": [
+      "grouping",
+      "intra_station",
+      "fusion",
+      "station_relations",
+      "closure",
+      "composition",
+      "residual_warp"
+    ],
+    "qg": "pass on both",
+    "attribution": {
+      "method": "bisect over the 33 source-changing commits in 72af6ea0..0b6147b1; sleeping-9-6479 scale=1, RAYON=8, exclusive, one frozen binary per step",
+      "steps": [
+        {
+          "commit": "c9aa8950",
+          "binary": "2B12-bisect-c9aa8950",
+          "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+          "v28": true
+        },
+        {
+          "commit": "01eaf132",
+          "binary": "2B12-bisect-01eaf132",
+          "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+          "v28": true
+        },
+        {
+          "commit": "0b6147b1",
+          "binary": "2B12-control-v1-0b6147b1",
+          "output_sha256": "6b7a5b26756ec59e2fd6eb0257714ac4153175b7ea02492a26245747d7ab0750",
+          "v28": false
+        }
+      ],
+      "first_bad_commit": "0b6147b1 'close diagnostic lanes and publish material evidence' (2026-11-23)",
+      "production_changes_in_commit": [
+        "stitching/tile_ownership_stitcher.rs: stale_owner_should_yield — a covered pixel whose current owner RGB is not canvas-like or is tone foreground always yields to the next candidate, bypassing the seam label and focus_tile_ownership_should_replace",
+        "stitching/station_seam_apply.rs: at a seam pixel whose sampled RGB is not canvas-like or is foreground, switch to the opposite owner when that sample is canvas-like",
+        "stack_pipeline/compositor.rs + tile_ownership_stitcher.rs:~1294: native_revisit_candidate_should_replace — a native revisit may not replace a canvas-like owner with a non-canvas candidate"
+      ],
+      "neutral_changes_checked": "tone pair_evidence/tone_local/transforms changes read env vars only under cfg(test) and fall back to the unchanged production constants",
+      "origin": "task 14 Wenyuan 'owner revisit guard' (docs/artwork-lanes/14-wenyuan-diagnostic.md §owner revisit)",
+      "process_gap": "no regression matrix run after task-6 (last: output/acceptance/task-6/matrix-r2-medium); tasks.md §6.3 requires medium tier before merge into v1",
+      "hunk_level_attribution": "not isolated; the three ownership rules were not tested separately"
+    },
+    "impact": "tests/acceptance/regression-matrix.json nine-cold/nine-hot still expect v28; medium tier on current v1 HEAD would fail these two rows independently of 2B.12",
+    "bisect_status": "complete",
+    "resolution": {
+      "user_decision": "a: revert the three ownership rules so v1 returns to v28",
+      "commit": "72fd0df4 on lane/2B.13/revert-owner-rules, fast-forwarded into local v1 (not pushed)",
+      "binary": "2B13-revert-owner-rules-r1",
+      "sleeping9_t8_output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "medium_tier": "pass 5/5, output/acceptance/task-2/matrix-2b13-r1-medium/matrix.json",
+      "kept": "test-only tone capture and diagnostics from 0b6147b1",
+      "follow_up": "task 14 owner revisit guard must be resubmitted with the medium tier and visual review before merging"
+    }
+  },
+  "next": "set final GRAPH_CUT_WORK_PER_CELL_ROUND, revise requirement 3.5, freeze, run determinism matrix and medium tier; user decides how to handle the v1 drift"
+}

@@ -1,0 +1,289 @@
+{
+  "schema": 1,
+  "task": "4B / 2B.2 / 2B.12",
+  "date": "2026-11-23",
+  "matrix": "output/acceptance/2B.12/determinism-sleeping9-work-budget-r1/determinism.json",
+  "matrix_status": "pass",
+  "binary": "2B12-work-budget-r1",
+  "binary_sha256": "b2ccadee8586973fa4b5ab50df01c3a6cbd6b46b02ca9606102a0e70340878fc",
+  "commit": "bcddb6a6fcdb6089e25cda2b65122d10bba2cf32",
+  "dataset": "sleeping",
+  "subset": "sleeping-9-6479",
+  "scale": 1.0,
+  "slot": "exclusive",
+  "threads": [
+    1,
+    2,
+    5,
+    8
+  ],
+  "repeat": 2,
+  "expected_output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+  "all_outputs_equal_v28": true,
+  "cut_work_identical_across_runs": true,
+  "max_peak_rss_bytes": 10960617472,
+  "memory_gate_bytes": 25769803776,
+  "runs": [
+    {
+      "run": "t1-r1",
+      "rayon_threads": 1,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "signature_sha256": "11eead2082a9b178d634159921f5a8473ffd17f6f74d4985333688a7d267fe33",
+      "mismatches": 0,
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_work": [
+        213320380,
+        73557822,
+        486364851
+      ],
+      "graph_cut_work_limit": [
+        6032588800,
+        3050766336,
+        9722904576
+      ],
+      "graph_cut_seconds": [
+        139.1,
+        67.9,
+        208.0
+      ],
+      "wall_seconds": 1218.4,
+      "peak_rss_bytes": 6848299008
+    },
+    {
+      "run": "t1-r2",
+      "rayon_threads": 1,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "signature_sha256": "11eead2082a9b178d634159921f5a8473ffd17f6f74d4985333688a7d267fe33",
+      "mismatches": 0,
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_work": [
+        213320380,
+        73557822,
+        486364851
+      ],
+      "graph_cut_work_limit": [
+        6032588800,
+        3050766336,
+        9722904576
+      ],
+      "graph_cut_seconds": [
+        138.4,
+        67.6,
+        206.6
+      ],
+      "wall_seconds": 1210.8,
+      "peak_rss_bytes": 7347683328
+    },
+    {
+      "run": "t2-r1",
+      "rayon_threads": 2,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "signature_sha256": "11eead2082a9b178d634159921f5a8473ffd17f6f74d4985333688a7d267fe33",
+      "mismatches": 0,
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_work": [
+        213320380,
+        73557822,
+        486364851
+      ],
+      "graph_cut_work_limit": [
+        6032588800,
+        3050766336,
+        9722904576
+      ],
+      "graph_cut_seconds": [
+        76.2,
+        38.0,
+        114.9
+      ],
+      "wall_seconds": 730.3,
+      "peak_rss_bytes": 7418904576
+    },
+    {
+      "run": "t2-r2",
+      "rayon_threads": 2,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "signature_sha256": "11eead2082a9b178d634159921f5a8473ffd17f6f74d4985333688a7d267fe33",
+      "mismatches": 0,
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_work": [
+        213320380,
+        73557822,
+        486364851
+      ],
+      "graph_cut_work_limit": [
+        6032588800,
+        3050766336,
+        9722904576
+      ],
+      "graph_cut_seconds": [
+        76.3,
+        37.9,
+        115.4
+      ],
+      "wall_seconds": 729.2,
+      "peak_rss_bytes": 6782992384
+    },
+    {
+      "run": "t5-r1",
+      "rayon_threads": 5,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "signature_sha256": "11eead2082a9b178d634159921f5a8473ffd17f6f74d4985333688a7d267fe33",
+      "mismatches": 0,
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_work": [
+        213320380,
+        73557822,
+        486364851
+      ],
+      "graph_cut_work_limit": [
+        6032588800,
+        3050766336,
+        9722904576
+      ],
+      "graph_cut_seconds": [
+        40.6,
+        20.4,
+        61.1
+      ],
+      "wall_seconds": 472.1,
+      "peak_rss_bytes": 10213621760
+    },
+    {
+      "run": "t5-r2",
+      "rayon_threads": 5,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "signature_sha256": "11eead2082a9b178d634159921f5a8473ffd17f6f74d4985333688a7d267fe33",
+      "mismatches": 0,
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_work": [
+        213320380,
+        73557822,
+        486364851
+      ],
+      "graph_cut_work_limit": [
+        6032588800,
+        3050766336,
+        9722904576
+      ],
+      "graph_cut_seconds": [
+        40.5,
+        19.9,
+        60.4
+      ],
+      "wall_seconds": 469.8,
+      "peak_rss_bytes": 10399105024
+    },
+    {
+      "run": "t8-r1",
+      "rayon_threads": 8,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "signature_sha256": "11eead2082a9b178d634159921f5a8473ffd17f6f74d4985333688a7d267fe33",
+      "mismatches": 0,
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_work": [
+        213320380,
+        73557822,
+        486364851
+      ],
+      "graph_cut_work_limit": [
+        6032588800,
+        3050766336,
+        9722904576
+      ],
+      "graph_cut_seconds": [
+        34.7,
+        17.1,
+        51.3
+      ],
+      "wall_seconds": 444.8,
+      "peak_rss_bytes": 10522214400
+    },
+    {
+      "run": "t8-r2",
+      "rayon_threads": 8,
+      "driver_exit_code": 0,
+      "status": "quality_accepted",
+      "output_sha256": "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "signature_sha256": "11eead2082a9b178d634159921f5a8473ffd17f6f74d4985333688a7d267fe33",
+      "mismatches": 0,
+      "fusion_solver_status": [
+        "graph_cut",
+        "graph_cut",
+        "graph_cut"
+      ],
+      "graph_cut_work": [
+        213320380,
+        73557822,
+        486364851
+      ],
+      "graph_cut_work_limit": [
+        6032588800,
+        3050766336,
+        9722904576
+      ],
+      "graph_cut_seconds": [
+        34.0,
+        16.8,
+        51.2
+      ],
+      "wall_seconds": 441.0,
+      "peak_rss_bytes": 10960617472
+    }
+  ],
+  "regression": {
+    "quick": "pass output/acceptance/task-2/matrix-2b12-r1-quick/matrix.json",
+    "medium": "pass 5/5 output/acceptance/task-2/matrix-2b12-r1-medium/matrix.json"
+  },
+  "comparison_r2": "base-2026-11-12 with 120 s wall clock: t1 0c40966c (fallback stations 0,2), t2 two different SHAs, t5/t8 v28 (docs/benchmarks/task-4b-sleeping9-determinism-r2.json)",
+  "not_run": [
+    "order_permutation",
+    "concurrent_load",
+    "cancellation",
+    "oom",
+    "provider_fallback"
+  ],
+  "scope": "thread-count determinism of one subset only; order permutation, concurrent load, cancellation, OOM and provider fallback remain not_run (task 22)"
+}

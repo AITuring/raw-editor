@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "method": "determinism_matrix_environment_block_audit_v1",
+  "task": "4B",
+  "matrix": "output/acceptance/task-4b/determinism-sleeping9-r1/determinism.json",
+  "attempts": 8,
+  "driver_exit_code": 127,
+  "native_runs_started": false,
+  "blocking_reason": "required_nice_priority_unavailable",
+  "environment_probe": {
+    "current_priority": 0,
+    "python_setpriority": {
+      "exit_code": 1,
+      "errno": 1,
+      "message": "Operation not permitted"
+    },
+    "nice_command": {
+      "exit_code": 0,
+      "stderr": "nice: setpriority: Operation not permitted"
+    }
+  },
+  "decision": {
+    "determinism_verdict": "not_run",
+    "resource_contract_changed": false,
+    "slot_contract_changed": false,
+    "safe_action": "retain required nice/setpriority fail-closed behavior; rerun only in an environment that grants the existing scheduling permission"
+  }
+}

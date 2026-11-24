@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "task": "4B",
+  "dataset": "sleeping",
+  "subset": "sleeping-9-6479",
+  "binary": "base-2026-11-12",
+  "matrix": "output/acceptance/task-4b/determinism-sleeping9-r2-escalated/determinism.json",
+  "status": "determinism_failed_quality_accepted",
+  "native_runs_started": true,
+  "attempts": 8,
+  "quality_gate": {
+    "all_runs_pass": true,
+    "all_driver_exit_zero": true,
+    "all_acceptance_states": "quality_accepted"
+  },
+  "output_sha256_by_thread": {
+    "1": [
+      "0c40966c4994225d2f2ecd3901e6d55cc4ea348e50dfd1ea994ce299a595df10",
+      "0c40966c4994225d2f2ecd3901e6d55cc4ea348e50dfd1ea994ce299a595df10"
+    ],
+    "2": [
+      "4b8016d3c76230534dbe61dea3aceef573a07ac6c1203725af21009699c72183",
+      "04ee459b669ed8bd9f6c633ee16b69e57287367a51e898f9f36d7329c4651f2b"
+    ],
+    "5": [
+      "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3"
+    ],
+    "8": [
+      "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3",
+      "718a903dcd0bf102fd7ea7f2be652168ad972f18bc540f5854225ee2f1bb47e3"
+    ]
+  },
+  "determinism_findings": {
+    "thread1_repeatable": true,
+    "thread2_repeatable": false,
+    "thread5_repeatable": true,
+    "thread8_repeatable": true,
+    "cross_thread_output_equal": false,
+    "qg_pass_does_not_imply_determinism": true
+  },
+  "resources": {
+    "max_peak_rss_bytes": 10816339968,
+    "max_peak_rss_gib": 10.074,
+    "memory_threshold_bytes": 25769803776,
+    "memory_gate_pass": true,
+    "max_wall_seconds": 1204.9092609882355
+  },
+  "decision": {
+    "determinism_gate": "fail",
+    "production_change": false,
+    "thresholds_changed": false,
+    "bounds_changed": false,
+    "fallback_changed": false,
+    "next_step": "retain rejection of the determinism gate; isolate the thread2 intra-run drift before any D5 claim or full-material determinism matrix"
+  }
+}

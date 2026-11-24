@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "method": "langyuan_scale1_diagnostic_closure_v1",
+  "task": "4C/13",
+  "dataset": "langyuan",
+  "status": "diagnostic_closed_d3_not_reached",
+  "production_impact": "read_only_evidence_no_pose_scale_bounds_threshold_fallback_or_rejection_change",
+  "run": {
+    "inputs": 84,
+    "scale": 1.0,
+    "slot": "exclusive",
+    "input_preflight": "pass",
+    "memory_gate": "pass",
+    "peak_rss_bytes": 13631864832,
+    "wall_seconds": 9829.781429,
+    "runner_exit_code": 1,
+    "native_child_exit_code": 101,
+    "status": "rejected",
+    "acceptance_state": "rejected"
+  },
+  "rejection": {
+    "closure": "unreliable",
+    "direct_pair_p95_px": 3.5276637618161684,
+    "closure_gate_px": 3.0,
+    "quality_gate": "fail",
+    "quality_gate_non_pass": [
+      "local_scale_median:fail",
+      "local_scale_pixel_ratio:fail"
+    ],
+    "output_density": {
+      "status": "bypassed",
+      "reason": "invalid_native_jacobian_probes",
+      "sample_count": 0,
+      "invalid_probe_count": 82
+    },
+    "output_contract": "artifact_validation_pass_but_verified_tiff_dimensions_mismatch_rendered_result"
+  },
+  "diagnostics": {
+    "residual_support": {
+      "failure_points": 10,
+      "inside": 0,
+      "outside": 10,
+      "decision": "residual_support_does_not_explain_failures"
+    },
+    "source_to_world_sensitivity": {
+      "required_factor_min": 1.086153639110418,
+      "required_factor_max": 1.76231884057971,
+      "decision": "no_global_scale_factor"
+    },
+    "closure_offender": {
+      "pair": [0, 17],
+      "inliers": 174,
+      "spatial_support": 0.42051223982515223,
+      "scale_ratio": 1.175650731336273,
+      "decision": "below_accepted_support_and_above_accepted_scale_range"
+    },
+    "station_jacobian": {
+      "station0_sqrt_abs_det": 1.0,
+      "station17_sqrt_abs_det": 0.8477461844077516,
+      "inverse_station17_over_station0": 1.179598349591647,
+      "topology_status": "both_topology_index_ambiguous"
+    },
+    "topology_correspondence": {
+      "exact_capture_membership_for_both": true,
+      "source_membership_complete_for_both": true,
+      "station0_center_drift_median_max_px": [50.250646293656516, 55.5442930492563],
+      "station17_center_drift_median_max_px": [139.2121461466233, 211.43418633853298],
+      "station17_to_station0_drift_ratio_median_max": [2.7703553369859244, 3.806587044883884],
+      "decision": "not_missing_source; topology_or_physical_magnification_remains"
+    }
+  },
+  "evidence": {
+    "pilot": "docs/benchmarks/task-4c-langyuan-scale1-pilot-r1.json",
+    "followup": "docs/benchmarks/task-4c-langyuan-scale1-followup-audit-r1.json",
+    "sensitivity": "docs/benchmarks/task-4c-langyuan-scale1-geometry-sensitivity-r1.json",
+    "closure_offender": "docs/benchmarks/task-4c-langyuan-scale1-closure-offender-r1.json",
+    "support_comparison": "docs/benchmarks/task-4c-langyuan-scale1-closure-support-comparison-r1.json",
+    "station_jacobian": "docs/benchmarks/task-4c-langyuan-scale1-station-jacobian-r1.json",
+    "topology_correspondence": "docs/benchmarks/task-4c-langyuan-scale1-topology-correspondence-r1.json"
+  },
+  "decision": {
+    "native_acceptance": false,
+    "d2": false,
+    "d3": false,
+    "thresholds_changed": false,
+    "bounds_changed": false,
+    "fallback_changed": false,
+    "rejection_semantics_changed": false,
+    "next_step": "freeze task13; reopen only with new topology or source correspondence evidence; do not repeat the 84-source native run"
+  }
+}

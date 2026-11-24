@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "method": "langyuan_scale1_topology_correspondence_audit_v1",
+  "production_impact": "test_only_read_only_topology_and_source_membership_no_pose_write_no_threshold_change",
+  "report": "output/acceptance/task-4c/langyuan-scale1-r1/run/langyuan-s1-task-4c-scale1-r1-stack-reports/stack-report-c8bf6f03-56f1-4603-a5b6-bf55b1173c5c.json",
+  "alignment": "output/acceptance/task-4c/langyuan-scale1-r1/source-alignment.json",
+  "stations": [
+    {
+      "station_index": 0,
+      "topology_status": "topology_index_ambiguous",
+      "members": [
+        "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3751.NEF",
+        "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3752.NEF",
+        "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3753.NEF"
+      ],
+      "source_ids": [
+        71,
+        72,
+        73
+      ],
+      "source_membership_complete": true,
+      "capture_group_exact_membership": true,
+      "capture_groups": [
+        {
+          "group_index": 0,
+          "anchor_id": 71,
+          "member_ids": [
+            71,
+            72,
+            73
+          ],
+          "member_count": 3,
+          "median_center_drift_px": 50.250646293656516,
+          "maximum_center_drift_px": 55.5442930492563
+        }
+      ],
+      "station_overlap_evidence": {
+        "kind": "verified_overlap",
+        "score": 0.8432021859230292,
+        "inliers": 672,
+        "overlap_ncc": 0.9994542263550105,
+        "spatial_support": 0.717672133056864,
+        "scale_ratio": 1.0068863523143952
+      },
+      "topology_candidates": [
+        {
+          "left": 0,
+          "right": 1,
+          "kind": "ambiguous",
+          "score": 0.44
+        },
+        {
+          "left": 0,
+          "right": 9,
+          "kind": "ambiguous",
+          "score": 0.36
+        },
+        {
+          "left": 0,
+          "right": 10,
+          "kind": "ambiguous",
+          "score": 0.24
+        },
+        {
+          "left": 0,
+          "right": 17,
+          "kind": "ambiguous",
+          "score": 0.12
+        },
+        {
+          "left": 0,
+          "right": 19,
+          "kind": "ambiguous",
+          "score": 0.08
+        },
+        {
+          "left": 0,
+          "right": 2,
+          "kind": "ambiguous",
+          "score": 0.0
+        },
+        {
+          "left": 0,
+          "right": 3,
+          "kind": "ambiguous",
+          "score": 0.0
+        },
+        {
+          "left": 0,
+          "right": 4,
+          "kind": "ambiguous",
+          "score": 0.0
+        }
+      ]
+    },
+    {
+      "station_index": 17,
+      "topology_status": "topology_index_ambiguous",
+      "members": [
+        "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3757.NEF",
+        "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3758.NEF",
+        "/Users/dp/Downloads/书画拼图/阆苑女仙/DSC_3759.NEF"
+      ],
+      "source_ids": [
+        77,
+        78,
+        79
+      ],
+      "source_membership_complete": true,
+      "capture_group_exact_membership": true,
+      "capture_groups": [
+        {
+          "group_index": 17,
+          "anchor_id": 77,
+          "member_ids": [
+            77,
+            78,
+            79
+          ],
+          "member_count": 3,
+          "median_center_drift_px": 139.2121461466233,
+          "maximum_center_drift_px": 211.43418633853298
+        }
+      ],
+      "station_overlap_evidence": {
+        "kind": "verified_overlap",
+        "score": 0.851071745056304,
+        "inliers": 627,
+        "overlap_ncc": 0.9913425015807917,
+        "spatial_support": 0.8307818306197161,
+        "scale_ratio": 0.9916432529604942
+      },
+      "topology_candidates": [
+        {
+          "left": 17,
+          "right": 25,
+          "kind": "ambiguous",
+          "score": 0.36
+        },
+        {
+          "left": 17,
+          "right": 19,
+          "kind": "ambiguous",
+          "score": 0.32
+        },
+        {
+          "left": 9,
+          "right": 17,
+          "kind": "ambiguous",
+          "score": 0.24
+        },
+        {
+          "left": 10,
+          "right": 17,
+          "kind": "ambiguous",
+          "score": 0.24
+        },
+        {
+          "left": 1,
+          "right": 17,
+          "kind": "ambiguous",
+          "score": 0.16
+        },
+        {
+          "left": 0,
+          "right": 17,
+          "kind": "ambiguous",
+          "score": 0.12
+        },
+        {
+          "left": 2,
+          "right": 17,
+          "kind": "ambiguous",
+          "score": 0.0
+        },
+        {
+          "left": 3,
+          "right": 17,
+          "kind": "ambiguous",
+          "score": 0.0
+        }
+      ]
+    }
+  ],
+  "comparison": {
+    "station17_to_station0_median_center_drift_ratio": 2.7703553369859244,
+    "station17_to_station0_max_center_drift_ratio": 3.806587044883884,
+    "exact_capture_membership_for_both": true,
+    "source_membership_complete_for_both": true
+  },
+  "interpretation": "Stations 0 and 17 have exact source membership matches in source-alignment.json, so the witness is not explained by a missing or misassigned source member. Station 17 has materially larger within-station center drift than station 0 while both retain strong verified-overlap evidence; both remain topology_index_ambiguous. The cross-station 0↔17 relation therefore remains a topology/physical-magnification diagnostic, not a production scale correction.",
+  "next_action": "Keep the rejection and topology ambiguity; reopen only with new topology or source correspondence evidence."
+}

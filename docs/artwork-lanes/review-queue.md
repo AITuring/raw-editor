@@ -2,7 +2,7 @@
 
 [返回任务卡说明](README.md) · [当前任务](../../.kiro/specs/layered-camera-group-focus-stitching/tasks.md)
 
-当前已登记待看：**1 / 3套**。活跃批次：**R20261118-1**。历史已关闭批次：**0**。
+当前已登记待看：**0 / 3套**。活跃批次：无。历史已关闭批次：**1**（R20261118-1，兰亭，用户通过，2026-11-23）。
 
 这里只记录实际提交给用户的复看包；模板、准备中的素材、D3机器验收记录不自动算作已提交。队列数量不代表D4已完成：任务6的兰亭r2整图与6对原生裁片已提交，尚待用户确认；阆苑/文苑10张结论不能外推全量。相关机器验收见 [任务2记录](2-run-matrix.md)及[任务6记录](6-paper-seams.md)，机器pass和agent看图均不代替用户D4。
 
@@ -10,11 +10,10 @@
 
 | 批次 | 素材与输入范围 | 成片版本/TIFF SHA | 入队前等级 | 状态 | 整图路径 | 关键原生裁片及坐标 | 卡片/证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| R20261118-1 | 兰亭45张完整/scale=1/显式取景 | task-6-paper-r2 / `29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02` | D3（v4严格保护及中等层5/5已过） | 待看，不计D4 | `/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/after-whole.jpg` | C1–C6各512×512、RGBA16；表及逐像素证明见下 | [任务6](6-paper-seams.md) / [复看包](/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/README.md) |
 
 ## 批次 R20261118-1：兰亭纸面接缝修复
 
-- 提交日期：2026-11-18；整理人/L0：Codex；状态：活跃，1套；跨批次待看1/3。
+- 提交日期：2026-11-18；整理人/L0：Codex；状态：**已关闭（通过D4，2026-11-23）**；跨批次待看0/3。
 - 输入：兰亭完整45 JPEG；输入清单SHA `00af0b142f22ef38138b078540b8156f75b5220557a93a5310d20caad120f4b1`；scale=1，显式取景。
 - 冻结：task-6-paper-r2，commit `72af6ea0bf011b3aea1d59a0e4cfe6570ac1e22b`，binary SHA `de905b0e6e1f3f620a88db2449a6df4f1672212d8e8f7fdc71862960f93db522`；QG pass/8ROI、unresolved0、RSS `11103862784` B。
 - 成片：`/Users/dp/Desktop/raw-editor/output/acceptance/task-6/lanting-r2/lanting/run/lanting-s1-task-6-r2.tiff`；31090×11008 RGBA16、sRGB；TIFF SHA `29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02`。取景在source-union内(2606,874)，source-union原点(1,1)，streaming canvas原点(2607,875)。
@@ -33,7 +32,7 @@
 | C6-real-bottom-reflection `[17202, 10206, 512, 512]` | `/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/before-006.tiff` SHA `cda35a3e1a60e3cb87ee6021d74107d4014c7c1927ca27dd5bba54b7a1a95346` | `/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/after-006.tiff` SHA `e44355eff06bead69732f2fcd748fbd51c8f0210aa8e37252d99b1ca6f1b8c68` |
 
 - 所有PNG路径、SHA、逐字节RGBA证明和ICC摘要：[manifest.json](/Users/dp/Desktop/raw-editor/output/acceptance/task-6/review-r2/manifest.json)。PNG与裁片均512×512、16位、无重采样；1-based裁切坐标与0-based窗口已由独立解码校验。
-- 用户记录：尚无。整图/关键裁片/颜色/细节/接缝均待用户确认；不自授D4；未回复不视为通过。
+- 用户记录：2026-11-23，会话中向用户展示整图（基线/候选）与 C1–C6 六对1:1原生裁片（16位PNG的8位JPEG浏览副本，位于 `review-r2/view/`，无重采样），请其逐项确认整图纸面色调与接缝、以及每对裁片候选是否劣于基线；用户原话：“通过”。
 - Agent初看：整图与C1–C6 before/after均已打开；这些位置未见明显新光晕、笔画断裂或真实反光丢失；这不是用户确认。
 - 结论适用范围：仅上述输入与r2 TIFF，不覆盖其他素材、任意未取景模式或桌面打包；中等层5/5已通过，已本地合入v1并发布task-6-paper-verified（与r2相同可执行文件）；视觉结论另记。
 
@@ -81,4 +80,4 @@
 
 ## 历史批次
 
-暂无。关闭批次移到此处，保留原版本、完整路径、用户原话及后续链接；关闭后更新顶部和当前待看表。
+- R20261118-1：兰亭45张完整/scale=1/显式取景，task-6-paper-r2，TIFF `29852099…`；2026-11-23 用户回复“通过”（整图+C1–C6），记D4；D5证据见 [lanting-d5-closure-r1](../benchmarks/lanting-d5-closure-r1.json)。批次详细记录保留在上文“批次 R20261118-1”。

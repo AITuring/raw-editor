@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "task": "2B.3 Lanting D4→D5",
+  "date": "2026-11-23",
+  "dataset": "lanting",
+  "inputs": "45 JPEG, full, scale=1, framed",
+  "input_list_sha256": "00af0b142f22ef38138b078540b8156f75b5220557a93a5310d20caad120f4b1",
+  "d4": {
+    "review_batch": "R20261118-1",
+    "package": "output/acceptance/task-6/review-r2/",
+    "user_reply": "通过",
+    "date": "2026-11-23",
+    "scope": "whole image (before/after) and crops C1–C6, shown inline in the session as 8-bit JPEG views of the 16-bit native crops; user answered the request to confirm whole-image tone/seams and each of C1–C6",
+    "view_copies": "output/acceptance/task-6/review-r2/view/*.jpg (sips conversion, no resampling; viewing only)"
+  },
+  "d5": {
+    "same_binary_repeat": [
+      {
+        "binary": "task-6-paper-r2",
+        "run": "output/acceptance/task-6/lanting-r2/lanting/run/lanting-s1-task-6-r2.tiff",
+        "sha256": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02"
+      },
+      {
+        "binary": "task-6-paper-r2",
+        "run": "output/acceptance/task-6/matrix-r2-medium/lanting-framed-attempt-1/lanting/run/lanting-s1-task-6-r2-lanting-framed.tiff",
+        "sha256": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02"
+      }
+    ],
+    "later_binaries_same_output": [
+      {
+        "binary": "2B13-revert-owner-rules-r1",
+        "commit": "72fd0df4",
+        "run": "output/acceptance/task-2/matrix-2b13-r1-medium/lanting-framed-attempt-1/lanting/run/lanting-s1-task-2-2b13-r1-lanting-framed.tiff",
+        "sha256": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02"
+      },
+      {
+        "binary": "2B12-work-budget-r1",
+        "commit": "bcddb6a6 (current local v1)",
+        "run": "output/acceptance/task-2/matrix-2b12-r1-medium/lanting-framed-attempt-1/lanting/run/lanting-s1-task-2-2b12-r1-lanting-framed.tiff",
+        "sha256": "29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02",
+        "peak_rss_bytes": 9003925504,
+        "strict_guard": "quality_and_regression_pass"
+      }
+    ],
+    "sha_recomputed_independently": "shasum -a 256 on all four TIFF files, 2026-11-23",
+    "max_peak_rss_bytes": 12517588992,
+    "memory_gate_bytes": 25769803776,
+    "regression_protection": "tests/acceptance/regression-matrix.json lanting-framed (tiers medium, full), expected output_sha256 = 29852099097a03e489d5addc0b04fca53860ef82e2a62ca3c08f0cffbda3ff02, v4 strict guard",
+    "qg": "pass / 8 ROI, unresolved 0"
+  },
+  "level": "D5",
+  "not_covered": [
+    "thread-count determinism matrix was run on sleeping-9 only, not on Lanting (Lanting uses legacy_single_layer_mosaic)",
+    "order permutation, concurrent load, cancellation, OOM (task 22)",
+    "other inputs, unframed mode, desktop packaging"
+  ]
+}
