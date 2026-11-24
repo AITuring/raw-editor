@@ -108,6 +108,62 @@ fn differential(
     (value.iter().all(|v| v.is_finite()) && value.determinant() > 1e-10).then_some(value)
 }
 
+/// 2B.9 (a), test-only: append one JSON line per invalid native Jacobian probe
+/// to `$RAW_EDITOR_TEST_DENSITY_INVALID_PROBES_DIR/invalid-probes.jsonl`, with
+/// the raw central differences so a folded map (negative determinant), a
+/// collapsed map (near-zero determinant) and a non-finite map can be told
+/// apart. Production never reads the variable.
+#[cfg(test)]
+fn record_invalid_probe(
+    origin: (f64, f64),
+    source_id: usize,
+    refinement: &crate::panorama_utils::stitching::FocusSourceRefinement,
+    map: &impl Fn(Point2<f64>) -> Option<Point2<f64>>,
+    point: Point2<f64>,
+) {
+    use std::io::Write;
+    let Some(directory) = std::env::var_os("RAW_EDITOR_TEST_DENSITY_INVALID_PROBES_DIR") else {
+        return;
+    };
+    let directory = std::path::PathBuf::from(directory);
+    let _ = std::fs::create_dir_all(&directory);
+    let at = |dx: f64, dy: f64| map(point + Vector2::new(dx, dy)).map(|p| [p.x, p.y]);
+    let column = |a: Option<[f64; 2]>, b: Option<[f64; 2]>| {
+        a.zip(b).map(|(a, b)| [a[0] - b[0], a[1] - b[1]])
+    };
+    let dx = column(at(0.5, 0.0), at(-0.5, 0.0));
+    let dy = column(at(0.0, 0.5), at(0.0, -0.5));
+    let determinant = dx.zip(dy).map(|(x, y)| x[0] * y[1] - x[1] * y[0]);
+    let reason = match determinant {
+        None => "unmapped_neighbour",
+        Some(d) if !d.is_finite() => "non_finite",
+        Some(d) if d < 0.0 => "folded",
+        Some(_) => "collapsed",
+    };
+    let corrected = refinement.inverse_canvas_point(point);
+    let record = serde_json::json!({
+        "station_origin": [origin.0, origin.1],
+        "source_id": source_id,
+        "station_point": [point.x, point.y],
+        "corrected_point": [corrected.x, corrected.y],
+        "source_point": at(0.0, 0.0),
+        "d_dx": dx,
+        "d_dy": dy,
+        "determinant": determinant,
+        "reason": reason,
+        "has_displacement": refinement.displacement.is_some(),
+        "translation": [refinement.translation.0, refinement.translation.1],
+        "has_foreground_move": refinement.foreground_move.is_some(),
+    });
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(directory.join("invalid-probes.jsonl"))
+    {
+        let _ = writeln!(file, "{record}");
+    }
+}
+
 /// Capture only lightweight derivatives from the station fusion already done
 /// for matching. No additional decode, color buffer or owner map is retained.
 pub(super) fn native_density_samples(
@@ -191,6 +247,8 @@ pub(super) fn native_density_samples(
                     });
                 } else {
                     result.invalid_probes += 1;
+                    #[cfg(test)]
+                    record_invalid_probe(origin, source_id, refinement, &map, point);
                 }
             }
         }

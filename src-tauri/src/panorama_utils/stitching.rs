@@ -335,7 +335,7 @@ fn luminance(pixel: &Rgb<f32>) -> f32 {
     pixel[0] * 0.299 + pixel[1] * 0.587 + pixel[2] * 0.114
 }
 
-fn focus_stack_pixel_is_canvas_like(pixel: &[f32]) -> bool {
+pub(crate) fn focus_stack_pixel_is_canvas_like(pixel: &[f32]) -> bool {
     if pixel.len() < 3 || pixel[..3].iter().any(|value| !value.is_finite()) {
         return false;
     }
@@ -365,7 +365,7 @@ fn focus_stack_pixel_is_canvas_like(pixel: &[f32]) -> bool {
         && red_dominance <= 0.08
 }
 
-fn focus_stack_pixel_is_tone_foreground(pixel: &[f32]) -> bool {
+pub(crate) fn focus_stack_pixel_is_tone_foreground(pixel: &[f32]) -> bool {
     if pixel.len() < 3 || pixel[..3].iter().any(|value| !value.is_finite()) {
         return false;
     }

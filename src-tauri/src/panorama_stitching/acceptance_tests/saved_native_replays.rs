@@ -659,3 +659,300 @@ fn real_joint_geometry_from_saved_native_points() {
     )
     .unwrap();
 }
+
+/// 2B.9 (b): test-only paper/content split of the tone boundary Delta E.
+///
+/// Replays the saved local tone model exactly like
+/// `real_saved_local_tone_from_env`, then measures every 256 px boundary
+/// window twice: with the production low-frequency pair fields ("all"), and
+/// with pair fields rebuilt from paper-only cells ("paper"). A cell is paper
+/// when all 16 native quadrature samples of the tile are canvas-like and not
+/// tone foreground, using the production classifiers. A paper cell keeps its
+/// coverage; any other cell gets coverage < 1 and so is never a pair sample.
+/// Reports only; no production path reads this.
+fn paper_only_tile(
+    tile: &crate::panorama_utils::stack_pipeline::tone::ToneTile,
+    min_fraction: f32,
+) -> Option<crate::panorama_utils::stack_pipeline::tone::ToneTile> {
+    use crate::panorama_utils::stitching::{
+        focus_stack_pixel_is_canvas_like, focus_stack_pixel_is_tone_foreground,
+    };
+    let native = tile.native_detail.as_ref()?;
+    let (width, height) = tile.cell_mean.dimensions();
+    if native.dimensions() != (width * 4, height * 4) {
+        return None;
+    }
+    let mut paper = tile.clone();
+    for cy in 0..height {
+        for cx in 0..width {
+            let mut sum = [0.0f64; 3];
+            let mut count = 0u32;
+            for dy in 0..4 {
+                for dx in 0..4 {
+                    let pixel = native.get_pixel(cx * 4 + dx, cy * 4 + dy).0;
+                    if focus_stack_pixel_is_canvas_like(&pixel)
+                        && !focus_stack_pixel_is_tone_foreground(&pixel)
+                    {
+                        for c in 0..3 {
+                            sum[c] += f64::from(pixel[c]);
+                        }
+                        count += 1;
+                    }
+                }
+            }
+            let index = (cy * width + cx) as usize;
+            if count > 0 {
+                paper.cell_mean.put_pixel(
+                    cx,
+                    cy,
+                    image::Rgb(sum.map(|v| (v / f64::from(count)) as f32)),
+                );
+            }
+            // A cell with at least `min_fraction` paper samples keeps its
+            // coverage (and becomes a paper-mean sample); others drop below 1.
+            let fraction = count as f32 / 16.0;
+            if count == 0 || fraction < min_fraction {
+                paper.cell_coverage[index] *= fraction.min(0.999);
+            }
+        }
+    }
+    Some(paper)
+}
+
+#[test]
+#[ignore = "requires saved native tone fields, ownership, and native relation proof"]
+fn real_saved_tone_paper_split_from_env() {
+    use crate::panorama_utils::stack_pipeline::{compositor, tone, tone_local};
+    let directory = PathBuf::from(std::env::var_os("RAW_EDITOR_LOCAL_TONE_FIELDS").unwrap());
+    let owner_plane = ["tone-owners.png", "tone-owners.filtered.png"]
+        .iter()
+        .map(|name| directory.join(name))
+        .find(|path| path.is_file())
+        .expect("saved capture should contain an owner plane");
+    let mut reader = image::ImageReader::open(&owner_plane).unwrap();
+    reader.no_limits();
+    let owners = reader.decode().unwrap().to_luma16();
+    let (width, height) = owners.dimensions();
+    let mut tiles = Vec::new();
+    for owner in 1..=u16::MAX {
+        let path = directory.join(format!("tone-owner-{owner:03}.json"));
+        if !path.exists() {
+            break;
+        }
+        tiles.push(load_saved_tone_tile(path));
+    }
+    let min_fraction = std::env::var("RAW_EDITOR_TONE_PAPER_MIN_FRACTION")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .filter(|v| (0.0..=1.0).contains(v) && *v > 0.0)
+        .unwrap_or(1.0);
+    let paper_tiles = tiles
+        .iter()
+        .map(|tile| {
+            paper_only_tile(tile, min_fraction)
+                .expect("native detail is required for the paper split")
+        })
+        .collect::<Vec<_>>();
+    let native: serde_json::Value = serde_json::from_slice(
+        &fs::read(std::env::var_os("RAW_EDITOR_LOCAL_TONE_NATIVE_PROOF").unwrap()).unwrap(),
+    )
+    .unwrap();
+    let tile_index = |station: usize| {
+        tiles
+            .iter()
+            .position(|tile| tile.station_index == station)
+            .unwrap()
+    };
+    let relations = native["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|record| record["authoritative"].as_bool() != Some(false))
+        .map(|record| {
+            let (a, b) = (
+                tile_index(record["left"].as_u64().unwrap() as usize),
+                tile_index(record["right"].as_u64().unwrap() as usize),
+            );
+            (a.min(b), a.max(b))
+        })
+        .collect::<Vec<_>>();
+    let use_saved = std::env::var_os("RAW_EDITOR_LOCAL_TONE_USE_SAVED_OWNERS").is_some();
+    let planned = if use_saved {
+        owners.as_raw().clone()
+    } else {
+        let plan = compositor::refine_station_ownership(
+            &tiles,
+            &relations,
+            owners.as_raw(),
+            width,
+            height,
+        )
+        .unwrap();
+        (0..height)
+            .flat_map(|y| (0..width).map(move |x| (x, y)))
+            .map(|(x, y)| {
+                if owners.get_pixel(x, y)[0] == 0 {
+                    0
+                } else {
+                    plan.owner_at(x, y)
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    let model = tone_local::fit_local_tone(&tiles, &relations, &planned, width, height).unwrap();
+    type Window = ([f64; 3], [f64; 3], usize);
+    let mut all_fields = std::collections::BTreeMap::new();
+    let mut paper_fields = std::collections::BTreeMap::new();
+    let mut all = std::collections::BTreeMap::<(usize, usize, u32, u32), Window>::new();
+    let mut paper = std::collections::BTreeMap::<(usize, usize, u32, u32), Window>::new();
+    let add = |windows: &mut std::collections::BTreeMap<(usize, usize, u32, u32), Window>,
+               key,
+               a: [f32; 3],
+               b: [f32; 3]| {
+        let entry = windows.entry(key).or_insert(([0.0; 3], [0.0; 3], 0));
+        for c in 0..3 {
+            entry.0[c] += f64::from(a[c]);
+            entry.1[c] += f64::from(b[c]);
+        }
+        entry.2 += 1;
+    };
+    for y in 0..height {
+        for x in 0..width {
+            let owner = planned[y as usize * width as usize + x as usize];
+            for (nx, ny, horizontal) in [(x + 1, y, true), (x, y + 1, false)] {
+                if nx >= width || ny >= height {
+                    continue;
+                }
+                let other = planned[ny as usize * width as usize + nx as usize];
+                if owner == 0 || other == 0 || owner == other {
+                    continue;
+                }
+                let a = tiles.iter().position(|t| t.owner_id == owner).unwrap();
+                let b = tiles.iter().position(|t| t.owner_id == other).unwrap();
+                let (first, second) = (a.min(b), a.max(b));
+                let key = (first, second, x / 256, y / 256);
+                for offset in -15i64..=16 {
+                    let px = i64::from(x) + if horizontal { offset } else { 0 };
+                    let py = i64::from(y) + if horizontal { 0 } else { offset };
+                    if px < 0 || py < 0 || px >= i64::from(width) || py >= i64::from(height) {
+                        continue;
+                    }
+                    let (wx, wy) = (px as f64, py as f64);
+                    for (fields, source, windows) in [
+                        (&mut all_fields, &tiles, &mut all),
+                        (&mut paper_fields, &paper_tiles, &mut paper),
+                    ] {
+                        let Some(field) = fields
+                            .entry((first, second))
+                            .or_insert_with(|| {
+                                tone::PairField::new(&source[first], &source[second])
+                            })
+                            .as_ref()
+                        else {
+                            continue;
+                        };
+                        if let Some((lo, hi)) = field.at(wx, wy) {
+                            add(
+                                windows,
+                                key,
+                                model.corrected(first, lo, wx, wy),
+                                model.corrected(second, hi, wx, wy),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let delta = |w: &Window| {
+        tone::delta_e00_rgb(
+            w.0.map(|v| (v / w.2 as f64) as f32),
+            w.1.map(|v| (v / w.2 as f64) as f32),
+        )
+    };
+    let threshold = stack_report::TONE_BOUNDARY_DELTA_E_THRESHOLD;
+    let mut windows = all
+        .iter()
+        .map(|(key, w)| {
+            let all_delta = delta(w);
+            let paper_window = paper.get(key);
+            serde_json::json!({
+                "first": tiles[key.0].station_index,
+                "second": tiles[key.1].station_index,
+                "x": key.2 * 256,
+                "y": key.3 * 256,
+                "all_delta_e00": all_delta,
+                "all_samples": w.2,
+                "paper_delta_e00": paper_window.map(delta),
+                "paper_samples": paper_window.map(|w| w.2).unwrap_or(0),
+            })
+        })
+        .collect::<Vec<_>>();
+    windows.sort_by(|a, b| {
+        b["all_delta_e00"]
+            .as_f64()
+            .unwrap()
+            .total_cmp(&a["all_delta_e00"].as_f64().unwrap())
+    });
+    let summary = |name: &str| {
+        let source = if name == "all" { &all } else { &paper };
+        let values = source.values().map(delta).collect::<Vec<_>>();
+        serde_json::json!({
+            "windows": values.len(),
+            "maximum": values.iter().copied().fold(0.0f64, f64::max),
+            "over_threshold": values.iter().filter(|v| **v > threshold).count(),
+            "samples": source.values().map(|w| w.2).sum::<usize>(),
+        })
+    };
+    let failed_all = windows
+        .iter()
+        .filter(|w| w["all_delta_e00"].as_f64().unwrap() > threshold)
+        .collect::<Vec<_>>();
+    let failed_measured_on_paper = failed_all
+        .iter()
+        .filter(|w| w["paper_delta_e00"].as_f64().is_some())
+        .count();
+    let failed_still_over_on_paper = failed_all
+        .iter()
+        .filter(|w| w["paper_delta_e00"].as_f64().is_some_and(|v| v > threshold))
+        .count();
+    let mut worst_paper_windows = windows
+        .iter()
+        .filter(|w| w["paper_delta_e00"].as_f64().is_some())
+        .collect::<Vec<_>>();
+    worst_paper_windows.sort_by(|a, b| {
+        b["paper_delta_e00"]
+            .as_f64()
+            .unwrap()
+            .total_cmp(&a["paper_delta_e00"].as_f64().unwrap())
+    });
+    worst_paper_windows.truncate(20);
+    let result = serde_json::json!({
+        "diagnostic_only": true,
+        "method": "saved_local_tone_paper_split_v1",
+        "capture": directory,
+        "use_saved_owners": use_saved,
+        "paper_min_fraction": min_fraction,
+        "fitted_relations": model.fitted_relations.len(),
+        "threshold": threshold,
+        "all": summary("all"),
+        "paper": summary("paper"),
+        "failed_windows_all": failed_all.len(),
+        "failed_windows_with_paper_samples": failed_measured_on_paper,
+        "failed_windows_still_over_on_paper": failed_still_over_on_paper,
+        "worst_windows": windows.iter().take(40).collect::<Vec<_>>(),
+        "worst_paper_windows": worst_paper_windows,
+    });
+    fs::write(
+        std::env::var_os("RAW_EDITOR_TONE_PAPER_SPLIT_OUTPUT").unwrap(),
+        serde_json::to_vec_pretty(&result).unwrap(),
+    )
+    .unwrap();
+    println!(
+        "Tone paper split: all max {:.6} ({} over), paper max {:.6} ({} over)",
+        result["all"]["maximum"],
+        result["all"]["over_threshold"],
+        result["paper"]["maximum"],
+        result["paper"]["over_threshold"]
+    );
+}
