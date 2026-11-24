@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "note": "Paths are relative to output/acceptance/. A directory resolves to its single Stack_Report with Quality_Gate criteria (latest if several), else its latest report.",
+  "cases": [
+    {"id": "lanting-45-s1-framed", "dataset": "lanting", "scale": 1, "report": "task-2/matrix-2b12-r1-medium/lanting-framed-attempt-1"},
+    {"id": "nine-s1", "dataset": "sleeping-9-6479", "scale": 1, "report": "task-2/matrix-2b12-r1-medium/nine-cold-attempt-1"},
+    {"id": "langyuan-10-s1", "dataset": "langyuan-10", "scale": 1, "report": "task-2/matrix-2b12-r1-medium/langyuan-10-attempt-1"},
+    {"id": "wenyuan-10-s1", "dataset": "wenyuan-10", "scale": 1, "report": "task-2/matrix-2b12-r1-medium/wenyuan-10-attempt-1"},
+    {"id": "langyuan-84-s0.25", "dataset": "langyuan", "scale": 0.25, "report": "task-5/langyuan-baseline-r1"},
+    {"id": "langyuan-84-s1", "dataset": "langyuan", "scale": 1, "report": "task-4c/langyuan-scale1-r1"},
+    {"id": "wenyuan-126-s0.25", "dataset": "wenyuan", "scale": 0.25, "report": "task-5/wenyuan-baseline-r1"},
+    {"id": "wenyuan-126-s1", "dataset": "wenyuan", "scale": 1, "report": "task-14/wenyuan-excluded-source-scale1-r1"},
+    {"id": "qixu-1-s0.25", "dataset": "qixu-1", "scale": 0.25, "report": "task-5/qixu-1-baseline-r1"},
+    {"id": "qixu-2-s0.25", "dataset": "qixu-2", "scale": 0.25, "report": "task-5/qixu-2-baseline-r1"},
+    {"id": "fengying-s0.25", "dataset": "fengying", "scale": 0.25, "report": "task-5/fengying-baseline-r1"},
+    {"id": "mayuan-2-s0.25", "dataset": "mayuan-2", "scale": 0.25, "report": "task-5/mayuan-2-baseline-r1"},
+    {"id": "mayuan-2-s1", "dataset": "mayuan-2", "scale": 1, "report": "task-16/mayuan-2-mayuan-2-native-scale1-control-r1"},
+    {"id": "mayuan-2-s1-stencil5", "dataset": "mayuan-2", "scale": 1, "report": "task-16/mayuan-2-mayuan-2-native-owner-stencil5-r1"},
+    {"id": "sleeping-45-s0.25", "dataset": "sleeping", "scale": 0.25, "report": "task-5/sleeping-baseline-r1"},
+    {"id": "chibi-s0.25", "dataset": "chibi", "scale": 0.25, "report": "task17/chibi-d1-r1"},
+    {"id": "lisong-s0.25", "dataset": "lisong", "scale": 0.25, "report": "task17/lisong-d1-r1"},
+    {"id": "xiagui-s0.25", "dataset": "xiagui", "scale": 0.25, "report": "task17/xiagui-d1-r1"},
+    {"id": "lidong-s0.25", "dataset": "lidong", "scale": 0.25, "report": "task17/lidong-d1-r1"},
+    {"id": "zhaoji-s0.25", "dataset": "zhaoji", "scale": 0.25, "report": "task17/zhaoji-d1-r1"}
+  ]
+}

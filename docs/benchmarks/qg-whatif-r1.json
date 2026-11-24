@@ -1,0 +1,2636 @@
+{
+  "schema": 1,
+  "tool": "scripts/stack-lab/qg_whatif.py",
+  "options": {
+    "C1": {
+      "computable": true,
+      "summary": "closure limits in base world-native pixels, not multiplied by the density factor"
+    },
+    "C2": {
+      "computable": false,
+      "summary": "mixed-magnification local-scale reference",
+      "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+    },
+    "C3": {
+      "computable": true,
+      "summary": "boundary with <8 measurable samples: fail only on a sample above 3.0 px, no P95"
+    },
+    "C4": {
+      "computable": false,
+      "summary": "tone boundary measured on content-matched paper pixels only",
+      "needs": "per-boundary paper/content masks (2B.9 measurement)"
+    },
+    "C5": {
+      "computable": false,
+      "summary": "owner reverse-lookup stencil 3x3 -> 5x5",
+      "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+    },
+    "C6": {
+      "computable": false,
+      "summary": "effective_pixel_count for sources without native sampling metadata",
+      "needs": "per-source native_registration inventory (2B.7)"
+    },
+    "C7": {
+      "computable": false,
+      "summary": "residual-aware density planning replaces the nonidentity_world_residual bypass",
+      "needs": "composed residual Jacobian samples after the 2B.8 fix"
+    }
+  },
+  "consistency": "pass",
+  "inconsistent_cases": [],
+  "cases": [
+    {
+      "id": "lanting-45-s1-framed",
+      "dataset": "lanting",
+      "scale": 1,
+      "report": "task-2/matrix-2b12-r1-medium/lanting-framed-attempt-1/lanting/run/lanting-s1-task-2-2b12-r1-lanting-framed-stack-reports/stack-report-4fa1c022-ca47-4aaf-9129-de4d911c143b.json",
+      "selected_path": "legacy_single_layer_mosaic",
+      "recorded": {
+        "quality_gate": "pass",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "density": "not_run"
+      },
+      "current": {
+        "density": "not_run",
+        "density_reason": null,
+        "quality_gate": "pass",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "native": "not_layered",
+        "native_reason": "legacy path: the layered native check does not apply"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "nine-s1",
+      "dataset": "sleeping-9-6479",
+      "scale": 1,
+      "report": "task-2/matrix-2b12-r1-medium/nine-cold-attempt-1/run/sleeping-9-6479-s1-task-2-2b12-r1-nine-cold-stack-reports/stack-report-962152bc-a341-4f18-aea3-5c9ebfe64ee4.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "pass",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "density": "applied"
+      },
+      "current": {
+        "density": "applied",
+        "density_reason": null,
+        "quality_gate": "pass",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "native": "accepted",
+        "native_reason": null
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "accepted",
+            "native_reason": null
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "accepted",
+            "native_reason": null
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "accepted",
+            "native_reason": null
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "langyuan-10-s1",
+      "dataset": "langyuan-10",
+      "scale": 1,
+      "report": "task-2/matrix-2b12-r1-medium/langyuan-10-attempt-1/run/langyuan-10-s1-task-2-2b12-r1-langyuan-10-stack-reports/stack-report-6fff0f64-d9de-40b6-9da8-a6f09ff427b5.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "pass",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "density": "applied"
+      },
+      "current": {
+        "density": "applied",
+        "density_reason": null,
+        "quality_gate": "pass",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "native": "accepted",
+        "native_reason": null
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "accepted",
+            "native_reason": null
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "accepted",
+            "native_reason": null
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "accepted",
+            "native_reason": null
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "wenyuan-10-s1",
+      "dataset": "wenyuan-10",
+      "scale": 1,
+      "report": "task-2/matrix-2b12-r1-medium/wenyuan-10-attempt-1/run/wenyuan-10-s1-task-2-2b12-r1-wenyuan-10-stack-reports/stack-report-06d0ba09-eae4-4d65-91a8-d82baca19c1f.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "pass",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "density": "applied"
+      },
+      "current": {
+        "density": "applied",
+        "density_reason": null,
+        "quality_gate": "pass",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "native": "accepted",
+        "native_reason": null
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "accepted",
+            "native_reason": null
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "accepted",
+            "native_reason": null
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "accepted",
+            "native_reason": null
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "langyuan-84-s0.25",
+      "dataset": "langyuan",
+      "scale": 0.25,
+      "report": "task-5/langyuan-baseline-r1/run/langyuan-s0p25-task-5-baseline-r1-stack-reports/stack-report-9ea87961-b839-4c85-986c-ffa29ee2c9d6.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "pass"
+        },
+        "density": "bypassed"
+      },
+      "current": {
+        "density": "bypassed",
+        "density_reason": "nonidentity_world_residual",
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "pass"
+        },
+        "native": "rejected",
+        "native_reason": "native output did not pass the complete quality gate"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "langyuan-84-s1",
+      "dataset": "langyuan",
+      "scale": 1,
+      "report": "task-4c/langyuan-scale1-r1/run/langyuan-s1-task-4c-scale1-r1-stack-reports/stack-report-c8bf6f03-56f1-4603-a5b6-bf55b1173c5c.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "fail",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "density": "bypassed"
+      },
+      "current": {
+        "density": "bypassed",
+        "density_reason": "invalid_native_jacobian_probes",
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "fail",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "native": "rejected",
+        "native_reason": "native station geometry is not connected and converged"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "invalid_native_jacobian_probes",
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "fail",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native station geometry is not connected and converged"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "invalid_native_jacobian_probes",
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "fail",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native station geometry is not connected and converged"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "invalid_native_jacobian_probes",
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "fail",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native station geometry is not connected and converged"
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "wenyuan-126-s0.25",
+      "dataset": "wenyuan",
+      "scale": 0.25,
+      "report": "task-5/wenyuan-baseline-r1/run/wenyuan-s0p25-task-5-baseline-r1-stack-reports/stack-report-5259420f-544f-48ed-b839-d0bd7cce75ec.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "pass",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "density": "bypassed"
+      },
+      "current": {
+        "density": "bypassed",
+        "density_reason": "nonidentity_world_residual",
+        "quality_gate": "pass",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "native": "rejected",
+        "native_reason": "native quality criterion failed: local_scale_median"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native quality criterion failed: local_scale_median"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native quality criterion failed: local_scale_median"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native quality criterion failed: local_scale_median"
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "wenyuan-126-s1",
+      "dataset": "wenyuan",
+      "scale": 1,
+      "report": "task-14/wenyuan-excluded-source-scale1-r1/run/wenyuan-s1-task-14-excluded-source-scale1-r1-stack-reports/stack-report-d074efa8-394d-4bb2-976b-86fd9593942f.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "pass",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "density": "bypassed"
+      },
+      "current": {
+        "density": "bypassed",
+        "density_reason": "nonidentity_world_residual",
+        "quality_gate": "pass",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "not_applicable",
+          "owner_sharpness_coverage": "pass"
+        },
+        "native": "rejected",
+        "native_reason": "native tone boundary failed: 8.778901254993071"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native tone boundary failed: 8.778901254993071"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native tone boundary failed: 8.778901254993071"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native tone boundary failed: 8.778901254993071"
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "qixu-1-s0.25",
+      "dataset": "qixu-1",
+      "scale": 0.25,
+      "report": "task-5/qixu-1-baseline-r1/run/qixu-1-s0p25-task-5-baseline-r1-stack-reports/stack-report-56fa677f-ccb6-40af-a498-9a248cdf4bb3.json",
+      "selected_path": "legacy_single_layer_mosaic",
+      "recorded": {
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "fail"
+        },
+        "density": "not_run"
+      },
+      "current": {
+        "density": "not_run",
+        "density_reason": null,
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "fail"
+        },
+        "native": "not_layered",
+        "native_reason": "legacy path: the layered native check does not apply"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "fail"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "fail"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "fail"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "qixu-2-s0.25",
+      "dataset": "qixu-2",
+      "scale": 0.25,
+      "report": "task-5/qixu-2-baseline-r1/run/qixu-2-s0p25-task-5-baseline-r1-stack-reports/stack-report-395eca3e-55ed-4288-af3d-0ad78750cb66.json",
+      "selected_path": "legacy_single_layer_mosaic",
+      "recorded": {
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "fail",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "fail"
+        },
+        "density": "not_run"
+      },
+      "current": {
+        "density": "not_run",
+        "density_reason": null,
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "fail",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "fail"
+        },
+        "native": "not_layered",
+        "native_reason": "legacy path: the layered native check does not apply"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "fail",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "fail"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "fail",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "fail"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "fail",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "fail"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "fengying-s0.25",
+      "dataset": "fengying",
+      "scale": 0.25,
+      "report": "task-5/fengying-baseline-r1/run/fengying-s0p25-task-5-baseline-r1-stack-reports/stack-report-77116a1e-07da-46a2-bbba-28bd35b843a9.json",
+      "selected_path": "legacy_single_layer_mosaic",
+      "recorded": {
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "pass",
+          "owner_sharpness_coverage": "fail"
+        },
+        "density": "not_run"
+      },
+      "current": {
+        "density": "not_run",
+        "density_reason": null,
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "pass",
+          "owner_sharpness_coverage": "fail"
+        },
+        "native": "not_layered",
+        "native_reason": "legacy path: the layered native check does not apply"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "pass",
+              "owner_sharpness_coverage": "fail"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "pass",
+              "owner_sharpness_coverage": "fail"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "pass",
+              "owner_sharpness_coverage": "fail"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "mayuan-2-s0.25",
+      "dataset": "mayuan-2",
+      "scale": 0.25,
+      "report": "task-5/mayuan-2-baseline-r1/run/mayuan-2-s0p25-task-5-baseline-r1-stack-reports/stack-report-dba85ff6-15c2-48d8-bede-c07efc9d62fc.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "not_run",
+        "criteria": {},
+        "density": "rejected"
+      },
+      "current": {
+        "density": "rejected",
+        "density_reason": "output_pixel_closure_limit_exceeded",
+        "quality_gate": "not_run",
+        "criteria": {},
+        "native": "rejected",
+        "native_reason": "quality gate not run (density rejected)"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "needs_rerun",
+            "criteria": {},
+            "native": "needs_rerun",
+            "native_reason": "density would pass; QG was never run"
+          },
+          "changed": {
+            "density": [
+              "rejected",
+              "applied"
+            ],
+            "quality_gate": [
+              "not_run",
+              "needs_rerun"
+            ],
+            "native": [
+              "rejected",
+              "needs_rerun"
+            ]
+          },
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "rejected",
+            "density_reason": "output_pixel_closure_limit_exceeded",
+            "quality_gate": "not_run",
+            "criteria": {},
+            "native": "rejected",
+            "native_reason": "quality gate not run (density rejected)"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "needs_rerun",
+            "criteria": {},
+            "native": "needs_rerun",
+            "native_reason": "density would pass; QG was never run"
+          },
+          "changed": {
+            "density": [
+              "rejected",
+              "applied"
+            ],
+            "quality_gate": [
+              "not_run",
+              "needs_rerun"
+            ],
+            "native": [
+              "rejected",
+              "needs_rerun"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mayuan-2-s1",
+      "dataset": "mayuan-2",
+      "scale": 1,
+      "report": "task-16/mayuan-2-mayuan-2-native-scale1-control-r1/run/mayuan-2-s1-task-16-mayuan-2-native-scale1-control-r1-stack-reports/stack-report-5f1ba6c4-7ba0-4eeb-8c50-a9c706e0d8a0.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "insufficient_evidence",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "insufficient_evidence"
+        },
+        "density": "bypassed"
+      },
+      "current": {
+        "density": "bypassed",
+        "density_reason": "nonidentity_world_residual",
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "insufficient_evidence",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "insufficient_evidence"
+        },
+        "native": "rejected",
+        "native_reason": "native output did not pass the complete quality gate"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "insufficient_evidence",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "insufficient_evidence"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "insufficient_evidence",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "insufficient_evidence",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "insufficient_evidence"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {
+            "quality_gate": [
+              "fail",
+              "insufficient_evidence"
+            ]
+          },
+          "changed_criteria": {
+            "boundary_stroke_alignment": [
+              "fail",
+              "not_applicable"
+            ]
+          }
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "insufficient_evidence",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "insufficient_evidence",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "insufficient_evidence"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {
+            "quality_gate": [
+              "fail",
+              "insufficient_evidence"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mayuan-2-s1-stencil5",
+      "dataset": "mayuan-2",
+      "scale": 1,
+      "report": "task-16/mayuan-2-mayuan-2-native-owner-stencil5-r1/run/mayuan-2-s1-task-16-mayuan-2-native-owner-stencil5-r1-stack-reports/stack-report-e27253ac-5819-4cb9-a9ad-9546c93f370b.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "insufficient_evidence",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "pass"
+        },
+        "density": "bypassed"
+      },
+      "current": {
+        "density": "bypassed",
+        "density_reason": "nonidentity_world_residual",
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "pass",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "insufficient_evidence",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "pass",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "pass"
+        },
+        "native": "rejected",
+        "native_reason": "native output did not pass the complete quality gate"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "insufficient_evidence",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "insufficient_evidence",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "insufficient_evidence",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {
+            "quality_gate": [
+              "fail",
+              "insufficient_evidence"
+            ]
+          },
+          "changed_criteria": {
+            "boundary_stroke_alignment": [
+              "fail",
+              "not_applicable"
+            ]
+          }
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "insufficient_evidence",
+            "criteria": {
+              "local_scale_median": "pass",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "insufficient_evidence",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "pass",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {
+            "quality_gate": [
+              "fail",
+              "insufficient_evidence"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "sleeping-45-s0.25",
+      "dataset": "sleeping",
+      "scale": 0.25,
+      "report": "task-5/sleeping-baseline-r1/run/sleeping-s0p25-task-5-baseline-r1-stack-reports/stack-report-bc8d2ebb-c4d7-4a1e-80af-94ce4520cc44.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "not_run",
+        "criteria": {},
+        "density": "rejected"
+      },
+      "current": {
+        "density": "rejected",
+        "density_reason": "output_pixel_closure_limit_exceeded",
+        "quality_gate": "not_run",
+        "criteria": {},
+        "native": "rejected",
+        "native_reason": "quality gate not run (density rejected)"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "needs_rerun",
+            "criteria": {},
+            "native": "needs_rerun",
+            "native_reason": "density would pass; QG was never run"
+          },
+          "changed": {
+            "density": [
+              "rejected",
+              "applied"
+            ],
+            "quality_gate": [
+              "not_run",
+              "needs_rerun"
+            ],
+            "native": [
+              "rejected",
+              "needs_rerun"
+            ]
+          },
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "rejected",
+            "density_reason": "output_pixel_closure_limit_exceeded",
+            "quality_gate": "not_run",
+            "criteria": {},
+            "native": "rejected",
+            "native_reason": "quality gate not run (density rejected)"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "needs_rerun",
+            "criteria": {},
+            "native": "needs_rerun",
+            "native_reason": "density would pass; QG was never run"
+          },
+          "changed": {
+            "density": [
+              "rejected",
+              "applied"
+            ],
+            "quality_gate": [
+              "not_run",
+              "needs_rerun"
+            ],
+            "native": [
+              "rejected",
+              "needs_rerun"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "chibi-s0.25",
+      "dataset": "chibi",
+      "scale": 0.25,
+      "report": "task17/chibi-d1-r1/run/chibi-s0p25-task17-chibid1r1-stack-reports/stack-report-504a289a-2351-43bc-a4b8-0b89d25a3110.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "pass"
+        },
+        "density": "bypassed"
+      },
+      "current": {
+        "density": "bypassed",
+        "density_reason": "nonidentity_world_residual",
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "pass"
+        },
+        "native": "rejected",
+        "native_reason": "native output did not pass the complete quality gate"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "bypassed",
+            "density_reason": "nonidentity_world_residual",
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "lisong-s0.25",
+      "dataset": "lisong",
+      "scale": 0.25,
+      "report": "task17/lisong-d1-r1/run/lisong-s0p25-task17-lisongd1r1-stack-reports/stack-report-6b797c3f-2301-4742-85c6-808b6e145327.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "pass"
+        },
+        "density": "applied"
+      },
+      "current": {
+        "density": "applied",
+        "density_reason": null,
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "pass"
+        },
+        "native": "rejected",
+        "native_reason": "native output did not pass the complete quality gate"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native quality criterion failed: local_scale_median"
+          },
+          "changed": {
+            "quality_gate": [
+              "fail",
+              "pass"
+            ]
+          },
+          "changed_criteria": {
+            "boundary_stroke_alignment": [
+              "fail",
+              "not_applicable"
+            ]
+          }
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "pass",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "not_applicable",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native quality criterion failed: local_scale_median"
+          },
+          "changed": {
+            "quality_gate": [
+              "fail",
+              "pass"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "xiagui-s0.25",
+      "dataset": "xiagui",
+      "scale": 0.25,
+      "report": "task17/xiagui-d1-r1/run/xiagui-s0p25-task17-xiaguid1r1-stack-reports/stack-report-cb3753ca-4a6b-45ae-9044-99fa72700b35.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "pass"
+        },
+        "density": "applied"
+      },
+      "current": {
+        "density": "applied",
+        "density_reason": null,
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "pass",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "pass"
+        },
+        "native": "rejected",
+        "native_reason": "native output did not pass the complete quality gate"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "pass",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "pass"
+            },
+            "native": "rejected",
+            "native_reason": "native output did not pass the complete quality gate"
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "lidong-s0.25",
+      "dataset": "lidong",
+      "scale": 0.25,
+      "report": "task17/lidong-d1-r1/run/lidong-s0p25-task17-lidongd1r1-stack-reports/stack-report-b0d2d3a9-782f-4c08-a35d-99baf930ef34.json",
+      "selected_path": "legacy_single_layer_mosaic",
+      "recorded": {
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "fail"
+        },
+        "density": "not_run"
+      },
+      "current": {
+        "density": "not_run",
+        "density_reason": null,
+        "quality_gate": "fail",
+        "criteria": {
+          "local_scale_median": "not_applicable",
+          "local_scale_pixel_ratio": "fail",
+          "effective_pixel_count": "pass",
+          "mtf50_normalized": "not_applicable",
+          "gradient_energy_normalized": "pass",
+          "noise_sigma_ratio": "not_applicable",
+          "roi_delta_e00": "pass",
+          "boundary_stroke_alignment": "fail",
+          "owner_sharpness_coverage": "fail"
+        },
+        "native": "not_layered",
+        "native_reason": "legacy path: the layered native check does not apply"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "fail"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "fail"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "not_run",
+            "density_reason": null,
+            "quality_gate": "fail",
+            "criteria": {
+              "local_scale_median": "not_applicable",
+              "local_scale_pixel_ratio": "fail",
+              "effective_pixel_count": "pass",
+              "mtf50_normalized": "not_applicable",
+              "gradient_energy_normalized": "pass",
+              "noise_sigma_ratio": "not_applicable",
+              "roi_delta_e00": "pass",
+              "boundary_stroke_alignment": "fail",
+              "owner_sharpness_coverage": "fail"
+            },
+            "native": "not_layered",
+            "native_reason": "legacy path: the layered native check does not apply"
+          },
+          "changed": {}
+        }
+      }
+    },
+    {
+      "id": "zhaoji-s0.25",
+      "dataset": "zhaoji",
+      "scale": 0.25,
+      "report": "task17/zhaoji-d1-r1/zhaoji-s0p25-task17-zhaoji-d1-r1-stack-reports/stack-report-a5b8f23a-46a1-4798-b21c-b68ef4fa659c.json",
+      "selected_path": "layered_virtual_tile",
+      "recorded": {
+        "quality_gate": "not_run",
+        "criteria": {},
+        "density": "rejected"
+      },
+      "current": {
+        "density": "rejected",
+        "density_reason": "output_pixel_closure_limit_exceeded",
+        "quality_gate": "not_run",
+        "criteria": {},
+        "native": "rejected",
+        "native_reason": "quality gate not run (density rejected)"
+      },
+      "consistency_mismatches": [],
+      "options": {
+        "C1": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "needs_rerun",
+            "criteria": {},
+            "native": "needs_rerun",
+            "native_reason": "density would pass; QG was never run"
+          },
+          "changed": {
+            "density": [
+              "rejected",
+              "applied"
+            ],
+            "quality_gate": [
+              "not_run",
+              "needs_rerun"
+            ],
+            "native": [
+              "rejected",
+              "needs_rerun"
+            ]
+          },
+          "changed_criteria": {}
+        },
+        "C2": {
+          "status": "needs_rerun",
+          "needs": "per-ROI source magnification and a chosen reference scale; rerun with a new local-scale contract"
+        },
+        "C3": {
+          "status": "computed",
+          "result": {
+            "density": "rejected",
+            "density_reason": "output_pixel_closure_limit_exceeded",
+            "quality_gate": "not_run",
+            "criteria": {},
+            "native": "rejected",
+            "native_reason": "quality gate not run (density rejected)"
+          },
+          "changed": {},
+          "changed_criteria": {}
+        },
+        "C4": {
+          "status": "needs_rerun",
+          "needs": "per-boundary paper/content masks (2B.9 measurement)"
+        },
+        "C5": {
+          "status": "needs_rerun",
+          "needs": "a rerun; task-16 stencil5 A/B measured mayuan-2 unresolved 163 -> 0"
+        },
+        "C6": {
+          "status": "needs_rerun",
+          "needs": "per-source native_registration inventory (2B.7)"
+        },
+        "C7": {
+          "status": "needs_rerun",
+          "needs": "composed residual Jacobian samples after the 2B.8 fix"
+        },
+        "C1+C3": {
+          "status": "computed",
+          "result": {
+            "density": "applied",
+            "density_reason": null,
+            "quality_gate": "needs_rerun",
+            "criteria": {},
+            "native": "needs_rerun",
+            "native_reason": "density would pass; QG was never run"
+          },
+          "changed": {
+            "density": [
+              "rejected",
+              "applied"
+            ],
+            "quality_gate": [
+              "not_run",
+              "needs_rerun"
+            ],
+            "native": [
+              "rejected",
+              "needs_rerun"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
