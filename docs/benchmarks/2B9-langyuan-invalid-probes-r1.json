@@ -62,5 +62,18 @@
     "the langyuan scale=1 density bypass (invalid_native_jacobian_probes) comes from a source-sampling discontinuity in a narrow edge strip, not from a real fold of the station geometry",
     "C7 / C2: a residual-aware density planner would hit the same discontinuity; it needs either a continuous band transition in production sampling (changes pixels) or an explicit, recorded exclusion of such probes (contract change)"
   ],
-  "production_change": false
+  "production_change": false,
+  "full_native_verdict": {
+    "note": "first langyuan 84 scale=1 run that reaches the native verdict (2B.4 harness fix in the binary)",
+    "acceptance_state": "rejected",
+    "peak_rss_bytes": 10860314624,
+    "output": "34670x10560, written, artifact_validation pass",
+    "output_sha256": "e82c0f08b22a06b635d342f7d895cdb5e32fb9a11f8219e40d81a5274fe7b11d",
+    "native_rejection": "native station geometry is not connected and converged (closure unreliable, direct P95 3.5277 px, pair station 0 r0c5 <-> 17 r2c5)",
+    "density": "bypassed, invalid_native_jacobian_probes 82",
+    "quality_gate": "fail: local_scale_median fail, local_scale_pixel_ratio fail; effective_pixel_count, gradient, noise, roi_delta_e00, owner pass; mtf50 and boundary not_applicable",
+    "tone": "degraded, max 6.0024, 7 violations",
+    "reference_metrics": "registration_failed (74 matches, <40 inliers) recorded as an explicit runner failure instead of aborting",
+    "same_as_task_4c": "closure, density and QG local-scale outcome unchanged; tone is now measured (6.0024 / 7)"
+  }
 }
