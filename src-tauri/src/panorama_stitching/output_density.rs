@@ -7,6 +7,8 @@ use super::residual_warp::ResidualWarp;
 use crate::panorama_utils::stack_pipeline::report::{ClosureReport, OutputDensityReport};
 use crate::panorama_utils::stitching::FocusStackTileMasks;
 use nalgebra::{Matrix2, Matrix3, Point2, Point3, Vector2};
+#[cfg(test)]
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -283,6 +285,105 @@ fn residual_composed_scale(
     let jacobian = world_per_station * inverse;
     let smallest = jacobian.svd(false, false).singular_values.min();
     (smallest.is_finite() && smallest > 1e-10).then_some(smallest)
+}
+
+/// Test-only residual-aware density planning. The production planner keeps
+/// its explicit `nonidentity_world_residual` bypass; this helper reports what
+/// the repaired composed Jacobian would require without changing that path.
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(super) struct ResidualAwareOutputDensityReport {
+    pub(super) report: OutputDensityReport,
+    pub(super) residual_regions_per_station: Vec<usize>,
+}
+
+#[cfg(test)]
+pub(super) fn plan_output_density_residual_aware(
+    station_ids: &[usize],
+    poses: &HashMap<usize, Matrix3<f64>>,
+    evidence: &[StationDensitySamples],
+    residual: &ResidualWarp,
+) -> Result<ResidualAwareOutputDensityReport, String> {
+    let mut report = plan_output_density(station_ids, poses, evidence, true)?;
+    let residual_regions_per_station = station_ids
+        .iter()
+        .map(|station| {
+            residual
+                .regions
+                .iter()
+                .filter(|region| region.right_station == *station)
+                .count()
+        })
+        .collect::<Vec<_>>();
+    report.sampling_contract =
+        "sampled_native_and_residual_jacobian_test_only_not_full_pixel_proof".into();
+    if report.status == "bypassed" {
+        return Ok(ResidualAwareOutputDensityReport {
+            report,
+            residual_regions_per_station,
+        });
+    }
+
+    report.minimum_scale = None;
+    report.p01_scale = None;
+    report.median_scale = None;
+    let mut scales = Vec::new();
+    let mut invalid = 0usize;
+    let mut worst_scale = None;
+    for (station_index, (&tile_id, station)) in station_ids.iter().zip(evidence).enumerate() {
+        let pose = poses
+            .get(&tile_id)
+            .ok_or("residual-aware density station pose missing")?;
+        for sample in &station.samples {
+            if let Some(scale) = residual_composed_scale(pose, residual, tile_id, sample) {
+                if worst_scale.is_none_or(|current| scale < current) {
+                    worst_scale = Some(scale);
+                    report.worst_station_index = Some(station_index);
+                    report.worst_source_id = Some(sample.source_id);
+                    report.worst_station_point = Some([sample.point.x, sample.point.y]);
+                }
+                scales.push(scale);
+            } else {
+                invalid += 1;
+            }
+        }
+    }
+    report.invalid_probe_count += invalid;
+    scales.sort_by(f64::total_cmp);
+    report.sample_count = scales.len();
+    report.minimum_scale = scales.first().copied();
+    report.p01_scale = (!scales.is_empty()).then(|| scales[(scales.len() - 1) / 100]);
+    report.median_scale = (!scales.is_empty()).then(|| scales[scales.len() / 2]);
+    let Some(minimum) = scales.first().copied() else {
+        report.status = "bypassed".into();
+        report.factor = 1.0;
+        report.pixel_count_multiplier = 1.0;
+        report.bypass_reason = Some("residual_sampling_evidence_empty".into());
+        return Ok(ResidualAwareOutputDensityReport {
+            report,
+            residual_regions_per_station,
+        });
+    };
+    if invalid > 0 {
+        report.status = "bypassed".into();
+        report.factor = 1.0;
+        report.pixel_count_multiplier = 1.0;
+        report.bypass_reason = Some("residual_jacobian_invalid_probes".into());
+    } else {
+        report.factor = ((1.0 / minimum).max(1.0) * 1024.0).ceil() / 1024.0;
+        report.pixel_count_multiplier = report.factor * report.factor;
+        report.status = if report.factor > 1.0 {
+            "applied"
+        } else {
+            "unchanged"
+        }
+        .into();
+        report.bypass_reason = None;
+    }
+    Ok(ResidualAwareOutputDensityReport {
+        report,
+        residual_regions_per_station,
+    })
 }
 
 /// Export a residual-aware density diagnostic without changing the output
@@ -655,6 +756,60 @@ mod tests {
         };
         let scale = residual_composed_scale(&Matrix3::identity(), &residual, 99, &sample).unwrap();
         assert!((scale - 1.0).abs() < 1e-8);
+    }
+
+    #[test]
+    fn residual_aware_planner_is_test_only_and_reports_region_counts() {
+        let poses = HashMap::from([(0, Matrix3::identity())]);
+        let mut residual = ResidualWarp::new();
+        let observations = (0..4)
+            .flat_map(|row| {
+                (0..4).map(move |column| {
+                    WarpObservation::new(
+                        crate::panorama_utils::stack_pipeline::report::WorldPoint {
+                            x: 100.0 + column as f64 * 64.0,
+                            y: 200.0 + row as f64 * 64.0,
+                        },
+                        [2.0, 0.0],
+                        0.1,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        residual
+            .add_observations(
+                OverlapResidual::new(
+                    0,
+                    0,
+                    crate::panorama_utils::stack_pipeline::report::WorldRect {
+                        left: 100.0,
+                        top: 200.0,
+                        width: 192.0,
+                        height: 192.0,
+                    },
+                    10.0,
+                ),
+                &observations,
+            )
+            .unwrap();
+        let aware = plan_output_density_residual_aware(
+            &[0],
+            &poses,
+            &[evidence(Matrix2::identity())],
+            &residual,
+        )
+        .unwrap();
+        assert_eq!(aware.residual_regions_per_station, vec![1]);
+        assert_eq!(aware.report.sample_count, 1);
+        assert_eq!(aware.report.status, "unchanged");
+
+        // The production entry point remains the explicit residual bypass.
+        let production =
+            plan_output_density(&[0], &poses, &[evidence(Matrix2::identity())], false).unwrap();
+        assert_eq!(
+            production.bypass_reason.as_deref(),
+            Some("nonidentity_world_residual")
+        );
     }
 
     #[test]

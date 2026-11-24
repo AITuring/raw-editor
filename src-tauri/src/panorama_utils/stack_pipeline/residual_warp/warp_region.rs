@@ -348,12 +348,27 @@ impl WarpRegion {
     /// smoothstep is applied after interpolation so values remain zero exactly
     /// on the activation boundary.
     pub(crate) fn displacement_at(&self, x: f64, y: f64) -> [f64; 2] {
+        let raw = self.raw_displacement_at(x, y);
+        let fade = self.edge_weight_at(x, y);
+        [raw[0] * fade, raw[1] * fade]
+    }
+
+    /// Return the un-faded bilinear field value.  ResidualWarp uses this with
+    /// the same edge weight to form a partition-of-unity blend when several
+    /// regions for one station overlap.
+    pub(super) fn raw_displacement_at(&self, x: f64, y: f64) -> [f64; 2] {
         if !x.is_finite() || !y.is_finite() || !contains(&self.world, x, y) {
             return [0.0, 0.0];
         }
-        let raw = self.field.at(x - self.world.left, y - self.world.top);
-        let fade = edge_fade(&self.world, x, y);
-        [raw[0] * fade, raw[1] * fade]
+        self.field.at(x - self.world.left, y - self.world.top)
+    }
+
+    /// Smooth support weight for the residual region at a world point.
+    pub(super) fn edge_weight_at(&self, x: f64, y: f64) -> f64 {
+        if !x.is_finite() || !y.is_finite() || !contains(&self.world, x, y) {
+            return 0.0;
+        }
+        edge_fade(&self.world, x, y)
     }
 
     /// Apply the residual to a world point, returning the point used to sample
@@ -412,6 +427,7 @@ impl WarpRegion {
     pub(crate) fn report_record(&self) -> WarpRegionRecord {
         WarpRegionRecord {
             world: self.world,
+            right_station: self.right_station,
             node_step_px: self.node_step_px,
             columns: self.columns,
             rows: self.rows,

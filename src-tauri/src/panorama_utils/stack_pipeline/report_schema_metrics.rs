@@ -13,6 +13,10 @@ use super::report_schema_core::*;
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub(crate) struct WarpRegionRecord {
     pub world: WorldRect,
+    /// Station whose residual field is applied.  Older Stack_Reports omitted
+    /// this field; serde default keeps those reports readable for audits.
+    #[serde(default)]
+    pub right_station: usize,
     pub node_step_px: u32,
     pub columns: u32,
     pub rows: u32,
@@ -26,6 +30,7 @@ impl Default for WarpRegionRecord {
     fn default() -> Self {
         Self {
             world: WorldRect::default(),
+            right_station: 0,
             node_step_px: RESIDUAL_WARP_NODE_STEP_PX,
             columns: 0,
             rows: 0,

@@ -1,0 +1,154 @@
+{
+  "schema": 1,
+  "task": "2B.8",
+  "baseline": {
+    "tag": "v1",
+    "commit": "bcddb6a6fcdb6089e25cda2b65122d10bba2cf32"
+  },
+  "branch": "lane/2B.8/residual-jacobian",
+  "worktree": "/Users/dp/Desktop/raw-editor/.worktrees/2B.8",
+  "implementation": {
+    "residual_composition": "C_edge_weighted_partition",
+    "single_region_bitwise_compatibility": true,
+    "forward_inverse_shared_rule": true,
+    "production_nonidentity_world_residual_bypass_unchanged": true,
+    "line_layers": "independent_inverse_only_depth_layer_documented_not_changed"
+  },
+  "pre_fix": {
+    "overlap_unit_test": "failed_before_fix",
+    "observed_boundary_jump_px": "about_2.2",
+    "task16_scale1_all_samples": {
+      "count": 1788082,
+      "minimum_scale": 0.01725085664235415,
+      "worst": {
+        "station": 8,
+        "source_id": 18,
+        "point": [
+          8097,
+          5409
+        ]
+      }
+    },
+    "task16_scale1_excluding_right_edge": {
+      "count": 1786403,
+      "right_edge_removed": 1679,
+      "minimum_scale": 0.01725085664235415,
+      "worst": {
+        "station": 8,
+        "source_id": 18,
+        "point": [
+          8097,
+          5409
+        ]
+      },
+      "definition": "per station point.x == maximum sampled x"
+    }
+  },
+  "post_fix": {
+    "unit_tests": {
+      "residual_warp": {
+        "passed": 9,
+        "failed": 0
+      },
+      "residual_jacobian_properties": {
+        "passed": 2,
+        "failed": 0
+      },
+      "output_density": {
+        "passed": 8,
+        "failed": 0
+      },
+      "report_schema": {
+        "passed": 20,
+        "failed": 0
+      }
+    },
+    "mayuan2_scale025": {
+      "run_path": "/Users/dp/Desktop/raw-editor/.worktrees/2B.8/output/acceptance/2B.8/mayuan-2-scale025-residual-density-r1",
+      "diagnostic_path": "/Users/dp/Desktop/raw-editor/.worktrees/2B.8/output/acceptance/2B.8/mayuan-2-scale025-residual-density-r1/diagnostics/residual-density",
+      "harness_status": "diagnostics_written_but_closure_assertion_failed",
+      "harness_failure": "output density 1.176758 exceeds closure output-pixel limits",
+      "right_edge_definition": "per station point.x == maximum sampled x",
+      "all_samples": {
+        "count": 124543,
+        "minimum_scale": 0.8504955088348083,
+        "worst": {
+          "point": [
+            2049,
+            33
+          ],
+          "source_id": 33
+        }
+      },
+      "excluding_right_edge": {
+        "count": 123566,
+        "minimum_scale": 0.8512830902238775,
+        "worst": {
+          "point": [
+            2017,
+            33
+          ],
+          "source_id": 33
+        }
+      },
+      "removed_right_edge_count": 977,
+      "report_path": "/Users/dp/Desktop/raw-editor/.worktrees/2B.8/output/acceptance/2B.8/mayuan-2-scale025-residual-density-r1/diagnostics/residual-density/right-edge-report.json"
+    },
+    "scale1_rerun": "not_started; brief permits scale0.25 first and estimates about 2.8 hours"
+  },
+  "frozen_binary": {
+    "label": "2B8-residual-jacobian-contract-r3",
+    "sha256": "b7e07e1bd0ca5263e6346902b962e52dbe6a4800d2b2918bf81f8e1b831f32e3",
+    "path": "/Users/dp/Desktop/raw-editor/.worktrees/2B.8/output/acceptance/binaries/2B8-residual-jacobian-contract-r3",
+    "resource_contract": "verified",
+    "frozen_commit": "8a3035b9d341971c270923e56f2d9f5cdda90d6f",
+    "supersedes": [
+      "2B8-residual-jacobian-contract-r1",
+      "2B8-residual-jacobian-contract-r2"
+    ]
+  },
+  "quick": {
+    "status": "pass",
+    "passed": 7,
+    "path": "/Users/dp/Desktop/raw-editor/.worktrees/2B.8/output/acceptance/2B.8/matrix-2B8-residual-jacobian-contract-r2-quick/quick.json",
+    "execution": "direct_without_slot_supervisor_due_to_nice_preexec_sandbox_error",
+    "binary": "2B8-residual-jacobian-contract-r2",
+    "binary_sha256": "b7e07e1bd0ca5263e6346902b962e52dbe6a4800d2b2918bf81f8e1b831f32e3",
+    "final_frozen_label": "2B8-residual-jacobian-contract-r3",
+    "same_binary_sha_as_final_frozen_label": true
+  },
+  "medium": {
+    "status": "direct_validation_complete",
+    "matrix_dry_run_cases": [
+      "nine-cold",
+      "nine-hot",
+      "langyuan-10",
+      "wenyuan-10",
+      "lanting-framed"
+    ],
+    "paths": {
+      "nine_cold": "/Users/dp/Desktop/raw-editor/.worktrees/2B.8/output/acceptance/2B.8/medium-direct-nine-cold",
+      "langyuan_10": "/Users/dp/Desktop/raw-editor/.worktrees/2B.8/output/acceptance/2B.8/medium-direct-langyuan-10",
+      "wenyuan_10": "/Users/dp/Desktop/raw-editor/.worktrees/2B.8/output/acceptance/2B.8/medium-direct-wenyuan-10",
+      "nine_hot": "/Users/dp/Desktop/raw-editor/.worktrees/2B.8/output/acceptance/2B.8/medium-direct-nine-hot",
+      "lanting_framed": "/Users/dp/Desktop/raw-editor/.worktrees/2B.8/output/acceptance/2B.8/medium-direct-lanting-framed"
+    },
+    "tiff_sha_matches_expected": {
+      "nine_cold": true,
+      "langyuan_10": true,
+      "wenyuan_10": true,
+      "nine_hot": true,
+      "lanting_framed": true
+    },
+    "lanting_framed": "completed; TIFF SHA matched matrix expectation",
+    "run_py_monitor_limitation": "ps Operation not permitted in sandbox; no matrix analysis was fabricated",
+    "binary_label": "2B8-residual-jacobian-contract-r1",
+    "binary_sha256": "6166b1ac38e68ca88ffcf89e74aaea85bd9e81104e293112669f188b9776d4f4",
+    "note": "r1 and final r2 differ only in test-only planner serialization derives; production residual mapping is unchanged."
+  },
+  "forbidden_files_untouched": [
+    "tasks.md",
+    "docs/project-progress.md",
+    "tests/acceptance/regression-matrix.json"
+  ]
+}

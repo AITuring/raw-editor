@@ -222,17 +222,17 @@ impl ResidualWarp {
             .copied()
             .unwrap_or(station_id);
         let world = self.line_layers.inverse(world, station_id);
-        let Some(region) = self.regions.iter().find(|region| {
-            region.right_station == station_id && contains(&region.world, world.x, world.y)
-        }) else {
+        if !self.has_residual_region_at(world, station_id) {
             return world;
-        };
+        }
         let mut source = world;
         // The 32/8 grid and edge fade can approach a 0.625 contraction.
         // Four steps are not subpixel-accurate there; sixteen bound the
         // remaining inverse error below 0.02px even at maximum displacement.
         for _ in 0..16 {
-            let displacement = region.displacement_at(source.x, source.y);
+            let displacement = self
+                .composed_displacement_at(source, station_id)
+                .unwrap_or([0.0, 0.0]);
             let next = Point2::new(world.x - displacement[0], world.y - displacement[1]);
             if (next - source).norm() < 1e-6 {
                 return next;
@@ -252,13 +252,61 @@ impl ResidualWarp {
             .get(&image_id)
             .copied()
             .unwrap_or(image_id);
-        self.regions
+        self.composed_displacement_at(source, station)
+            .map_or(source, |d| Point2::new(source.x + d[0], source.y + d[1]))
+    }
+
+    /// Return the shared residual composition at a point.  A single region
+    /// takes the original path byte-for-byte; the multi-region path is a
+    /// smooth edge-weighted partition of unity.  Each region contributes its
+    /// unfaded field value with its smoothstep support weight, so entering or
+    /// leaving a region cannot change the displacement discontinuously.
+    fn composed_displacement_at(&self, point: Point2<f64>, station: usize) -> Option<[f64; 2]> {
+        let station_region_count = self
+            .regions
             .iter()
-            .find(|r| r.right_station == station && contains(&r.world, source.x, source.y))
-            .map_or(source, |r| {
-                let d = r.displacement_at(source.x, source.y);
-                Point2::new(source.x + d[0], source.y + d[1])
-            })
+            .filter(|region| region.right_station == station)
+            .count();
+        if station_region_count == 0 {
+            return None;
+        }
+        if station_region_count == 1 {
+            // Preserve the exact single-region mapping, including all legacy
+            // floating-point rounding and the identity field bit pattern.
+            let region = self
+                .regions
+                .iter()
+                .find(|region| region.right_station == station)
+                .expect("station region count was one");
+            return Some(region.displacement_at(point.x, point.y));
+        }
+        let mut weight_sum = 0.0;
+        let mut max_weight = 0.0f64;
+        let mut displacement = [0.0; 2];
+        let mut matching = false;
+        for region in self.regions.iter().filter(|region| {
+            region.right_station == station && contains(&region.world, point.x, point.y)
+        }) {
+            matching = true;
+            let weight = region.edge_weight_at(point.x, point.y);
+            max_weight = max_weight.max(weight);
+            weight_sum += weight;
+            let raw = region.raw_displacement_at(point.x, point.y);
+            displacement[0] += raw[0] * weight;
+            displacement[1] += raw[1] * weight;
+        }
+        (matching && weight_sum > 1e-12).then(|| {
+            [
+                displacement[0] / weight_sum * max_weight,
+                displacement[1] / weight_sum * max_weight,
+            ]
+        })
+    }
+
+    fn has_residual_region_at(&self, point: Point2<f64>, station: usize) -> bool {
+        self.regions.iter().any(|region| {
+            region.right_station == station && contains(&region.world, point.x, point.y)
+        })
     }
     pub(crate) fn has_line_layer(&self, image_id: usize) -> bool {
         let station = self

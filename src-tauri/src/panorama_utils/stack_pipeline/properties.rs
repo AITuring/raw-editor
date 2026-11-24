@@ -90,6 +90,8 @@ mod closure;
 
 mod quality_gate_checks;
 
+mod residual_jacobian;
+
 /// The exact shape requirement 12.7 fixes for a machine readable failure reason.
 fn reason_identifier_pattern() -> Regex {
     Regex::new(r"^[a-z0-9_]{1,64}$").expect("the reason identifier pattern must compile")
