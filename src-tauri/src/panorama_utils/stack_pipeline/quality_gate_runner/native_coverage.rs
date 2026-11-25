@@ -24,9 +24,32 @@ pub(super) fn measure(
     input: &QualityGateInput<'_>,
     legacy: &EffectivePixelCoverage,
 ) -> Result<(EffectivePixelCoverage, EffectiveSourceDomainRecord), &'static str> {
+    // Requirement 11.4 (C6, 2026-11-23): a source without native sampling
+    // metadata that owns no output pixel is a registration-failed frame. It
+    // has no verified footprint and contributes nothing, so it is left out
+    // of the domain and recorded. A source that owns pixels but lacks the
+    // metadata still fails closed.
+    let owned = if input
+        .sources
+        .iter()
+        .any(|source| source.native_registration.is_none())
+    {
+        owners_present(input.ownership)
+    } else {
+        std::collections::BTreeSet::new()
+    };
+    let mut excluded_sources = Vec::new();
+    let mut domain_sources = Vec::with_capacity(input.sources.len());
+    for source in input.sources {
+        if source.native_registration.is_none() && !owned.contains(&source.owner) {
+            excluded_sources.push(source.path.clone());
+        } else {
+            domain_sources.push(source);
+        }
+    }
     // Fail closed for malformed maps, rather than interpreting mapping errors
     // as absent source area and accidentally shrinking the denominator.
-    for source in input.sources {
+    for source in &domain_sources {
         let native = source
             .native_registration
             .as_ref()
@@ -41,7 +64,7 @@ pub(super) fn measure(
         }
     }
     let counts = count_domain(input.coverage, input.world_origin, |world| {
-        input.sources.iter().any(|source| {
+        domain_sources.iter().any(|source| {
             let native = source
                 .native_registration
                 .as_ref()
@@ -78,8 +101,25 @@ pub(super) fn measure(
         covered_inside: counts.covered_inside,
         missing_inside: counts.domain - counts.covered_inside,
         covered_outside: counts.covered_outside,
+        excluded_source_count: excluded_sources.len(),
+        excluded_sources,
     };
     Ok((result, record))
+}
+
+/// Owner identifiers that own at least one output pixel. `NO_OWNER` (0) is
+/// never an owner.
+fn owners_present(ownership: &[u16]) -> std::collections::BTreeSet<u16> {
+    let mut seen = vec![false; usize::from(u16::MAX) + 1];
+    for &owner in ownership {
+        seen[usize::from(owner)] = true;
+    }
+    seen.iter()
+        .enumerate()
+        .skip(1)
+        .filter(|(_, present)| **present)
+        .map(|(owner, _)| owner as u16)
+        .collect()
 }
 
 #[derive(Default, Debug, PartialEq)]
@@ -256,5 +296,118 @@ mod tests {
         assert_eq!(audit.missing_inside, 0);
         // Uncalibrated paths retain the legacy result unless explicitly tested here.
         assert!(!applicable(&input));
+    }
+
+    /// C6 (2026-11-23): a source without native sampling metadata is left out
+    /// of the domain and recorded only when it owns no output pixel. If it
+    /// owns pixels, the criterion still fails closed.
+    #[test]
+    fn zero_owned_sources_without_native_metadata_are_excluded_and_recorded() {
+        use super::super::{NativeReferenceMap, QualitySource};
+        use crate::panorama_utils::stack_pipeline::{
+            quality_gate::SourceGeometry, residual_warp::ResidualWarp,
+        };
+        use crate::panorama_utils::{
+            shared::ImageInfo,
+            stitching::{FocusSourceRefinement, FocusSourceSampling},
+        };
+        use nalgebra::Matrix3;
+        let image = ImageInfo {
+            id: 0,
+            filename: "anchor.nef".into(),
+            width: 10,
+            height: 10,
+            alignment_image: GrayImage::new(10, 10),
+            full_image: None,
+            scale_factor: 1.0,
+            focal_length_35mm: None,
+            source_footprint: None,
+            overview_reference: false,
+            features: vec![],
+            top_features: vec![],
+            foreground_range: None,
+            foreground_mask: None,
+            horizontal_edge_rows: vec![],
+            vertical_edge_columns: vec![],
+        };
+        let identity = Matrix3::identity();
+        let sampling = FocusSourceSampling::for_test(
+            &image,
+            &identity,
+            crate::panorama_utils::coordinates::Projection::Planar,
+            None,
+        );
+        let geometry = SourceGeometry {
+            member_to_anchor: identity,
+            tile_to_world: identity,
+            station_id: 0,
+        };
+        let anchor = QualitySource {
+            owner: 1,
+            path: "anchor.nef".into(),
+            dimensions: (10, 10),
+            geometry: geometry.clone(),
+            native_warp: None,
+            native_registration: Some(NativeReferenceMap {
+                mosaic_tone: None,
+                source_prefilter_divisor: 1.0,
+                world_to_station: identity,
+                station_to_world: identity,
+                station_origin: (0.0, 0.0),
+                refinement: FocusSourceRefinement {
+                    source_sampling: Some(sampling),
+                    ..Default::default()
+                },
+            }),
+        };
+        let failed = QualitySource {
+            owner: 2,
+            path: "failed.nef".into(),
+            dimensions: (10, 10),
+            geometry,
+            native_warp: None,
+            native_registration: None,
+        };
+        let sources = [anchor, failed];
+        let output = image::Rgb32FImage::new(10, 10);
+        let coverage = GrayImage::from_pixel(10, 10, Luma([255]));
+        let residual = ResidualWarp::new();
+        let legacy = EffectivePixelCoverage {
+            output_nontransparent: 100,
+            projected_union: 100,
+            ratio: 1.0,
+        };
+        let run = |ownership: &[u16]| {
+            let input = QualityGateInput {
+                output: &output,
+                coverage: &coverage,
+                ownership,
+                confidence: &[],
+                textured: None,
+                owner_shortfall: None,
+                owner_disagreement: None,
+                unresolved_pixel_count: 0,
+                world_origin: (0.0, 0.0),
+                sources: &sources,
+                accepted_station_relations: &[],
+                residual: &residual,
+                acceptance_render_scale: 1.0,
+                final_sharpen_amount: 0.0,
+            };
+            measure(&input, &legacy)
+        };
+        // Only the anchor owns pixels: the failed frame is excluded.
+        let (result, audit) = run(&[1u16; 100]).expect("a zero-owned failed frame is excluded");
+        assert_eq!(result.projected_union, 100);
+        assert_eq!(audit.source_count, 2);
+        assert_eq!(audit.excluded_source_count, 1);
+        assert_eq!(audit.excluded_sources, vec!["failed.nef".to_string()]);
+        // The metadata-less source owns one pixel: still insufficient evidence.
+        let mut ownership = vec![1u16; 100];
+        ownership[7] = 2;
+        assert_eq!(
+            run(&ownership).unwrap_err(),
+            degradation::QUALITY_GATE_INSUFFICIENT_EVIDENCE
+        );
     }
 }

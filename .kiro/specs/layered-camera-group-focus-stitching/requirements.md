@@ -384,6 +384,14 @@
 8. WHEN 联合解的 Closure_Residual 中位数不超过 2.0 个世界坐标原生像素，THE Closure_Optimizer SHALL
    使任意两个通过 Station_Relation 直接相连的 Capture_Station 在重叠区域的重投影误差第 95 百分位
    不超过 3.0 个世界坐标原生像素，并在 Stack_Report 中记录所有直接相连机位对中该第 95 百分位的最大值。
+   输出密度规划（`output_density`）放大输出网格后，本条及第 6 条、第 4 条的闭环上限仍按**世界坐标原生
+   像素**判定，不乘密度因子；乘以因子后的输出网格数值只作记录（`direct_pair_p95_output_px` 等）。
+   可见错位另由需求 11.11 的边界描线判据在输出像素上独立约束。
+
+   说明（2026-11-23 修订，用户决定 C1）：此前 `validate_output_closure` 把闭环值乘以密度因子再与 3px 比较，
+   睡觉45（2.5386×1.37891）、马远2（2.6047×1.17676）、赵佶（2.768×1.29297）在基础闭环通过时被拒。密度
+   放大只把输出网格加密到最细来源的采样率，相对源图像素的几何误差不变
+   （`docs/qg-contract-decisions-2026-11.md` C1）。拒绝标识 `output_pixel_closure_limit_exceeded` 为兼容沿用原名。
 9. IF 存在任一通过 Station_Relation 直接相连的 Capture_Station 对，其重叠区域重投影误差第 95 百分位
    超过 3.0 个世界坐标原生像素，THEN THE Closure_Optimizer SHALL 保留生成树初值，并在 Stack_Report 中
    把闭环状态记录为不可靠且列出该 Capture_Station 对的行列索引。
@@ -493,7 +501,15 @@
    对校准原生路径，唯一覆盖域 SHALL 由完整原生逆映射和原始传感器 footprint 独立定义，校准 padding
    不属于来源域；分子 SHALL 只计该域内的非透明输出，域外像素不得补偿域内缺失。域的定义不得依赖
    输出 alpha、owner 空洞或亮度。报告 SHALL 保留旧矩形并集/全部非透明计数和新域内缺失/域外覆盖，
-   缺失采样元数据时 SHALL 记录证据不足；0.98 门槛不变。
+   拥有输出像素的来源缺失采样元数据时 SHALL 记录证据不足；不拥有任何输出像素且缺失采样元数据的来源
+   （机位内配准失败、被排除出融合的帧）SHALL 不计入来源域，并在报告的 `effective_source_domain` 中
+   记录 `excluded_source_count` 与 `excluded_sources`；0.98 门槛不变。
+
+   说明（2026-11-23 修订，用户决定 C6 选项 a）：原文“缺失采样元数据时 SHALL 记录证据不足”使任一含配准
+   失败帧的机位整项判为证据不足。2B.7 在15个分层路径报告中确认，只有含配准失败帧的马远2 scale=1 两次运行
+   出现该结论，失败帧（DSC_5434/5435、5422、5337、5426）不拥有像素、没有已验证的 footprint，其机位锚点
+   覆盖同一视角（`docs/benchmarks/2B7-effective-pixel-root-cause-r1.json`）。拥有像素的来源缺元数据仍判
+   证据不足，排除项逐条记录，不缩小可验证来源的分母。
 5. THE Quality_Gate SHALL 把满足以下全部条件的 ROI 判定为倾斜边 ROI：含至少 1 条长度不小于 128 个
    原生像素的直线边、该边与最近像素轴夹角在 3 度至 15 度之间、边两侧低频亮度对比度不小于满量程的
    20%、边两侧各 32 个原生像素内不存在其他满足上述对比度条件的边。

@@ -486,20 +486,25 @@ pub(super) fn apply_output_density(poses: &mut HashMap<usize, Matrix3<f64>>, fac
     }
 }
 
-/// Uniform output scale changes world-pixel residuals by the same factor.
-/// Preserve the original closure report and independently enforce its limits
-/// in the output lattice; never claim invariance of pixel error units.
+/// Requirement 7.8 bounds the closure in world-native pixels (C1, 2026-11-23).
+/// A uniform output density factor only refines the sampling lattice to the
+/// finest source; it does not change the geometric error measured against
+/// source pixels, so the limits are checked on the unscaled closure values.
+/// The output-lattice values are still recorded for audit, and visible
+/// misalignment remains bounded independently by the Quality_Gate boundary
+/// criterion measured in output pixels.
 pub(super) fn validate_output_closure(
     report: &mut OutputDensityReport,
     closure: &ClosureReport,
 ) -> Result<(), String> {
-    let direct = closure.max_direct_pair_p95_px * report.factor;
-    let median = closure.residual_median_px * report.factor;
-    let corner = closure.max_corner_correction_px * report.factor;
-    report.direct_pair_p95_output_px = Some(direct);
-    report.residual_median_output_px = Some(median);
-    report.max_corner_correction_output_px = Some(corner);
-    if !direct.is_finite()
+    let direct = closure.max_direct_pair_p95_px;
+    let median = closure.residual_median_px;
+    let corner = closure.max_corner_correction_px;
+    report.direct_pair_p95_output_px = Some(direct * report.factor);
+    report.residual_median_output_px = Some(median * report.factor);
+    report.max_corner_correction_output_px = Some(corner * report.factor);
+    if !report.factor.is_finite()
+        || !direct.is_finite()
         || direct > super::CLOSURE_DIRECT_PAIR_P95_LIMIT_PX
         || !median.is_finite()
         || median > super::CLOSURE_RESIDUAL_MEDIAN_LIMIT_PX
@@ -507,9 +512,11 @@ pub(super) fn validate_output_closure(
         || corner > super::CLOSURE_MAX_CORNER_CORRECTION_PX
     {
         report.status = "rejected".into();
+        // Identifier kept for report compatibility; the check is now in
+        // world-native pixels.
         report.bypass_reason = Some("output_pixel_closure_limit_exceeded".into());
         return Err(format!(
-            "output density {:.6} exceeds closure output-pixel limits: direct P95 {direct:.6}, median {median:.6}, corner {corner:.6}",
+            "output density {:.6}: closure exceeds world-native limits: direct P95 {direct:.6}, median {median:.6}, corner {corner:.6}",
             report.factor
         ));
     }
@@ -651,7 +658,9 @@ mod tests {
     }
 
     #[test]
-    fn density_cannot_relax_closure_pixel_limits() {
+    fn density_closure_is_judged_in_world_native_pixels() {
+        // C1: the 3 / 2 / 256 px limits apply to the unscaled closure, while
+        // the output-lattice values stay recorded for audit.
         let mut report = OutputDensityReport {
             factor: 1.1,
             ..Default::default()
@@ -660,15 +669,35 @@ mod tests {
             max_direct_pair_p95_px: 2.9,
             ..Default::default()
         };
-        assert!(validate_output_closure(&mut report, &closure).is_err());
+        assert!(validate_output_closure(&mut report, &closure).is_ok());
         assert!((report.direct_pair_p95_output_px.unwrap() - 3.19).abs() < 1e-10);
         assert_eq!(closure.max_direct_pair_p95_px, 2.9);
-        closure.max_direct_pair_p95_px = 2.012;
-        assert!(validate_output_closure(&mut report, &closure).is_ok());
+        closure.max_direct_pair_p95_px = 3.01;
+        assert!(validate_output_closure(&mut report, &closure).is_err());
+        assert_eq!(report.status, "rejected");
+        closure.max_direct_pair_p95_px = 2.0;
         closure.max_corner_correction_px = 240.0;
+        let mut report = OutputDensityReport {
+            factor: 1.1,
+            ..Default::default()
+        };
+        assert!(validate_output_closure(&mut report, &closure).is_ok());
+        closure.max_corner_correction_px = 257.0;
         assert!(validate_output_closure(&mut report, &closure).is_err());
         closure.max_corner_correction_px = 0.0;
-        closure.residual_median_px = 1.9;
+        closure.residual_median_px = 2.01;
         assert!(validate_output_closure(&mut report, &closure).is_err());
+        // The real sleeping-45 case: 2.5386 px at factor 1.37891 is 3.50
+        // output px, but within the 3 px world-native limit.
+        let mut report = OutputDensityReport {
+            factor: 1.37890625,
+            ..Default::default()
+        };
+        let closure = ClosureReport {
+            max_direct_pair_p95_px: 2.5386065,
+            ..Default::default()
+        };
+        assert!(validate_output_closure(&mut report, &closure).is_ok());
+        assert!(report.direct_pair_p95_output_px.unwrap() > 3.0);
     }
 }

@@ -32,7 +32,7 @@
 
 ## G2：输出采样与来源链
 
-复用当前 `output_density`：从实际 owner/source map 的原生 Jacobian 规划统一输出格；不修改真实配准矩阵，不凭空增加来源细节。保存 `source_count`、有效/无效/边界探针、最小尺度、density factor、采样契约。若 source sampling 缺失或发生翻折，禁止伪造 unit scale。Quality Gate 仍按真实 output→station→source 逆映射采样，并按现有 local-scale、MTF、gradient、noise、boundary、coverage 等门禁判定。MTF 和梯度双方使用同一局部尺度；不重定义阈值，也不删除不利 ROI。
+复用当前 `output_density`：从实际 owner/source map 的原生 Jacobian 规划统一输出格；不修改真实配准矩阵，不凭空增加来源细节。保存 `source_count`、有效/无效/边界探针、最小尺度、density factor、采样契约。若 source sampling 缺失或发生翻折，禁止伪造 unit scale。密度放大后的闭环上限按世界坐标原生像素判定，输出网格数值只作记录（需求 7.8，2026-11-23 C1）。Quality Gate 仍按真实 output→station→source 逆映射采样，并按现有 local-scale、MTF、gradient、noise、boundary、coverage 等门禁判定。MTF 和梯度双方使用同一局部尺度；不重定义阈值，也不删除不利 ROI。
 
 保持 source path/hash、RAW decode 与 source cache 统计、fusion owner legend、source refinements、station owner evidence、Coverage_Mask、ROI 路径与不可测原因。不得通过 owner 替换掩盖倍率变化。
 

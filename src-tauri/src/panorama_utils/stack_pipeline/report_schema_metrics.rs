@@ -977,4 +977,12 @@ pub(crate) struct EffectiveSourceDomainRecord {
     pub covered_inside: u64,
     pub missing_inside: u64,
     pub covered_outside: u64,
+    /// Requirement 11.4 (C6): sources with no native sampling metadata that
+    /// own no output pixel (registration-failed frames). They are left out of
+    /// the domain and listed here; an owning source without metadata still
+    /// makes the criterion insufficient evidence.
+    #[serde(default)]
+    pub excluded_source_count: usize,
+    #[serde(default)]
+    pub excluded_sources: Vec<String>,
 }
