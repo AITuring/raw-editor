@@ -332,14 +332,14 @@ flowchart LR
   - 测试：属性与回归测试；快速层；中等层中阆苑10/文苑10 TIFF 若变须逐项说明，否则视为修复失败。
   - 演示：马远2 重新导出诊断，合成尺度最小值回到合同范围；写出 `docs/benchmarks/residual-jacobian-contract-r1.json`。
 
-- [ ] 2B.9 阆苑无效探针与 tone 内容匹配诊断（线B，test-only）
+- [x] 2B.9 阆苑无效探针与 tone 内容匹配诊断（线B，test-only，2026-11-23）
   - 目标：为 C2、C4、C7 提供缺少的测量。
   - 做法：(a) 4C 的82个 `invalid_native_jacobian_probes` 的位置与原因（站点、来源、折叠/奇异、越界），优先用已有 Stack_Report 与 test-only 导出；(b) 在文苑34–39段、赤壁2↔5、阆苑0.25 的 tone 边界带上，分别统计“全部像素”与“两侧均为纸面平坦像素”的低频 ΔE，验证“witness 内容不匹配”是否为 ΔE 偏高主因。
   - 资源：`build`；`run` 以 0.25 为主。依赖：2B.1。冲突：无（不改生产路径）。
   - 测试：test-only 代码有单元测试；快速层通过。
   - 演示：两份 benchmark JSON，作为 C4、C7 的数据依据。
   - (b) 完成（2026-11-23，分支 `lane/2B.9/probe-tone-diagnostics` 提交 `9d0647d7`，test-only）：文苑 34–39 已保存数据重放，23 个 tone 超限窗口（max 8.425）都没有纸面单元；纸面口径在其他窗口新增不稳定超限（max 3.122 / 4.878）。结论：C4 选项 B 不可取。见[摘要](../../../docs/benchmarks/2B9-tone-paper-split-r1.json)。
-  - (a) 探针结果（2026-11-23，`2B9-probe-tone-r1`）：82 个全部为“折叠”，全部在源图右缘竖条（源 x 为宽度的 96.8%–98.8%，贯穿全高）；只有 x 方向导数异常（−0.01 至 −205），y 方向正常（0.857–1.011），多数是映射跳变而非平滑折叠；22 个没有原生残差位移。未验证的假设：`FocusSourceSampling::mapping` 在全局与局部带模型之间切换造成 x 方向不连续。见[摘要](../../../docs/benchmarks/2B9-langyuan-invalid-probes-r1.json)。该运行已完成，首次得到阆苑84张 scale=1 的完整原生判定：rejected，原因依次为 closure unreliable（0↔17，3.5277px）、QG local-scale 两项 fail、tone degraded（max 6.0024，7 处）；参考配准失败被记为显式失败而不再中断；峰值 RSS 10.11GiB。
+  - (a) 探针结果（2026-11-23，`2B9-probe-tone-r1`）：82 个全部为“折叠”，全部在源图右缘竖条（源 x 为宽度的 96.8%–98.8%，贯穿全高）；只有 x 方向导数异常（−0.01 至 −205），y 方向正常（0.857–1.011），多数是映射跳变而非平滑折叠；22 个没有原生残差位移。未验证的假设：`FocusSourceSampling::mapping` 在全局与局部带模型之间切换造成 x 方向不连续。见[摘要](../../../docs/benchmarks/2B9-langyuan-invalid-probes-r1.json)。合入：冻结 `2B9-probe-tone-r1` 快速层通过、中等层5/5 TIFF不变，提交 `b2cd3102` 已快进 v1（src-tauri 与冻结提交 `9d0647d7` 相同）。该运行已完成，首次得到阆苑84张 scale=1 的完整原生判定：rejected，原因依次为 closure unreliable（0↔17，3.5277px）、QG local-scale 两项 fail、tone degraded（max 6.0024，7 处）；参考配准失败被记为显式失败而不再中断；峰值 RSS 10.11GiB。
 
 - [ ] 2B.10 实施已批准的合同变更（线B）
   - 目标：每次只落地一条已批准条目，用真实运行验证 what-if 预测。
