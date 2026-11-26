@@ -81,6 +81,8 @@ export interface ImageStackModalState {
   softRegions?: ImageStackSoftRegions | null;
   /** Photos a scan went on without because they aligned with none of the others. */
   skippedSources?: string[] | null;
+  /** Path to the latest Stack_Report JSON emitted by the backend, if present. */
+  stackReportPath?: string | null;
   /** The capture positions did not all relate; the photos were composed on their own positions. */
   stationsUnrelated?: boolean;
   isOpen: boolean;
@@ -299,6 +301,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     resultSize: null,
     softRegions: null,
     skippedSources: null,
+    stackReportPath: null,
     stationsUnrelated: false,
     sourcePaths: [],
     blendMode: 'focus',

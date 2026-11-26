@@ -1,7 +1,8 @@
-"""Unit tests for the bounded determinism matrix helpers."""
+"""Unit tests for the bounded determinism & resilience matrix helpers."""
 import importlib.util
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 
@@ -58,6 +59,58 @@ class DeterminismHelpersTest(unittest.TestCase):
             {'blocking_reason': None, 'mismatches': [{'field': 'output_sha256'}]},
         ]
         self.assertEqual(MODULE.classify_matrix_status(runs), ('fail', None))
+
+    def test_scenario_parser_and_dynamic_not_run_tracking(self):
+        self.assertEqual(
+            MODULE.parse_scenarios('threads,order_permutation,cancellation,order_permutation'),
+            ['threads', 'order_permutation', 'cancellation'],
+        )
+        self.assertEqual(
+            MODULE.remaining_not_run(['threads']),
+            ['order_permutation', 'concurrent_load', 'cancellation', 'oom', 'provider_fallback'],
+        )
+        self.assertEqual(
+            MODULE.remaining_not_run(['threads', 'order_permutation', 'concurrent_load', 'cancellation', 'oom']),
+            ['provider_fallback'],
+        )
+        with self.assertRaises(Exception):
+            MODULE.parse_scenarios('threads,unknown_mode')
+
+    def test_permuted_symlink_view_preserves_targets_and_reverses_sort_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src_dir = root / 'sources'
+            src_dir.mkdir()
+            files = []
+            for name in ('DSC_0001.NEF', 'DSC_0002.NEF', 'DSC_0003.NEF'):
+                p = src_dir / name
+                p.write_bytes(name.encode())
+                files.append(p)
+            view_dir = root / 'permuted'
+            mapping = MODULE.build_permuted_symlink_view(files, view_dir, mode='reverse')
+            self.assertEqual(len(mapping), 3)
+            links = sorted(view_dir.iterdir())
+            self.assertEqual([link.resolve().name for link in links], ['DSC_0003.NEF', 'DSC_0002.NEF', 'DSC_0001.NEF'])
+            self.assertTrue(all(link.is_symlink() for link in links))
+
+    def test_cancellation_and_oom_probes_fail_closed_when_output_published(self):
+        self.assertEqual(
+            MODULE.evaluate_cancellation_probe(143, {'acceptance_state': 'cancelled'}, False),
+            [],
+        )
+        self.assertTrue(
+            MODULE.evaluate_cancellation_probe(0, {'acceptance_state': 'accepted'}, True),
+        )
+        self.assertEqual(
+            MODULE.evaluate_oom_probe(1, {'status': 'resource_failed', 'memory': {'threshold_exceeded': True}}, False),
+            [],
+        )
+        self.assertTrue(
+            MODULE.evaluate_oom_probe(1, {'status': 'rejected', 'memory': {'threshold_exceeded': False}}, False),
+        )
+        self.assertTrue(
+            MODULE.evaluate_oom_probe(1, {'status': 'resource_failed', 'memory': {'threshold_exceeded': True}}, True),
+        )
 
 
 if __name__ == '__main__':

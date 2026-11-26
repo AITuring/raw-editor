@@ -26,6 +26,8 @@
     "crop-transform:check": "node tests/crop-transform-contract.mjs",
     "export-dialog:check": "node tests/export-dialog-contract.mjs",
     "image-stack-preview:check": "node tests/image-stack-preview-contract.mjs",
+    "stack-report-inspection:check": "node tests/stack-report-inspection.mjs",
+    "source-lock-sidecar:check": "node tests/source-lock-sidecar.mjs",
     "focus-stack-quality:check": "node tests/focus-stack-quality-contract.mjs",
     "focus-stack-research:check": "node tests/focus-stack-quality-contract.mjs --research",
     "focus-stack-datasets:check": "node tests/focus-stack-datasets-contract.mjs",

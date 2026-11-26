@@ -265,6 +265,7 @@ export default function AppModals(props: AppModalsProps) {
         resultSize: null,
         softRegions: null,
         skippedSources: null,
+        stackReportPath: null,
         stationsUnrelated: false,
         sourcePaths: [],
         blendMode: 'focus',
@@ -354,6 +355,7 @@ export default function AppModals(props: AppModalsProps) {
         resultSize={imageStackModalState.resultSize}
         softRegions={imageStackModalState.softRegions ?? null}
         skippedSources={imageStackModalState.skippedSources ?? null}
+        stackReportPath={imageStackModalState.stackReportPath ?? null}
         stationsUnrelated={imageStackModalState.stationsUnrelated ?? false}
         onClose={closeImageStackModal}
         onChange={() =>

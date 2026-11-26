@@ -410,6 +410,10 @@ export function useTauriListeners({
           const softRegions = parseImageStackSoftRegions(event.payload?.softRegions);
           const stationsUnrelated = event.payload?.stationsUnrelated === true;
           const skippedSources = parseImageStackSkippedSources(event.payload?.skippedSources);
+          const stackReportPath =
+            typeof event.payload?.stackReportPath === 'string' && event.payload.stackReportPath.length > 0
+              ? event.payload.stackReportPath
+              : null;
           const { previewSource, detailPreviewSource } = resolveImageStackPreviewSources(event.payload);
           useUIStore.getState().setUI((state) => {
             if (typeof requestId !== 'string' || requestId !== state.imageStackModalState.requestId) {
@@ -455,6 +459,7 @@ export function useTauriListeners({
                 resultSize,
                 softRegions,
                 skippedSources,
+                stackReportPath,
                 stationsUnrelated,
                 ...(resolvedOrder ? { sourcePaths: resolvedOrder } : {}),
               },
@@ -471,6 +476,10 @@ export function useTauriListeners({
           const softRegions = previewSource ? parseImageStackSoftRegions(event.payload?.softRegions) : null;
           const skippedSources = previewSource ? parseImageStackSkippedSources(event.payload?.skippedSources) : null;
           const stationsUnrelated = previewSource ? event.payload?.stationsUnrelated === true : false;
+          const stackReportPath =
+            typeof event.payload?.stackReportPath === 'string' && event.payload.stackReportPath.length > 0
+              ? event.payload.stackReportPath
+              : null;
           useUIStore.getState().setUI((state) => {
             if (typeof requestId !== 'string' || requestId !== state.imageStackModalState.requestId) return state;
             return {
@@ -488,6 +497,7 @@ export function useTauriListeners({
                 resultSize,
                 softRegions,
                 skippedSources,
+                stackReportPath,
                 stationsUnrelated,
               },
             };

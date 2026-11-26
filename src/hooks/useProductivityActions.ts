@@ -109,6 +109,7 @@ export function useProductivityActions(refreshImageList: () => Promise<void>, pa
           resultSize: null,
           softRegions: null,
           skippedSources: null,
+          stackReportPath: null,
           stationsUnrelated: false,
           sourcePaths: paths,
           blendMode,

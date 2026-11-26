@@ -52,9 +52,12 @@ import type {
   ImageStackSoftRegions,
 } from '../../store/useUIStore';
 import ImageStackResultPreview from './ImageStackResultPreview';
+import ImageStackInspectionPanel from './ImageStackInspectionPanel';
 import ExportImageDialog from '../../features/export/ExportImageDialog';
 import { getSupportedImageTypes, normalizeExtensions, pathsFromSelection } from './BatchGeometryModal/utils';
 import type { ExportDialogSettings } from '../../features/export/exportDialog';
+import type { StackReportInspection, StackReportInspectionMarker } from '../../utils/stackReportInspection';
+import type { SourceLockDocument } from '../../utils/sourceLockSidecar';
 
 interface ImageStackModalProps {
   detailImageBase64: string | null;
@@ -68,6 +71,7 @@ interface ImageStackModalProps {
   resultSize: ImageStackResultSize | null;
   softRegions?: ImageStackSoftRegions | null;
   skippedSources?: string[] | null;
+  stackReportPath?: string | null;
   stationsUnrelated?: boolean;
   sourceMetadata?: Record<string, unknown> | null;
   sourcePaths: string[];
@@ -266,6 +270,7 @@ export default function ImageStackModal({
   resultSize,
   softRegions = null,
   skippedSources = null,
+  stackReportPath = null,
   stationsUnrelated = false,
   sourceMetadata = null,
   sourcePaths,
@@ -290,6 +295,10 @@ export default function ImageStackModal({
   const [show, setShow] = useState(false);
   const [isPreviewFocused, setIsPreviewFocused] = useState(false);
   const [addSourcesNotice, setAddSourcesNotice] = useState<string | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<'setup' | 'inspection'>('setup');
+  const [inspection, setInspection] = useState<StackReportInspection | null>(null);
+  const [focusedMarker, setFocusedMarker] = useState<StackReportInspectionMarker | null>(null);
+  const [sourceLockDoc, setSourceLockDoc] = useState<SourceLockDocument | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const sourcePanelRef = useRef<HTMLElement | null>(null);
   const sourceListRef = useRef<HTMLOListElement | null>(null);
@@ -311,6 +320,10 @@ export default function ImageStackModal({
     setSavedPath(null);
     setIsPreviewFocused(false);
     setAddSourcesNotice(null);
+    setSidebarTab('setup');
+    setInspection(null);
+    setFocusedMarker(null);
+    setSourceLockDoc(null);
     setIsMounted(true);
     const timer = window.setTimeout(() => setShow(true), 10);
     return () => window.clearTimeout(timer);
@@ -643,6 +656,8 @@ export default function ImageStackModal({
                     alignmentLabel={translateAlignment(selectedAlignment.labelKey)}
                     alt={t('modals.imageStack.resultAlt')}
                     detailSrc={activeDetailSrc}
+                    focusedMarker={focusedMarker}
+                    inspectionMarkers={inspection?.markers ?? null}
                     isFocused={isPreviewFocused}
                     modeLabel={
                       blendMode === 'focus'
@@ -650,6 +665,10 @@ export default function ImageStackModal({
                         : t('modals.imageStack.panoramaResult')
                     }
                     onFocusedChange={setIsPreviewFocused}
+                    onSelectMarker={(marker) => {
+                      setFocusedMarker(marker);
+                      setSidebarTab('inspection');
+                    }}
                     resultSize={resultSize}
                     softRegions={softRegions}
                     skippedSources={skippedSources}
@@ -761,166 +780,217 @@ export default function ImageStackModal({
               onScroll={scheduleVisibleThumbnailRequest}
               ref={sourcePanelRef}
             >
-              <section className="p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-text-primary">{t('modals.imageStack.sourceLayers')}</h3>
-                    <p className="mt-0.5 text-xs text-text-secondary">
-                      {t('modals.imageStack.sourceCount', { count: orderedPaths.length })}
+              <div className="sticky top-0 z-10 border-b border-border-color bg-surface/95 px-4 py-2 backdrop-blur-sm">
+                <div
+                  aria-label={t('modals.imageStack.title')}
+                  className="grid grid-cols-2 rounded-lg border border-border-color bg-bg-primary/45 p-1"
+                  role="tablist"
+                >
+                  <button
+                    aria-selected={sidebarTab === 'setup'}
+                    className={`ui-choice-button ${sidebarTab === 'setup' ? 'is-active' : ''}`}
+                    onClick={() => setSidebarTab('setup')}
+                    role="tab"
+                    type="button"
+                  >
+                    <span>{t('modals.imageStack.inspection.setupTab')}</span>
+                  </button>
+                  <button
+                    aria-selected={sidebarTab === 'inspection'}
+                    className={`ui-choice-button ${sidebarTab === 'inspection' ? 'is-active' : ''}`}
+                    onClick={() => setSidebarTab('inspection')}
+                    role="tab"
+                    type="button"
+                  >
+                    <span>{t('modals.imageStack.inspection.tab')}</span>
+                    {(inspection?.issues.length || error) && (
+                      <span className="rounded-full bg-status-error/20 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-status-error">
+                        {inspection?.issues.length || 1}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+              {sidebarTab === 'inspection' ? (
+                <ImageStackInspectionPanel
+                  error={error}
+                  inspection={inspection}
+                  onFocusMarker={(marker) => setFocusedMarker(marker)}
+                  onLoadInspection={(parsed) => {
+                    setInspection(parsed);
+                    setFocusedMarker(parsed.markers[0] ?? null);
+                  }}
+                  onSourceLockDocChange={setSourceLockDoc}
+                  selectedMarkerId={focusedMarker?.id ?? null}
+                  sourceLockDoc={sourceLockDoc}
+                  stackReportPath={stackReportPath}
+                />
+              ) : (
+                <>
+                  <section className="p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-text-primary">
+                          {t('modals.imageStack.sourceLayers')}
+                        </h3>
+                        <p className="mt-0.5 text-xs text-text-secondary">
+                          {t('modals.imageStack.sourceCount', { count: orderedPaths.length })}
+                        </p>
+                      </div>
+                      <span className="rounded-md bg-card-active px-2 py-1 text-[10px] font-medium text-text-secondary">
+                        {blendMode === 'focus'
+                          ? t('modals.imageStack.focusAutoOrderHint')
+                          : t('modals.imageStack.orderHint')}
+                      </span>
+                    </div>
+
+                    <DndContext
+                      collisionDetection={closestLayerCenter}
+                      id="image-stack-layers-dnd"
+                      onDragEnd={handleLayerDragEnd}
+                      sensors={layerSensors}
+                    >
+                      <ol className="space-y-1.5" aria-label={t('modals.imageStack.sourceLayers')} ref={sourceListRef}>
+                        {orderedPaths.map((path, index) => (
+                          <SourceLayerItem
+                            count={orderedPaths.length}
+                            disabled={isProcessing || isSaving}
+                            dragLabel={t('modals.imageStack.dragLayer', { number: index + 1 })}
+                            index={index}
+                            key={path}
+                            moveDownLabel={t('modals.imageStack.moveDown', { number: index + 1 })}
+                            moveUpLabel={t('modals.imageStack.moveUp', { number: index + 1 })}
+                            onMove={movePath}
+                            path={path}
+                            thumbnail={thumbnails[path]}
+                          />
+                        ))}
+                      </ol>
+                    </DndContext>
+
+                    <button
+                      className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-text-secondary outline-1 -outline-offset-1 outline-dashed outline-text-secondary/35 transition-colors hover:text-text-primary hover:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isProcessing || isSaving}
+                      onClick={() => void handleAddSources()}
+                      type="button"
+                    >
+                      <Plus aria-hidden="true" size={14} />
+                      {t('modals.imageStack.addSources')}
+                    </button>
+                    {addSourcesNotice && (
+                      <p className="mt-1.5 text-[11px] text-text-secondary" role="status">
+                        {addSourcesNotice}
+                      </p>
+                    )}
+
+                    <p className="mt-3 border-t border-border-color pt-3 text-[11px] leading-relaxed text-text-secondary">
+                      {blendMode === 'focus'
+                        ? t('modals.imageStack.focusAutoOrderSourceHint')
+                        : t('modals.imageStack.sourceHint')}
                     </p>
-                  </div>
-                  <span className="rounded-md bg-card-active px-2 py-1 text-[10px] font-medium text-text-secondary">
-                    {blendMode === 'focus'
-                      ? t('modals.imageStack.focusAutoOrderHint')
-                      : t('modals.imageStack.orderHint')}
-                  </span>
-                </div>
+                  </section>
 
-                <DndContext
-                  collisionDetection={closestLayerCenter}
-                  id="image-stack-layers-dnd"
-                  onDragEnd={handleLayerDragEnd}
-                  sensors={layerSensors}
-                >
-                  <ol className="space-y-1.5" aria-label={t('modals.imageStack.sourceLayers')} ref={sourceListRef}>
-                    {orderedPaths.map((path, index) => (
-                      <SourceLayerItem
-                        count={orderedPaths.length}
-                        disabled={isProcessing || isSaving}
-                        dragLabel={t('modals.imageStack.dragLayer', { number: index + 1 })}
-                        index={index}
-                        key={path}
-                        moveDownLabel={t('modals.imageStack.moveDown', { number: index + 1 })}
-                        moveUpLabel={t('modals.imageStack.moveUp', { number: index + 1 })}
-                        onMove={movePath}
-                        path={path}
-                        thumbnail={thumbnails[path]}
-                      />
-                    ))}
-                  </ol>
-                </DndContext>
-
-                <button
-                  className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-text-secondary outline-1 -outline-offset-1 outline-dashed outline-text-secondary/35 transition-colors hover:text-text-primary hover:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={isProcessing || isSaving}
-                  onClick={() => void handleAddSources()}
-                  type="button"
-                >
-                  <Plus aria-hidden="true" size={14} />
-                  {t('modals.imageStack.addSources')}
-                </button>
-                {addSourcesNotice && (
-                  <p className="mt-1.5 text-[11px] text-text-secondary" role="status">
-                    {addSourcesNotice}
-                  </p>
-                )}
-
-                <p className="mt-3 border-t border-border-color pt-3 text-[11px] leading-relaxed text-text-secondary">
-                  {blendMode === 'focus'
-                    ? t('modals.imageStack.focusAutoOrderSourceHint')
-                    : t('modals.imageStack.sourceHint')}
-                </p>
-              </section>
-
-              <section className="border-t border-border-color p-4">
-                <h3 className="text-sm font-semibold text-text-primary">{t('modals.imageStack.workflow')}</h3>
-                <div
-                  className="mt-2 grid grid-cols-2 rounded-lg border border-border-color bg-bg-primary/45 p-1"
-                  role="group"
-                  aria-label={t('modals.imageStack.workflow')}
-                >
-                  <button
-                    aria-pressed={blendMode === 'focus'}
-                    className={`ui-choice-button ${blendMode === 'focus' ? 'is-active' : ''}`}
-                    disabled={isProcessing}
-                    onClick={() => {
-                      setBlendMode('focus');
-                      setSavedPath(null);
-                      onChange();
-                    }}
-                    type="button"
-                  >
-                    <Layers3 aria-hidden="true" size={16} />
-                    <span>{t('modals.imageStack.focusStack')}</span>
-                    {blendMode === 'focus' && <Check aria-hidden="true" className="text-accent" size={14} />}
-                  </button>
-                  <button
-                    aria-pressed={blendMode === 'panorama'}
-                    className={`ui-choice-button ${blendMode === 'panorama' ? 'is-active' : ''}`}
-                    disabled={isProcessing}
-                    onClick={() => {
-                      setBlendMode('panorama');
-                      setSavedPath(null);
-                      onChange();
-                    }}
-                    type="button"
-                  >
-                    <Expand aria-hidden="true" size={16} />
-                    <span>{t('modals.imageStack.panorama')}</span>
-                    {blendMode === 'panorama' && <Check aria-hidden="true" className="text-accent" size={14} />}
-                  </button>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-text-secondary">
-                  {blendMode === 'focus'
-                    ? t('modals.imageStack.focusStackDescription')
-                    : t('modals.imageStack.panoramaDescription')}
-                </p>
-              </section>
-
-              <section className="border-t border-border-color p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <h3
-                    className="text-sm font-semibold text-text-primary"
-                    data-tooltip={t('modals.imageStack.alignmentHint')}
-                  >
-                    {t('modals.imageStack.alignment')}
-                  </h3>
-                  <span className="flex items-center gap-1.5 rounded-md bg-card-active px-2 py-1 text-[10px] font-medium text-text-secondary">
-                    <SelectedAlignmentIcon aria-hidden="true" size={12} />
-                    {translateAlignment(selectedAlignment.labelKey)}
-                  </span>
-                </div>
-                <div
-                  className="mt-2 grid grid-cols-2 gap-1.5"
-                  role="radiogroup"
-                  aria-label={t('modals.imageStack.alignment')}
-                >
-                  {ALIGNMENT_OPTIONS.map((option) => {
-                    const Icon = option.icon;
-                    const isSelected = option.value === alignmentMode;
-                    return (
+                  <section className="border-t border-border-color p-4">
+                    <h3 className="text-sm font-semibold text-text-primary">{t('modals.imageStack.workflow')}</h3>
+                    <div
+                      className="mt-2 grid grid-cols-2 rounded-lg border border-border-color bg-bg-primary/45 p-1"
+                      role="group"
+                      aria-label={t('modals.imageStack.workflow')}
+                    >
                       <button
-                        aria-checked={isSelected}
-                        className={`ui-surface-button flex h-11 min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                          isSelected
-                            ? 'bg-accent/10 text-text-primary'
-                            : 'text-text-secondary hover:bg-card-active hover:text-text-primary'
-                        }`}
-                        data-tooltip={translateAlignment(option.descriptionKey)}
+                        aria-pressed={blendMode === 'focus'}
+                        className={`ui-choice-button ${blendMode === 'focus' ? 'is-active' : ''}`}
                         disabled={isProcessing}
-                        key={option.value}
                         onClick={() => {
-                          setAlignmentMode(option.value);
+                          setBlendMode('focus');
                           setSavedPath(null);
                           onChange();
                         }}
-                        role="radio"
                         type="button"
                       >
-                        <Icon aria-hidden="true" className="shrink-0" size={15} />
-                        <span className="min-w-0 flex-1 truncate text-[11px] font-medium">
-                          {translateAlignment(option.labelKey)}
-                        </span>
-                        {isSelected && <Check aria-hidden="true" className="shrink-0 text-accent" size={13} />}
+                        <Layers3 aria-hidden="true" size={16} />
+                        <span>{t('modals.imageStack.focusStack')}</span>
+                        {blendMode === 'focus' && <Check aria-hidden="true" className="text-accent" size={14} />}
                       </button>
-                    );
-                  })}
-                </div>
-                <p className="mt-2 flex items-start gap-2 text-[11px] leading-relaxed text-text-secondary">
-                  <SelectedAlignmentIcon aria-hidden="true" className="mt-0.5 shrink-0" size={13} />
-                  <span>{translateAlignment(selectedAlignment.descriptionKey)}</span>
-                </p>
-              </section>
+                      <button
+                        aria-pressed={blendMode === 'panorama'}
+                        className={`ui-choice-button ${blendMode === 'panorama' ? 'is-active' : ''}`}
+                        disabled={isProcessing}
+                        onClick={() => {
+                          setBlendMode('panorama');
+                          setSavedPath(null);
+                          onChange();
+                        }}
+                        type="button"
+                      >
+                        <Expand aria-hidden="true" size={16} />
+                        <span>{t('modals.imageStack.panorama')}</span>
+                        {blendMode === 'panorama' && <Check aria-hidden="true" className="text-accent" size={14} />}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[11px] leading-relaxed text-text-secondary">
+                      {blendMode === 'focus'
+                        ? t('modals.imageStack.focusStackDescription')
+                        : t('modals.imageStack.panoramaDescription')}
+                    </p>
+                  </section>
+
+                  <section className="border-t border-border-color p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3
+                        className="text-sm font-semibold text-text-primary"
+                        data-tooltip={t('modals.imageStack.alignmentHint')}
+                      >
+                        {t('modals.imageStack.alignment')}
+                      </h3>
+                      <span className="flex items-center gap-1.5 rounded-md bg-card-active px-2 py-1 text-[10px] font-medium text-text-secondary">
+                        <SelectedAlignmentIcon aria-hidden="true" size={12} />
+                        {translateAlignment(selectedAlignment.labelKey)}
+                      </span>
+                    </div>
+                    <div
+                      className="mt-2 grid grid-cols-2 gap-1.5"
+                      role="radiogroup"
+                      aria-label={t('modals.imageStack.alignment')}
+                    >
+                      {ALIGNMENT_OPTIONS.map((option) => {
+                        const Icon = option.icon;
+                        const isSelected = option.value === alignmentMode;
+                        return (
+                          <button
+                            aria-checked={isSelected}
+                            className={`ui-surface-button flex h-11 min-w-0 items-center gap-2 rounded-lg px-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                              isSelected
+                                ? 'bg-accent/10 text-text-primary'
+                                : 'text-text-secondary hover:bg-card-active hover:text-text-primary'
+                            }`}
+                            data-tooltip={translateAlignment(option.descriptionKey)}
+                            disabled={isProcessing}
+                            key={option.value}
+                            onClick={() => {
+                              setAlignmentMode(option.value);
+                              setSavedPath(null);
+                              onChange();
+                            }}
+                            role="radio"
+                            type="button"
+                          >
+                            <Icon aria-hidden="true" className="shrink-0" size={15} />
+                            <span className="min-w-0 flex-1 truncate text-[11px] font-medium">
+                              {translateAlignment(option.labelKey)}
+                            </span>
+                            {isSelected && <Check aria-hidden="true" className="shrink-0 text-accent" size={13} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-2 flex items-start gap-2 text-[11px] leading-relaxed text-text-secondary">
+                      <SelectedAlignmentIcon aria-hidden="true" className="mt-0.5 shrink-0" size={13} />
+                      <span>{translateAlignment(selectedAlignment.descriptionKey)}</span>
+                    </p>
+                  </section>
+                </>
+              )}
             </aside>
           )}
         </div>

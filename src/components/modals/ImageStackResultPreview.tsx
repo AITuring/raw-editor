@@ -3,6 +3,7 @@ import { Maximize2, Minimize2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type { ImageStackResultSize, ImageStackSoftRegions } from '../../store/useUIStore';
+import type { StackReportInspectionMarker } from '../../utils/stackReportInspection';
 import { ZoomableImagePreview } from '../preview';
 import type { ZoomableImagePreviewHandle } from '../preview/ZoomableImagePreview';
 
@@ -10,9 +11,12 @@ interface ImageStackResultPreviewProps {
   alignmentLabel: string;
   alt: string;
   detailSrc: string | null;
+  focusedMarker?: StackReportInspectionMarker | null;
+  inspectionMarkers?: StackReportInspectionMarker[] | null;
   isFocused: boolean;
   modeLabel: string;
   onFocusedChange(isFocused: boolean): void;
+  onSelectMarker?(marker: StackReportInspectionMarker): void;
   resultSize: ImageStackResultSize | null;
   softRegions?: ImageStackSoftRegions | null;
   skippedSources?: string[] | null;
@@ -24,9 +28,12 @@ function ImageStackResultPreview({
   alignmentLabel,
   alt,
   detailSrc,
+  focusedMarker = null,
+  inspectionMarkers = null,
   isFocused,
   modeLabel,
   onFocusedChange,
+  onSelectMarker,
   resultSize,
   softRegions = null,
   skippedSources = null,
@@ -40,6 +47,11 @@ function ImageStackResultPreview({
   const previewRef = useRef<ZoomableImagePreviewHandle | null>(null);
   const [showSoftRegions, setShowSoftRegions] = useState(true);
   useEffect(() => setShowSoftRegions(true), [src]);
+  useEffect(() => {
+    if (!focusedMarker) return;
+    const { x, y, width, height } = focusedMarker.normalizedBox;
+    previewRef.current?.zoomToRegion(x, y, width, height);
+  }, [focusedMarker]);
   const regionFrame =
     softRegions?.outputSize ?? (resultSize ? { width: resultSize.width, height: resultSize.height } : null);
   const showingSoftRegions = showSoftRegions && softRegions !== null && regionFrame !== null;
@@ -113,12 +125,58 @@ function ImageStackResultPreview({
         })
       : null;
 
+  const inspectionOverlay =
+    inspectionMarkers && inspectionMarkers.length > 0
+      ? inspectionMarkers.map((marker) => {
+          const { x, y, width, height } = marker.normalizedBox;
+          const isSelected = focusedMarker?.id === marker.id;
+          return (
+            <button
+              aria-label={marker.detail}
+              className={`pointer-events-auto absolute rounded-sm ring-2 ring-inset transition-colors ${
+                marker.kind === 'qg_fail'
+                  ? isSelected
+                    ? 'bg-red-500/20 ring-red-400'
+                    : 'ring-red-500/85 hover:bg-red-500/15'
+                  : isSelected
+                    ? 'bg-amber-400/20 ring-amber-300'
+                    : 'ring-amber-400/85 hover:bg-amber-400/15'
+              }`}
+              data-tooltip={marker.detail}
+              key={marker.id}
+              onClick={(event) => {
+                event.stopPropagation();
+                previewRef.current?.zoomToRegion(x, y, width, height);
+                onSelectMarker?.(marker);
+              }}
+              onDoubleClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+              style={{
+                height: `max(${height * 100}%, 14px)`,
+                left: `${x * 100}%`,
+                top: `${y * 100}%`,
+                width: `max(${width * 100}%, 14px)`,
+              }}
+              type="button"
+            />
+          );
+        })
+      : null;
+
+  const combinedOverlay =
+    softRegionOverlay || inspectionOverlay ? (
+      <>
+        {softRegionOverlay}
+        {inspectionOverlay}
+      </>
+    ) : null;
+
   return (
     <ZoomableImagePreview
       alt={alt}
       ariaDescribedBy={hintId}
       detailSrc={detailSrc}
-      imageOverlay={softRegionOverlay}
+      imageOverlay={combinedOverlay}
       interactionSrc={src}
       labels={{
         fit: t('modals.imageStack.fitPreview'),
