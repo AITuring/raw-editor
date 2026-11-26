@@ -4,18 +4,15 @@
 //! through the transform into a temporary file that is published atomically.
 
 use crate::app_settings::AppSettings;
-#[cfg(target_os = "android")]
+use crate::color_management::save_srgb_tagged_image;
 use image::DynamicImage;
 use image::ImageFormat;
 use image::RgbImage;
-#[cfg(target_os = "android")]
-use image::codecs::jpeg::JpegEncoder;
 #[cfg(not(target_os = "android"))]
 use mozjpeg::Decompress;
 use std::fs;
+#[cfg(not(target_os = "android"))]
 use std::fs::File;
-#[cfg(target_os = "android")]
-use std::io::BufWriter;
 #[cfg(not(target_os = "android"))]
 use std::io::Write;
 use std::path::Path;
@@ -32,9 +29,9 @@ pub(super) fn encode_output(image: &RgbImage, output_path: &Path) -> Result<(), 
     let format = ImageFormat::from_path(output_path).unwrap_or(ImageFormat::Jpeg);
     match format {
         ImageFormat::Jpeg => encode_jpeg_output(image, output_path)?,
-        ImageFormat::Png => image
-            .save_with_format(output_path, ImageFormat::Png)
-            .map_err(|error| error.to_string())?,
+        ImageFormat::Png | ImageFormat::Tiff => {
+            save_srgb_tagged_image(&DynamicImage::ImageRgb8(image.clone()), output_path)?
+        }
         _ => image
             .save_with_format(output_path, format)
             .map_err(|error| error.to_string())?,
@@ -80,11 +77,7 @@ fn encode_jpeg_output(image: &RgbImage, output_path: &Path) -> Result<(), String
 
 #[cfg(target_os = "android")]
 fn encode_jpeg_output(image: &RgbImage, output_path: &Path) -> Result<(), String> {
-    let file = File::create(output_path).map_err(|error| error.to_string())?;
-    let mut writer = BufWriter::new(file);
-    JpegEncoder::new_with_quality(&mut writer, 94)
-        .encode_image(&DynamicImage::ImageRgb8(image.clone()))
-        .map_err(|error| error.to_string())
+    save_srgb_tagged_image(&DynamicImage::ImageRgb8(image.clone()), output_path)
 }
 
 #[cfg(not(target_os = "android"))]

@@ -1,7 +1,6 @@
 use crate::file_management::{parse_virtual_path, read_file_mapped};
 use crate::image_loader::load_base_image_from_bytes;
 use base64::{Engine as _, engine::general_purpose};
-use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, Rgb32FImage};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -9,7 +8,6 @@ use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::io::Cursor;
 use std::path::Path;
 use tauri::AppHandle;
 
@@ -274,13 +272,9 @@ pub async fn preview_negative_conversion(
 
     let processed = run_pipeline(&base_image_for_processing, &params, None);
 
-    let mut buf = Cursor::new(Vec::new());
-    processed
-        .to_rgb8()
-        .write_with_encoder(JpegEncoder::new_with_quality(&mut buf, 80))
-        .map_err(|e| e.to_string())?;
+    let jpeg_bytes = crate::color_management::encode_srgb_jpeg_bytes(&processed, 80)?;
 
-    let base64_str = general_purpose::STANDARD.encode(buf.get_ref());
+    let base64_str = general_purpose::STANDARD.encode(&jpeg_bytes);
     Ok(format!("data:image/jpeg;base64,{}", base64_str))
 }
 
@@ -326,10 +320,11 @@ pub async fn convert_negatives(
             let filename = format!("{}_Positive.tiff", stem);
             let out_path = parent.join(&filename);
 
-            processed
-                .to_rgb16()
-                .save(&out_path)
-                .map_err(|e| format!("Failed to save {}: {}", filename, e))?;
+            crate::color_management::save_srgb_tagged_image(
+                &DynamicImage::ImageRgb16(processed.to_rgb16()),
+                &out_path,
+            )
+            .map_err(|e| format!("Failed to save {}: {}", filename, e))?;
 
             let _ = crate::exif_processing::write_rrexif_sidecar(&real_path, &out_path);
             results.push(out_path.to_string_lossy().to_string());

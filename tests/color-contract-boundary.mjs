@@ -50,6 +50,11 @@ const lutProcessing = read('src-tauri/src/lut_processing.rs');
 const fileManagement = read('src-tauri/src/file_management.rs');
 const gpuProcessing = read('src-tauri/src/gpu_processing.rs');
 const exportProcessing = read('src-tauri/src/export_processing.rs');
+const mergedOutputs = read('src-tauri/src/lib/merged_outputs.rs');
+const panoramaStitching = read('src-tauri/src/panorama_stitching.rs');
+const denoising = read('src-tauri/src/denoising.rs');
+const negativeConversion = read('src-tauri/src/negative_conversion.rs');
+const styleTransfer = read('src-tauri/src/style_transfer.rs');
 const mainShader = read('src-tauri/src/shaders/shader.wgsl');
 const flareShader = read('src-tauri/src/shaders/flare.wgsl');
 const contractDocument = read('docs/color-pipeline.md');
@@ -103,6 +108,24 @@ expectIncludes(
   previewEncoder,
   '.icc_profile(srgb_v4_profile().to_vec())',
   'WebView JPEG previews must embed the bundled sRGB profile',
+);
+const pngPreviewEncoder = functionBody(colorManagement, 'encode_srgb_png_bytes', 'WebView PNG preview encoder');
+expectIncludes(
+  pngPreviewEncoder,
+  '.set_icc_profile(srgb_v4_profile().to_vec())',
+  'WebView PNG previews must embed the bundled sRGB profile',
+);
+const jpegPreviewEncoder = functionBody(colorManagement, 'encode_srgb_jpeg_bytes', 'WebView JPEG bytes encoder');
+expectIncludes(
+  jpegPreviewEncoder,
+  '.set_icc_profile(srgb_v4_profile().to_vec())',
+  'WebView JPEG bytes previews must embed the bundled sRGB profile',
+);
+const taggedImageSaver = functionBody(colorManagement, 'save_srgb_tagged_image', 'tagged sRGB image saver');
+expectIncludes(
+  taggedImageSaver,
+  '.set_icc_profile(srgb_v4_profile().to_vec())',
+  'tagged sRGB image saves must embed the bundled sRGB profile',
 );
 
 const canonicalPath = path.join(repoRoot, 'src-tauri', 'src', 'color_management.rs');
@@ -179,6 +202,20 @@ expectIncludes(
   'encoder.set_icc_profile(srgb_v4_profile().to_vec())',
   'library thumbnails must embed sRGB ICC',
 );
+expectIncludes(mergedOutputs, 'encode_srgb_png_bytes(', 'HDR merge previews must embed sRGB ICC');
+expectIncludes(mergedOutputs, 'save_srgb_tagged_image(', 'HDR saves must embed sRGB ICC');
+expectIncludes(panoramaStitching, 'encode_srgb_png_bytes(', 'legacy panorama previews must embed sRGB ICC');
+expectIncludes(panoramaStitching, 'save_srgb_tagged_image(', 'legacy panorama saves must embed sRGB ICC');
+expectIncludes(denoising, 'encode_srgb_png_bytes(', 'denoising before/after previews must embed sRGB ICC');
+expectIncludes(denoising, 'save_srgb_tagged_image(', 'non-RAW denoising saves must embed sRGB ICC');
+expectIncludes(exportProcessing, 'encode_srgb_jpeg_bytes(', 'batch geometry previews must embed sRGB ICC');
+expectIncludes(negativeConversion, 'encode_srgb_jpeg_bytes(', 'negative conversion previews must embed sRGB ICC');
+expectIncludes(
+  negativeConversion,
+  'save_srgb_tagged_image(',
+  'negative conversion positive exports must embed sRGB ICC',
+);
+expectIncludes(styleTransfer, 'save_srgb_tagged_image(', 'style transfer PNG/Android exports must embed sRGB ICC');
 
 for (const [source, label] of [
   [mainShader, 'main shader'],

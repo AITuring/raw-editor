@@ -4,13 +4,13 @@
 //! guides for the review modal.
 
 use crate::apply_all_transformations;
+use crate::color_management::encode_srgb_jpeg_bytes;
 use crate::exif_processing;
 use crate::file_management::parse_virtual_path;
 use crate::image_processing::downscale_f32_image;
 use base64::Engine as _;
 use base64::engine::general_purpose;
 use image::DynamicImage;
-use image::codecs::jpeg::JpegEncoder;
 use imageproc::drawing::draw_line_segment_mut;
 use serde_json::Value;
 use std::borrow::Cow;
@@ -35,9 +35,7 @@ pub(super) struct BatchGeometryPreviewImages {
 }
 
 fn encode_batch_geometry_preview(image: &DynamicImage) -> Result<String, String> {
-    let mut bytes = Vec::new();
-    JpegEncoder::new_with_quality(&mut bytes, BATCH_GEOMETRY_PREVIEW_JPEG_QUALITY)
-        .encode_image(&image.to_rgb8())
+    let bytes = encode_srgb_jpeg_bytes(image, BATCH_GEOMETRY_PREVIEW_JPEG_QUALITY)
         .map_err(|error| format!("Failed to encode batch correction preview: {error}"))?;
 
     Ok(format!(

@@ -12,11 +12,9 @@ use base64::Engine as _;
 use base64::engine::general_purpose;
 use image::DynamicImage;
 use image::GenericImageView;
-use image::ImageFormat;
 use image::Rgb;
 use image::Rgb32FImage;
 use std::fs;
-use std::io::Cursor;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -161,12 +159,11 @@ pub(super) fn denoise_image(
         denoised_preview_source
     };
 
-    let mut buf_denoised = Cursor::new(Vec::new());
-    denoised_preview
-        .to_rgb8()
-        .write_to(&mut buf_denoised, ImageFormat::Png)
-        .map_err(|e| format!("Failed to encode preview: {}", e))?;
-    let base64_str_denoised = general_purpose::STANDARD.encode(buf_denoised.get_ref());
+    let buf_denoised = crate::color_management::encode_srgb_png_bytes(&DynamicImage::ImageRgb8(
+        denoised_preview.to_rgb8(),
+    ))
+    .map_err(|e| format!("Failed to encode preview: {}", e))?;
+    let base64_str_denoised = general_purpose::STANDARD.encode(&buf_denoised);
     let data_url_denoised = format!("data:image/png;base64,{}", base64_str_denoised);
 
     let mut original_dynamic = DynamicImage::ImageRgb32F(rgb_img_for_denoiser);
@@ -180,12 +177,11 @@ pub(super) fn denoise_image(
         original_dynamic
     };
 
-    let mut buf_orig = Cursor::new(Vec::new());
-    original_preview
-        .to_rgb8()
-        .write_to(&mut buf_orig, ImageFormat::Png)
-        .map_err(|e| format!("Failed to encode original preview: {}", e))?;
-    let base64_str_orig = general_purpose::STANDARD.encode(buf_orig.get_ref());
+    let buf_orig = crate::color_management::encode_srgb_png_bytes(&DynamicImage::ImageRgb8(
+        original_preview.to_rgb8(),
+    ))
+    .map_err(|e| format!("Failed to encode original preview: {}", e))?;
+    let base64_str_orig = general_purpose::STANDARD.encode(&buf_orig);
     let data_url_orig = format!("data:image/png;base64,{}", base64_str_orig);
 
     let payload = serde_json::json!({

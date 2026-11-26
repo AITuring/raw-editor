@@ -3,7 +3,6 @@ use crate::app_settings::AppSettings;
 use crate::app_state::AppState;
 use crate::file_management::parse_virtual_path;
 use base64::{Engine as _, engine::general_purpose};
-use image::ImageFormat;
 #[cfg(test)]
 use image::RgbImage;
 use image::{DynamicImage, GenericImageView};
@@ -19,7 +18,6 @@ use rayon::prelude::*;
 use std::collections::BTreeMap;
 #[cfg(test)]
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::io::Cursor;
 #[cfg(test)]
 use std::path::Path;
 #[cfg(test)]
@@ -862,13 +860,14 @@ pub async fn stitch_panorama(
 
                 let preview_u8 = preview_f32.to_rgb8();
 
-                let mut buf = Cursor::new(Vec::new());
+                let png_bytes = match crate::color_management::encode_srgb_png_bytes(
+                    &DynamicImage::ImageRgb8(preview_u8),
+                ) {
+                    Ok(bytes) => bytes,
+                    Err(e) => return Err(format!("Failed to encode panorama preview: {}", e)),
+                };
 
-                if let Err(e) = preview_u8.write_to(&mut buf, ImageFormat::Png) {
-                    return Err(format!("Failed to encode panorama preview: {}", e));
-                }
-
-                let base64_str = general_purpose::STANDARD.encode(buf.get_ref());
+                let base64_str = general_purpose::STANDARD.encode(&png_bytes);
                 let final_base64 = format!("data:image/png;base64,{}", base64_str);
 
                 *panorama_result_handle.lock().unwrap() = Some(panorama_image);
@@ -923,17 +922,20 @@ pub async fn save_panorama(
     };
 
     if panorama_image.color().has_alpha() {
-        DynamicImage::ImageRgba8(panorama_image.to_rgba8())
-            .save(&output_path)
-            .map_err(|e| format!("Failed to save panorama image: {}", e))?;
+        crate::color_management::save_srgb_tagged_image(
+            &DynamicImage::ImageRgba8(panorama_image.to_rgba8()),
+            &output_path,
+        )
+        .map_err(|e| format!("Failed to save panorama image: {}", e))?;
     } else if panorama_image.as_rgb32f().is_some() {
-        panorama_image
-            .save(&output_path)
+        crate::color_management::save_srgb_tagged_image(panorama_image, &output_path)
             .map_err(|e| format!("Failed to save panorama image: {}", e))?;
     } else {
-        DynamicImage::ImageRgb8(panorama_image.to_rgb8())
-            .save(&output_path)
-            .map_err(|e| format!("Failed to save panorama image: {}", e))?;
+        crate::color_management::save_srgb_tagged_image(
+            &DynamicImage::ImageRgb8(panorama_image.to_rgb8()),
+            &output_path,
+        )
+        .map_err(|e| format!("Failed to save panorama image: {}", e))?;
     }
 
     let (real_path, _) = crate::file_management::parse_virtual_path(&first_path_str);

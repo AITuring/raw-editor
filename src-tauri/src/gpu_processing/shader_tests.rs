@@ -302,3 +302,212 @@ fn tiled_mask_gpu_sampling_matches_source_pixels_across_tile_boundary() {
         }
     }
 }
+
+#[test]
+#[ignore = "manual local-GPU color transfer parity regression"]
+fn gpu_srgb_and_raw_color_transfer_match_cpu_reference() {
+    use crate::color_management::{linear_to_srgb_channel, srgb_to_linear_channel};
+
+    let instance =
+        wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::HighPerformance,
+        compatible_surface: None,
+        ..Default::default()
+    }))
+    .expect("local GPU adapter for color transfer parity");
+    let limits = adapter.limits();
+    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("Color Transfer Parity Device"),
+        required_features: wgpu::Features::empty(),
+        required_limits: limits.clone(),
+        experimental_features: wgpu::ExperimentalFeatures::default(),
+        memory_hints: wgpu::MemoryHints::MemoryUsage,
+        trace: wgpu::Trace::Off,
+    }))
+    .expect("request local GPU device for color transfer parity");
+    let context = GpuContext {
+        device: Arc::new(device),
+        queue: Arc::new(queue),
+        limits,
+        display: Arc::new(Mutex::new(None)),
+    };
+
+    let patches: [[u8; 3]; 8] = [
+        [0, 0, 0],
+        [24, 24, 24],
+        [118, 118, 118],
+        [255, 255, 255],
+        [204, 52, 48],
+        [54, 172, 76],
+        [48, 104, 212],
+        [192, 148, 96],
+    ];
+    let width = 8_u32;
+    let height = 2_u32;
+    let processor = GpuProcessor::new(context.clone(), width, height, false)
+        .expect("create GPU processor for color parity");
+
+    let make_view = |pixels: &[f16], label: &str| {
+        let texture = context.device.create_texture_with_data(
+            &context.queue,
+            &wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba16Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            },
+            TextureDataOrder::MipMajor,
+            bytemuck::cast_slice(pixels),
+        );
+        texture.create_view(&Default::default())
+    };
+
+    let mut srgb_texels = Vec::with_capacity(width as usize * height as usize * 4);
+    let mut linear_texels = Vec::with_capacity(width as usize * height as usize * 4);
+    for _row in 0..height {
+        for &[r, g, b] in &patches {
+            let sr = r as f32 / 255.0;
+            let sg = g as f32 / 255.0;
+            let sb = b as f32 / 255.0;
+            srgb_texels.extend([
+                f16::from_f32(sr),
+                f16::from_f32(sg),
+                f16::from_f32(sb),
+                f16::ONE,
+            ]);
+            linear_texels.extend([
+                f16::from_f32(srgb_to_linear_channel(sr)),
+                f16::from_f32(srgb_to_linear_channel(sg)),
+                f16::from_f32(srgb_to_linear_channel(sb)),
+                f16::ONE,
+            ]);
+        }
+    }
+    let srgb_view = make_view(&srgb_texels, "Color Parity sRGB Input");
+    let linear_view = make_view(&linear_texels, "Color Parity Linear RAW Input");
+
+    // 1. Neutral non-RAW sRGB round-trip must match input within 1 LSB.
+    let mut neutral_srgb = AllAdjustments::default();
+    neutral_srgb.global.is_raw_image = 0;
+    neutral_srgb.global.tonemapper_mode = 0;
+    let (gpu_neutral, ..) = processor
+        .run(
+            &srgb_view,
+            width,
+            height,
+            RenderRequest {
+                adjustments: neutral_srgb,
+                mask_bitmaps: &[],
+                lut: None,
+                roi: None,
+            },
+            GpuRenderOutput::CpuImage,
+        )
+        .expect("render neutral sRGB");
+    for (idx, &[r, g, b]) in patches.iter().enumerate() {
+        let px = &gpu_neutral[idx * 4..idx * 4 + 4];
+        assert!(
+            px[0].abs_diff(r) <= 1,
+            "neutral R patch {idx}: got {}, expected {r}",
+            px[0]
+        );
+        assert!(
+            px[1].abs_diff(g) <= 1,
+            "neutral G patch {idx}: got {}, expected {g}",
+            px[1]
+        );
+        assert!(
+            px[2].abs_diff(b) <= 1,
+            "neutral B patch {idx}: got {}, expected {b}",
+            px[2]
+        );
+    }
+
+    // 2. +1 EV linear exposure on non-RAW sRGB must match CPU EOTF -> *2 -> OETF within 1 LSB.
+    let mut exposed_srgb = neutral_srgb;
+    exposed_srgb.global.exposure = 1.0;
+    let (gpu_exposed, ..) = processor
+        .run(
+            &srgb_view,
+            width,
+            height,
+            RenderRequest {
+                adjustments: exposed_srgb,
+                mask_bitmaps: &[],
+                lut: None,
+                roi: None,
+            },
+            GpuRenderOutput::CpuImage,
+        )
+        .expect("render +1 EV sRGB");
+    for (idx, &rgb) in patches.iter().enumerate() {
+        let px = &gpu_exposed[idx * 4..idx * 4 + 4];
+        for c in 0..3 {
+            let expected = (linear_to_srgb_channel(
+                (srgb_to_linear_channel(rgb[c] as f32 / 255.0) * 2.0).clamp(0.0, 1.0),
+            ) * 255.0)
+                .round() as u8;
+            assert!(
+                px[c].abs_diff(expected) <= 1,
+                "+1 EV patch {idx} ch {c}: GPU {}, CPU {expected}",
+                px[c]
+            );
+        }
+    }
+
+    // 3. Under AgX tonemapper, is_raw=0 (sRGB input) and is_raw=1 (CPU-linearized input)
+    // must produce identical RGBA8Unorm output within 1 LSB.
+    let mut agx_srgb = AllAdjustments::default();
+    agx_srgb.global.is_raw_image = 0;
+    agx_srgb.global.tonemapper_mode = 1;
+    let mut agx_raw = agx_srgb;
+    agx_raw.global.is_raw_image = 1;
+
+    let (gpu_agx_srgb, ..) = processor
+        .run(
+            &srgb_view,
+            width,
+            height,
+            RenderRequest {
+                adjustments: agx_srgb,
+                mask_bitmaps: &[],
+                lut: None,
+                roi: None,
+            },
+            GpuRenderOutput::CpuImage,
+        )
+        .expect("render AgX sRGB");
+    let (gpu_agx_raw, ..) = processor
+        .run(
+            &linear_view,
+            width,
+            height,
+            RenderRequest {
+                adjustments: agx_raw,
+                mask_bitmaps: &[],
+                lut: None,
+                roi: None,
+            },
+            GpuRenderOutput::CpuImage,
+        )
+        .expect("render AgX RAW");
+    for idx in 0..patches.len() {
+        for c in 0..3 {
+            let srgb_out = gpu_agx_srgb[idx * 4 + c];
+            let raw_out = gpu_agx_raw[idx * 4 + c];
+            assert!(
+                srgb_out.abs_diff(raw_out) <= 1,
+                "AgX sRGB vs RAW mismatch patch {idx} ch {c}: sRGB={srgb_out}, RAW={raw_out}"
+            );
+        }
+    }
+}

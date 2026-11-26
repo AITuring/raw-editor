@@ -1,6 +1,11 @@
+use std::fs::File;
+use std::io::{BufWriter, Cursor};
+use std::path::Path;
 use std::sync::OnceLock;
 
 use base64::{Engine as _, engine::general_purpose};
+use image::codecs::{jpeg::JpegEncoder, png::PngEncoder, tiff::TiffEncoder};
+use image::{DynamicImage, ImageEncoder, ImageFormat};
 use moxcms::{
     CicpColorPrimaries, CicpProfile, ColorProfile, DataColorSpace, Layout, MatrixCoefficients,
     ParsingOptions, TransferCharacteristics, TransformOptions,
@@ -429,6 +434,98 @@ pub fn srgb_preview_encoder(preset: Preset) -> Encoder {
     Encoder::new(preset).icc_profile(srgb_v4_profile().to_vec())
 }
 
+fn png_encodable_srgb_image(image: &DynamicImage) -> std::borrow::Cow<'_, DynamicImage> {
+    match image {
+        DynamicImage::ImageRgb8(_)
+        | DynamicImage::ImageRgba8(_)
+        | DynamicImage::ImageRgb16(_)
+        | DynamicImage::ImageRgba16(_) => std::borrow::Cow::Borrowed(image),
+        _ if image.color().has_alpha() => {
+            std::borrow::Cow::Owned(DynamicImage::ImageRgba8(image.to_rgba8()))
+        }
+        _ => std::borrow::Cow::Owned(DynamicImage::ImageRgb8(image.to_rgb8())),
+    }
+}
+
+/// Encodes a display-encoded sRGB image into PNG bytes with the bundled sRGB v4
+/// ICC profile embedded (for WebView previews and lossless tagged PNG output).
+pub fn encode_srgb_png_bytes(image: &DynamicImage) -> Result<Vec<u8>, String> {
+    let encodable = png_encodable_srgb_image(image);
+    let mut bytes = Vec::new();
+    let mut encoder = PngEncoder::new(Cursor::new(&mut bytes));
+    encoder
+        .set_icc_profile(srgb_v4_profile().to_vec())
+        .map_err(|error| format!("Failed to attach sRGB ICC profile to PNG: {error}"))?;
+    encodable
+        .write_with_encoder(encoder)
+        .map_err(|error| format!("Failed to encode sRGB PNG: {error}"))?;
+    Ok(bytes)
+}
+
+/// Encodes a display-encoded sRGB image into JPEG bytes with the bundled sRGB
+/// v4 ICC profile embedded (for WebView previews that use `image::JpegEncoder`).
+pub fn encode_srgb_jpeg_bytes(image: &DynamicImage, quality: u8) -> Result<Vec<u8>, String> {
+    let rgb = image.to_rgb8();
+    let mut bytes = Vec::new();
+    let mut encoder = JpegEncoder::new_with_quality(&mut bytes, quality.clamp(1, 100));
+    encoder
+        .set_icc_profile(srgb_v4_profile().to_vec())
+        .map_err(|error| format!("Failed to attach sRGB ICC profile to JPEG: {error}"))?;
+    rgb.write_with_encoder(encoder)
+        .map_err(|error| format!("Failed to encode sRGB JPEG: {error}"))?;
+    Ok(bytes)
+}
+
+/// Saves a display-encoded sRGB image to disk with the bundled sRGB v4 ICC
+/// profile embedded for PNG, JPEG, and TIFF outputs.
+///
+/// Linear RAW buffers must NOT call this helper.
+pub fn save_srgb_tagged_image(image: &DynamicImage, path: &Path) -> Result<(), String> {
+    let format = ImageFormat::from_path(path).unwrap_or(ImageFormat::Png);
+    match format {
+        ImageFormat::Png => {
+            let file = File::create(path)
+                .map_err(|error| format!("Failed to create '{}': {error}", path.display()))?;
+            let encodable = png_encodable_srgb_image(image);
+            let mut encoder = PngEncoder::new(BufWriter::new(file));
+            encoder
+                .set_icc_profile(srgb_v4_profile().to_vec())
+                .map_err(|error| format!("Failed to attach sRGB ICC profile to PNG: {error}"))?;
+            encodable
+                .write_with_encoder(encoder)
+                .map_err(|error| format!("Failed to save tagged PNG '{}': {error}", path.display()))
+        }
+        ImageFormat::Jpeg => {
+            let file = File::create(path)
+                .map_err(|error| format!("Failed to create '{}': {error}", path.display()))?;
+            let mut encoder = JpegEncoder::new_with_quality(BufWriter::new(file), 94);
+            encoder
+                .set_icc_profile(srgb_v4_profile().to_vec())
+                .map_err(|error| format!("Failed to attach sRGB ICC profile to JPEG: {error}"))?;
+            image
+                .to_rgb8()
+                .write_with_encoder(encoder)
+                .map_err(|error| {
+                    format!("Failed to save tagged JPEG '{}': {error}", path.display())
+                })
+        }
+        ImageFormat::Tiff => {
+            let file = File::create(path)
+                .map_err(|error| format!("Failed to create '{}': {error}", path.display()))?;
+            let mut encoder = TiffEncoder::new(BufWriter::new(file));
+            encoder
+                .set_icc_profile(srgb_v4_profile().to_vec())
+                .map_err(|error| format!("Failed to attach sRGB ICC profile to TIFF: {error}"))?;
+            image.write_with_encoder(encoder).map_err(|error| {
+                format!("Failed to save tagged TIFF '{}': {error}", path.display())
+            })
+        }
+        _ => image
+            .save_with_format(path, format)
+            .map_err(|error| format!("Failed to save image '{}': {error}", path.display())),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -628,5 +725,126 @@ mod tests {
             decoder.icc_profile().expect("read preview ICC").as_deref(),
             Some(srgb_v4_profile())
         );
+    }
+
+    #[test]
+    fn tagged_preview_and_save_helpers_embed_srgb_icc_and_preserve_pixels() {
+        let rgb = image::RgbImage::from_fn(16, 16, |x, y| {
+            image::Rgb([
+                if x < 8 { 48 } else { 200 },
+                if y < 8 { 96 } else { 164 },
+                128,
+            ])
+        });
+        let dynamic = DynamicImage::ImageRgb8(rgb.clone());
+
+        let png_bytes = encode_srgb_png_bytes(&dynamic).expect("encode tagged PNG preview");
+        let mut png_decoder = ImageReader::with_format(Cursor::new(&png_bytes), ImageFormat::Png)
+            .into_decoder()
+            .expect("decode tagged PNG preview");
+        assert_eq!(
+            png_decoder.icc_profile().expect("read PNG ICC").as_deref(),
+            Some(srgb_v4_profile())
+        );
+        let decoded_png = image::load_from_memory_with_format(&png_bytes, ImageFormat::Png)
+            .expect("decode PNG pixels")
+            .to_rgb8();
+        assert_eq!(decoded_png, rgb);
+
+        let jpeg_bytes = encode_srgb_jpeg_bytes(&dynamic, 95).expect("encode tagged JPEG preview");
+        let mut jpeg_decoder =
+            ImageReader::with_format(Cursor::new(&jpeg_bytes), ImageFormat::Jpeg)
+                .into_decoder()
+                .expect("decode tagged JPEG preview");
+        assert_eq!(
+            jpeg_decoder
+                .icc_profile()
+                .expect("read JPEG ICC")
+                .as_deref(),
+            Some(srgb_v4_profile())
+        );
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        for (file_name, format) in [
+            ("tagged.png", ImageFormat::Png),
+            ("tagged.jpg", ImageFormat::Jpeg),
+            ("tagged.tiff", ImageFormat::Tiff),
+        ] {
+            let path = dir.path().join(file_name);
+            save_srgb_tagged_image(&dynamic, &path).expect("save tagged image");
+            let saved_bytes = std::fs::read(&path).expect("read saved image");
+            let saved_icc = match format {
+                ImageFormat::Tiff => {
+                    image::codecs::tiff::TiffDecoder::new(Cursor::new(&saved_bytes))
+                        .expect("decode saved TIFF")
+                        .icc_profile()
+                        .expect("read saved TIFF ICC")
+                }
+                _ => ImageReader::with_format(Cursor::new(&saved_bytes), format)
+                    .into_decoder()
+                    .expect("decode saved image")
+                    .icc_profile()
+                    .expect("read saved ICC"),
+            };
+            assert_eq!(
+                saved_icc.as_deref(),
+                Some(srgb_v4_profile()),
+                "saved {file_name} must embed sRGB v4 ICC"
+            );
+            if matches!(format, ImageFormat::Png | ImageFormat::Tiff) {
+                let decoded = image::load_from_memory_with_format(&saved_bytes, format)
+                    .expect("decode lossless saved image")
+                    .to_rgb8();
+                assert_eq!(decoded, rgb, "lossless {file_name} must preserve exact RGB");
+            }
+        }
+    }
+
+    #[test]
+    fn linear_node_reference_chart_preserves_display_p3_and_exposure_linearity() {
+        // Synthetic linear-node reference patches covering black, dark toe,
+        // 18% middle gray, highlight, and saturated primaries.
+        let linear_patches: [[f32; 3]; 6] = [
+            [0.0, 0.0, 0.0],
+            [0.002, 0.002, 0.002],
+            [0.18, 0.18, 0.18],
+            [0.45, 0.45, 0.45],
+            [0.35, 0.08, 0.04],
+            [0.06, 0.28, 0.42],
+        ];
+        for linear in linear_patches {
+            let encoded = linear.map(linear_to_srgb_channel);
+            let recovered_linear = encoded.map(srgb_to_linear_channel);
+            for c in 0..3 {
+                assert_close(recovered_linear[c], linear[c], 1.0e-6);
+            }
+
+            // +1 EV followed by -1 EV in linear space must be exact without tone shift.
+            let boosted = recovered_linear.map(|v| v * 2.0);
+            let restored = boosted.map(|v| v * 0.5);
+            for c in 0..3 {
+                assert_close(restored[c], linear[c], 1.0e-6);
+                let u8_q = (linear_to_srgb_channel(restored[c]).clamp(0.0, 1.0) * 255.0).round();
+                let u8_ref = (encoded[c].clamp(0.0, 1.0) * 255.0).round();
+                assert_eq!(u8_q, u8_ref);
+            }
+        }
+
+        // Display P3 neutral ramp must stay neutral after ICC -> sRGB -> linear EOTF.
+        let p3_profile = ColorProfile::new_display_p3()
+            .encode()
+            .expect("encode Display P3 profile");
+        for gray_linear in [0.002_f32, 0.18, 0.5] {
+            let encoded = linear_to_srgb_channel(gray_linear);
+            let mut pixel = [encoded, encoded, encoded];
+            normalize_encoded_rgb_profile_to_srgb(&mut pixel, &p3_profile)
+                .expect("normalize neutral P3 patch");
+            let out_linear = pixel.map(srgb_to_linear_channel);
+            assert_close(out_linear[0], gray_linear, 0.004);
+            assert_close(out_linear[1], gray_linear, 0.004);
+            assert_close(out_linear[2], gray_linear, 0.004);
+            assert!((out_linear[0] - out_linear[1]).abs() <= 0.002);
+            assert!((out_linear[1] - out_linear[2]).abs() <= 0.002);
+        }
     }
 }

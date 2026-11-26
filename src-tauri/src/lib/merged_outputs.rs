@@ -2,6 +2,7 @@
 
 use crate::app_settings::load_settings;
 use crate::app_state::AppState;
+use crate::color_management::{encode_srgb_png_bytes, save_srgb_tagged_image};
 use crate::file_management::parse_virtual_path;
 use crate::hdr_deghosting::align_hdr_frames;
 use crate::hdr_deghosting::assert_uniform_dimensions;
@@ -10,11 +11,9 @@ use crate::image_processing::apply_linear_to_srgb;
 use base64::Engine as _;
 use base64::engine::general_purpose;
 use image::DynamicImage;
-use image::ImageFormat;
 use image_hdr::hdr_merge_images;
 use image_hdr::input::HDRInput;
 use std::fs;
-use std::io::Cursor;
 use tauri::Emitter;
 
 #[tauri::command]
@@ -51,12 +50,10 @@ pub(super) async fn merge_hdr(
     hdr_merged = apply_linear_to_srgb(hdr_merged);
     log::info!("HDR merge completed");
 
-    let mut buf = Cursor::new(Vec::new());
-    if let Err(e) = hdr_merged.to_rgb8().write_to(&mut buf, ImageFormat::Png) {
-        return Err(format!("Failed to encode hdr preview: {}", e));
-    }
+    let png_bytes = encode_srgb_png_bytes(&DynamicImage::ImageRgb8(hdr_merged.to_rgb8()))
+        .map_err(|e| format!("Failed to encode hdr preview: {}", e))?;
 
-    let base64_str = general_purpose::STANDARD.encode(buf.get_ref());
+    let base64_str = general_purpose::STANDARD.encode(&png_bytes);
     let final_base64 = format!("data:image/png;base64,{}", base64_str);
 
     let _ = app_handle.emit("hdr-progress", "Creating preview...");
@@ -107,8 +104,7 @@ pub(super) async fn save_hdr(
 
     let output_path = parent_dir.join(output_filename);
 
-    image_to_save
-        .save(&output_path)
+    save_srgb_tagged_image(&image_to_save, &output_path)
         .map_err(|e| format!("Failed to save hdr image: {}", e))?;
 
     let (real_path, _) = crate::file_management::parse_virtual_path(&first_path_str);

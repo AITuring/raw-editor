@@ -45,8 +45,7 @@ CPU 的唯一标量实现是
 1. **嵌入输入 ICC**：当前闭环覆盖解码器暴露的 RGB 与灰度（Gray）ICC profile（限制为 4 MiB），以及无 `iCCP` 块时的全范围 SDR RGB PNG `cICP`（CICP-only，如 Display P3 / Linear sRGB / BT.2020）。CMYK、HDR（PQ/HLG）或窄范围 CICP、畸形/超限 profile 仍显式记录警告并按 sRGB 兼容回退，且不破坏原像素与解码流程。
 2. **显示器 ICC**：日常 SDR 显示依赖 WebView/系统合成器根据 sRGB ICC 或 sRGB surface 做逐显示器
    映射。应用尚未提供自定义显示 profile、软打样、纸张/油墨模拟或显示 profile 调试覆盖。
-3. 核心编辑 JPEG 已嵌入 ICC；旧 HDR/全景等非 basic 主链路的 PNG 预览仍依赖浏览器默认 sRGB，
-   后续在这些模块进入 1.0 范围时统一迁移。
+3. 核心编辑 JPEG、旧 HDR、旧全景、降噪、批量几何校正及底片反转预览均已统一通过 `color_management.rs` 嵌入固定 sRGB v4 ICC（同批非基础编码 sRGB 保存路径亦同步写入 ICC，线性 RAW 降噪 TIFF 明确保持未标 sRGB）；AVIF 导出因上游 `image` crate 编码器接口尚未暴露 `set_icc_profile`，暂依赖默认 BT.709/sRGB 信号。
 4. `apply_cpu_default_raw_processing` 只服务原图对比等旧 CPU 路径，是显示近似，不是主 RAW
    管线的参考实现。
 5. 用户授权的 Sony α7R V `DSC05363.ARW` 已完成范围化的真实管线画质、本机 60MP CPU 预览/导出

@@ -158,7 +158,16 @@ pub async fn batch_denoise_images(
                     };
 
                     let output_path = parent_dir.join(output_filename);
-                    if let Err(e) = image_to_save.save(&output_path) {
+                    let save_result = if is_raw {
+                        // Linear RAW denoised output must not be tagged as encoded sRGB.
+                        image_to_save.save(&output_path).map_err(|e| e.to_string())
+                    } else {
+                        crate::color_management::save_srgb_tagged_image(
+                            &image_to_save,
+                            &output_path,
+                        )
+                    };
+                    if let Err(e) = save_result {
                         let _ = app_handle.emit(
                             "denoise-error",
                             format!("Failed to save {}: {}", real_path, e),
@@ -246,9 +255,15 @@ pub async fn save_denoised_image(
 
     let output_path = parent_dir.join(output_filename);
 
-    image_to_save
-        .save(&output_path)
-        .map_err(|e| format!("Failed to save image: {}", e))?;
+    if is_raw {
+        // Linear RAW denoised output must not be tagged as encoded sRGB.
+        image_to_save
+            .save(&output_path)
+            .map_err(|e| format!("Failed to save image: {}", e))?;
+    } else {
+        crate::color_management::save_srgb_tagged_image(&image_to_save, &output_path)
+            .map_err(|e| format!("Failed to save image: {}", e))?;
+    }
 
     let (real_path, _) = crate::file_management::parse_virtual_path(&original_path_str);
     let _ =
