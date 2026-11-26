@@ -104,6 +104,7 @@ export enum Invokes {
   SavePanorama = 'save_panorama',
   ProcessImageStack = 'process_image_stack',
   ImageStackOutputNotices = 'image_stack_output_notices',
+  ReadStackReportJson = 'read_stack_report_json',
   VerifySourceLockExportBundle = 'verify_source_lock_export_bundle',
   SaveImageStack = 'save_image_stack',
   SaveHdr = 'save_hdr',

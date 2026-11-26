@@ -647,6 +647,7 @@ pub fn run() {
             image_stack::cancel_image_stack,
             image_stack::save_image_stack,
             image_stack::image_stack_output_notices,
+            image_stack::read_stack_report_json,
             image_stack::verify_source_lock_export_bundle,
             panorama_stitching::stitch_panorama,
             panorama_stitching::save_panorama,

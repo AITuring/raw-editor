@@ -32,7 +32,9 @@ import {
   X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { Invokes } from '../ui/AppProperties';
 import Button from '../ui/Button';
 import TaskProgress from '../ui/TaskProgress';
 import {
@@ -52,11 +54,12 @@ import type {
   ImageStackSoftRegions,
 } from '../../store/useUIStore';
 import ImageStackResultPreview from './ImageStackResultPreview';
-import ImageStackInspectionPanel from './ImageStackInspectionPanel';
+import ImageStackInspectionPanel, { buildInitialSidecarFromInspection } from './ImageStackInspectionPanel';
 import ExportImageDialog from '../../features/export/ExportImageDialog';
 import { getSupportedImageTypes, normalizeExtensions, pathsFromSelection } from './BatchGeometryModal/utils';
 import type { ExportDialogSettings } from '../../features/export/exportDialog';
 import type { StackReportInspection, StackReportInspectionMarker } from '../../utils/stackReportInspection';
+import { parseStackReportInspection } from '../../utils/stackReportInspection';
 import type { CoordinateFrame, SourceLockDocument, WorldBox } from '../../utils/sourceLockSidecar';
 
 interface ImageStackModalProps {
@@ -302,6 +305,7 @@ export default function ImageStackModal({
   const [draftWorldBox, setDraftWorldBox] = useState<WorldBox | null>(null);
   const [isDrawingRegion, setIsDrawingRegion] = useState(false);
   const [sourceLockDoc, setSourceLockDoc] = useState<SourceLockDocument | null>(null);
+  const [loadedReportFileName, setLoadedReportFileName] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const sourcePanelRef = useRef<HTMLElement | null>(null);
   const sourceListRef = useRef<HTMLOListElement | null>(null);
@@ -330,10 +334,59 @@ export default function ImageStackModal({
     setDraftWorldBox(null);
     setIsDrawingRegion(false);
     setSourceLockDoc(null);
+    setLoadedReportFileName(null);
     setIsMounted(true);
     const timer = window.setTimeout(() => setShow(true), 10);
     return () => window.clearTimeout(timer);
   }, [initialAlignmentMode, initialBlendMode, isOpen, sourcePaths]);
+
+  const loadCurrentStackReport = useCallback(async (reportPath: string, switchToInspectionOnFailure: boolean) => {
+    try {
+      const rawJson = await invoke<string>(Invokes.ReadStackReportJson, { pathStr: reportPath });
+      const parsed = parseStackReportInspection(rawJson);
+      if (!parsed) return;
+      setInspection(parsed);
+      setFocusedMarker(parsed.markers[0] ?? null);
+      setFocusedWorldBox(null);
+      setDraftWorldBox(null);
+      setIsDrawingRegion(false);
+      setSourceLockDoc(buildInitialSidecarFromInspection(parsed));
+      setLoadedReportFileName(getDisplayName(reportPath));
+      if (switchToInspectionOnFailure && (parsed.verdict === 'rejected' || parsed.issues.length > 0)) {
+        setSidebarTab('inspection');
+      }
+    } catch {
+      // Manual Stack_Report file upload remains available if automatic read fails.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || !stackReportPath) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rawJson = await invoke<string>(Invokes.ReadStackReportJson, { pathStr: stackReportPath });
+        if (cancelled) return;
+        const parsed = parseStackReportInspection(rawJson);
+        if (!parsed) return;
+        setInspection(parsed);
+        setFocusedMarker(parsed.markers[0] ?? null);
+        setFocusedWorldBox(null);
+        setDraftWorldBox(null);
+        setIsDrawingRegion(false);
+        setSourceLockDoc(buildInitialSidecarFromInspection(parsed));
+        setLoadedReportFileName(getDisplayName(stackReportPath));
+        if (error || parsed.verdict === 'rejected') {
+          setSidebarTab('inspection');
+        }
+      } catch {
+        // Ignore auto-load errors; user can still pick a Stack_Report file manually.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [error, isOpen, stackReportPath]);
 
   const activeCoordinateFrame = useMemo<CoordinateFrame | null>(() => {
     if (sourceLockDoc) return sourceLockDoc.coordinate_frame;
@@ -852,6 +905,7 @@ export default function ImageStackModal({
                   exportedTiffPath={savedPath}
                   inspection={inspection}
                   isDrawingRegion={isDrawingRegion}
+                  loadedReportFileName={loadedReportFileName}
                   onClearDraftWorldBox={() => setDraftWorldBox(null)}
                   onFocusMarker={(marker) => {
                     setFocusedMarker(marker);
@@ -861,13 +915,17 @@ export default function ImageStackModal({
                     setFocusedMarker(null);
                     setFocusedWorldBox({ ...worldBox });
                   }}
-                  onLoadInspection={(parsed) => {
+                  onLoadInspection={(parsed, fileName) => {
                     setInspection(parsed);
                     setFocusedMarker(parsed.markers[0] ?? null);
                     setFocusedWorldBox(null);
                     setDraftWorldBox(null);
                     setIsDrawingRegion(false);
+                    setLoadedReportFileName(fileName);
                   }}
+                  onReloadCurrentReport={
+                    stackReportPath ? () => void loadCurrentStackReport(stackReportPath, false) : undefined
+                  }
                   onSourceLockDocChange={setSourceLockDoc}
                   onToggleDrawRegion={
                     activeCoordinateFrame ? () => setIsDrawingRegion((drawing) => !drawing) : undefined

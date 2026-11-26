@@ -549,3 +549,143 @@ export function parseStackReportInspection(raw: unknown): StackReportInspection 
     markers,
   };
 }
+
+export type CriterionFilter = 'all' | 'issues';
+export type MarkerFilter = 'all' | InspectionMarkerKind;
+
+export interface DiagnosticSummaryExport {
+  exported_at: string;
+  run_id: string;
+  schema: number | null;
+  pipeline_version: string;
+  selected_path: string;
+  verdict: StackRunVerdict;
+  canvas: { width: number; height: number } | null;
+  origin: { x: number; y: number };
+  station_count: number;
+  source_count: number;
+  excluded_source_count: number;
+  quality_gate: {
+    verdict: QualityGateCriterionVerdict;
+    roi_count: number;
+    unresolved_pixels: number | null;
+    failing_criteria: Array<{
+      name: string;
+      verdict: QualityGateCriterionVerdict;
+      worst_value: number | null;
+      threshold: number | null;
+      measurable_count: number;
+      unmeasurable_count: number;
+    }>;
+  };
+  closure: StackReportInspection['closure'];
+  output_density: StackReportInspection['outputDensity'];
+  tone: StackReportInspection['tone'];
+  resources: StackReportInspection['resources'];
+  issues: StackReportIssueExplanation[];
+  marker_counts: {
+    total: number;
+    qg_fail: number;
+    qg_unmeasurable: number;
+    tone_violation: number;
+  };
+  excluded_sources: Array<{ path: string; reason: string | null }>;
+  source_lock_summary?: {
+    active_locks: number;
+    stale_or_unresolved_locks: number;
+    manual_review_regions: number;
+    sidecar_sha256: string;
+  } | null;
+}
+
+const CRITERION_VERDICT_RANK: Record<QualityGateCriterionVerdict, number> = {
+  fail: 0,
+  insufficient_evidence: 1,
+  unknown: 2,
+  pass: 3,
+  not_applicable: 4,
+};
+
+export function filterInspectionCriteria(
+  criteria: StackReportCriterionSummary[],
+  filter: CriterionFilter,
+): StackReportCriterionSummary[] {
+  const filtered =
+    filter === 'issues'
+      ? criteria.filter((criterion) => criterion.verdict === 'fail' || criterion.verdict === 'insufficient_evidence')
+      : criteria;
+  return [...filtered].sort(
+    (left, right) =>
+      CRITERION_VERDICT_RANK[left.verdict] - CRITERION_VERDICT_RANK[right.verdict] ||
+      left.name.localeCompare(right.name),
+  );
+}
+
+export function filterInspectionMarkers(
+  markers: StackReportInspectionMarker[],
+  filter: MarkerFilter,
+): StackReportInspectionMarker[] {
+  if (filter === 'all') return markers;
+  return markers.filter((marker) => marker.kind === filter);
+}
+
+export function buildDiagnosticSummaryExport(
+  inspection: StackReportInspection,
+  sourceLockSummary?: {
+    activeLockCount: number;
+    staleOrUnresolvedCount: number;
+    manualReviewCount: number;
+    sidecarSha256: string;
+  } | null,
+  exportedAt = new Date().toISOString(),
+): DiagnosticSummaryExport {
+  const failingCriteria = filterInspectionCriteria(inspection.qualityGate.criteria, 'issues').map((criterion) => ({
+    name: criterion.name,
+    verdict: criterion.verdict,
+    worst_value: criterion.worstValue,
+    threshold: criterion.threshold,
+    measurable_count: criterion.measurableCount,
+    unmeasurable_count: criterion.unmeasurableCount,
+  }));
+  return {
+    exported_at: exportedAt,
+    run_id: inspection.runId,
+    schema: inspection.schema,
+    pipeline_version: inspection.pipelineVersion,
+    selected_path: inspection.selectedPath,
+    verdict: inspection.verdict,
+    canvas: inspection.canvas,
+    origin: inspection.origin,
+    station_count: inspection.stationCount,
+    source_count: inspection.sources.length,
+    excluded_source_count: inspection.excludedCount,
+    quality_gate: {
+      verdict: inspection.qualityGate.verdict,
+      roi_count: inspection.qualityGate.roiCount,
+      unresolved_pixels: inspection.qualityGate.unresolvedPixels,
+      failing_criteria: failingCriteria,
+    },
+    closure: inspection.closure,
+    output_density: inspection.outputDensity,
+    tone: inspection.tone,
+    resources: inspection.resources,
+    issues: inspection.issues,
+    marker_counts: {
+      total: inspection.markers.length,
+      qg_fail: inspection.markers.filter((marker) => marker.kind === 'qg_fail').length,
+      qg_unmeasurable: inspection.markers.filter((marker) => marker.kind === 'qg_unmeasurable').length,
+      tone_violation: inspection.markers.filter((marker) => marker.kind === 'tone_violation').length,
+    },
+    excluded_sources: inspection.sources
+      .filter((source) => source.excluded)
+      .map((source) => ({ path: source.path, reason: source.exclusionReason })),
+    source_lock_summary: sourceLockSummary
+      ? {
+          active_locks: sourceLockSummary.activeLockCount,
+          stale_or_unresolved_locks: sourceLockSummary.staleOrUnresolvedCount,
+          manual_review_regions: sourceLockSummary.manualReviewCount,
+          sidecar_sha256: sourceLockSummary.sidecarSha256,
+        }
+      : null,
+  };
+}

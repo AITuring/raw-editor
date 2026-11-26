@@ -931,3 +931,31 @@ fn real_stack_export_fixture_from_env() {
         println!("{}", output_path.display());
     }
 }
+
+#[test]
+fn read_stack_report_json_file_accepts_valid_reports_and_rejects_non_reports() {
+    let directory = tempfile::tempdir().expect("temp stack report dir");
+
+    let valid_path = directory.path().join("stack-report-demo.json");
+    let valid_json = r#"{"schema":8,"run_id":"run-demo-1","degradation":{"result":"rejected","entries":[]},"quality_gate":{"verdict":"fail","criteria":[]}}"#;
+    fs::write(&valid_path, valid_json).expect("write valid stack report");
+    let loaded =
+        super::read_stack_report_json_file(&valid_path).expect("valid Stack_Report must read");
+    assert_eq!(loaded, valid_json);
+
+    let non_json_ext = directory.path().join("notes.txt");
+    fs::write(&non_json_ext, valid_json).expect("write non-json extension");
+    assert!(
+        super::read_stack_report_json_file(&non_json_ext)
+            .expect_err("non-.json extension must be rejected")
+            .contains(".json")
+    );
+
+    let unrelated_json = directory.path().join("package.json");
+    fs::write(&unrelated_json, r#"{"name":"not-a-report"}"#).expect("write unrelated json");
+    assert!(
+        super::read_stack_report_json_file(&unrelated_json)
+            .expect_err("unrelated JSON must be rejected")
+            .contains("Stack_Report schema")
+    );
+}

@@ -260,6 +260,7 @@ pub async fn process_image_stack(
                             "renderScale": render_scale,
                             "softRegions": soft_regions,
                             "skippedSources": skipped_sources,
+                            "stackReportPath": outcome.stack_report_path,
                             "stationsUnrelated": stations_unrelated,
                         }),
                     );
@@ -303,6 +304,7 @@ pub async fn process_image_stack(
                         "result": outcome_decision.as_identifier(),
                         "softRegions": soft_regions,
                         "skippedSources": skipped_sources,
+                        "stackReportPath": outcome.stack_report_path,
                         // The stations did not all relate and the photos were
                         // composed on their own positions instead.
                         "stationsUnrelated": stations_unrelated,
@@ -420,6 +422,87 @@ pub async fn image_stack_output_notices(
         );
     }
     Ok(OutputFidelity::of(image, output_format, bit_depth).downgrades(output_format))
+}
+
+const MAX_STACK_REPORT_JSON_BYTES: u64 = 32 * 1024 * 1024;
+
+pub(crate) fn read_stack_report_json_file(path: &std::path::Path) -> Result<String, String> {
+    use std::io::Read;
+
+    let is_json = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("json"));
+    if !is_json {
+        return Err("Stack_Report path must point to a .json file.".to_string());
+    }
+    let file = fs::File::open(path)
+        .map_err(|error| format!("Failed to open Stack_Report '{}': {error}", path.display()))?;
+    let metadata = file.metadata().map_err(|error| {
+        format!(
+            "Failed to inspect Stack_Report '{}': {error}",
+            path.display()
+        )
+    })?;
+    if metadata.len() > MAX_STACK_REPORT_JSON_BYTES {
+        return Err(format!(
+            "Stack_Report '{}' exceeds maximum readable size ({} bytes).",
+            path.display(),
+            MAX_STACK_REPORT_JSON_BYTES
+        ));
+    }
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    file.take(MAX_STACK_REPORT_JSON_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("Failed to read Stack_Report '{}': {error}", path.display()))?;
+    if bytes.len() as u64 > MAX_STACK_REPORT_JSON_BYTES {
+        return Err(format!(
+            "Stack_Report '{}' exceeds maximum readable size ({} bytes).",
+            path.display(),
+            MAX_STACK_REPORT_JSON_BYTES
+        ));
+    }
+    let text = String::from_utf8(bytes).map_err(|error| {
+        format!(
+            "Stack_Report '{}' is not valid UTF-8: {error}",
+            path.display()
+        )
+    })?;
+    let parsed: serde_json::Value = serde_json::from_str(&text).map_err(|error| {
+        format!(
+            "Stack_Report '{}' is not valid JSON: {error}",
+            path.display()
+        )
+    })?;
+    let Some(object) = parsed.as_object() else {
+        return Err("Stack_Report JSON root must be an object.".to_string());
+    };
+    let has_run_id = object
+        .get("run_id")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty());
+    let has_report_section =
+        object.contains_key("quality_gate") || object.contains_key("degradation");
+    if !has_run_id || !has_report_section {
+        return Err(
+            "Selected JSON file does not match the Stack_Report schema (missing run_id or report sections)."
+                .to_string(),
+        );
+    }
+    Ok(text)
+}
+
+/// Read-only bounded reader allowing the alignment inspection panel to auto-load
+/// the latest run's `Stack_Report` JSON without exposing arbitrary host files.
+#[tauri::command]
+pub async fn read_stack_report_json(path_str: String) -> Result<String, String> {
+    if path_str.trim().is_empty() {
+        return Err("Stack_Report path is empty.".to_string());
+    }
+    let (path, _) = parse_virtual_path(&path_str);
+    tokio::task::spawn_blocking(move || read_stack_report_json_file(&path))
+        .await
+        .map_err(|error| format!("Stack_Report read task failed: {error}"))?
 }
 
 /// Read-only audit verifying that an exported native TIFF, its

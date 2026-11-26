@@ -9,6 +9,7 @@ import {
   FolderOpen,
   Lock,
   Redo2,
+  RefreshCw,
   ShieldAlert,
   ShieldCheck,
   SquareDashedMousePointer,
@@ -21,8 +22,18 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { Invokes } from '../ui/AppProperties';
-import type { StackReportInspection, StackReportInspectionMarker } from '../../utils/stackReportInspection';
-import { parseStackReportInspection } from '../../utils/stackReportInspection';
+import type {
+  CriterionFilter,
+  MarkerFilter,
+  StackReportInspection,
+  StackReportInspectionMarker,
+} from '../../utils/stackReportInspection';
+import {
+  buildDiagnosticSummaryExport,
+  filterInspectionCriteria,
+  filterInspectionMarkers,
+  parseStackReportInspection,
+} from '../../utils/stackReportInspection';
 import type {
   RustExportBindingAudit,
   SourceLockDocument,
@@ -55,6 +66,7 @@ interface ImageStackInspectionPanelProps {
   exportedTiffPath?: string | null;
   inspection: StackReportInspection | null;
   isDrawingRegion?: boolean;
+  loadedReportFileName?: string | null;
   selectedMarkerId: string | null;
   sourceLockDoc: SourceLockDocument | null;
   stackReportPath: string | null;
@@ -62,6 +74,7 @@ interface ImageStackInspectionPanelProps {
   onFocusMarker(marker: StackReportInspectionMarker): void;
   onFocusWorldBox?(worldBox: WorldBox): void;
   onLoadInspection(inspection: StackReportInspection, fileName: string): void;
+  onReloadCurrentReport?(): void;
   onSourceLockDocChange(doc: SourceLockDocument | null): void;
   onToggleDrawRegion?(): void;
 }
@@ -129,6 +142,7 @@ export default function ImageStackInspectionPanel({
   exportedTiffPath = null,
   inspection,
   isDrawingRegion = false,
+  loadedReportFileName = null,
   selectedMarkerId,
   sourceLockDoc,
   stackReportPath,
@@ -136,6 +150,7 @@ export default function ImageStackInspectionPanel({
   onFocusMarker,
   onFocusWorldBox,
   onLoadInspection,
+  onReloadCurrentReport,
   onSourceLockDocChange,
   onToggleDrawRegion,
 }: ImageStackInspectionPanelProps) {
@@ -144,6 +159,8 @@ export default function ImageStackInspectionPanel({
   const sidecarInputRef = useRef<HTMLInputElement | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedFileName, setLoadedFileName] = useState<string | null>(null);
+  const [criterionFilter, setCriterionFilter] = useState<CriterionFilter>('all');
+  const [markerFilter, setMarkerFilter] = useState<MarkerFilter>('all');
   const [showSources, setShowSources] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
   const [sidecarNotice, setSidecarNotice] = useState<string | null>(null);
@@ -214,6 +231,19 @@ export default function ImageStackInspectionPanel({
   }, [draftWorldBox, inspection, selectedMarker]);
 
   const exportSummary = useMemo(() => (activeDoc ? summarizeSidecarForExport(activeDoc) : null), [activeDoc]);
+  const visibleCriteria = useMemo(
+    () => (inspection ? filterInspectionCriteria(inspection.qualityGate.criteria, criterionFilter) : []),
+    [criterionFilter, inspection],
+  );
+  const issueCriteriaCount = useMemo(
+    () => (inspection ? filterInspectionCriteria(inspection.qualityGate.criteria, 'issues').length : 0),
+    [inspection],
+  );
+  const visibleMarkers = useMemo(
+    () => (inspection ? filterInspectionMarkers(inspection.markers, markerFilter) : []),
+    [inspection, markerFilter],
+  );
+  const effectiveLoadedFileName = loadedReportFileName ?? loadedFileName;
   const undoAvailable = activeDoc ? canUndo(activeDoc) : false;
   const redoAvailable = activeDoc ? canRedo(activeDoc) : false;
 
@@ -277,6 +307,17 @@ export default function ImageStackInspectionPanel({
   const handleRevealReport = () => {
     if (!stackReportPath) return;
     void invoke(Invokes.ShowInFinder, { path: stackReportPath }).catch(() => {});
+  };
+
+  const handleExportDiagnosticSummary = () => {
+    if (!inspection) return;
+    const summary = buildDiagnosticSummaryExport(inspection, exportSummary);
+    const safeRunId = inspection.runId.replace(/[^a-zA-Z0-9._-]+/g, '_') || 'stack-run';
+    downloadTextFile(
+      `diagnostic-summary-${safeRunId}.json`,
+      `${JSON.stringify(summary, null, 2)}\n`,
+      'application/json',
+    );
   };
 
   const toggleAllowedSourceId = (sourceId: number) => {
@@ -528,6 +569,16 @@ export default function ImageStackInspectionPanel({
             <FileSearch aria-hidden="true" size={14} />
             {t('modals.imageStack.inspection.loadReport')}
           </button>
+          {stackReportPath && onReloadCurrentReport && (
+            <button
+              className="flex items-center gap-1.5 rounded-lg bg-card-active px-2.5 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onClick={onReloadCurrentReport}
+              type="button"
+            >
+              <RefreshCw aria-hidden="true" size={14} />
+              {t('modals.imageStack.inspection.reloadCurrentReport')}
+            </button>
+          )}
           {stackReportPath && (
             <button
               className="flex items-center gap-1.5 rounded-lg bg-card-active px-2.5 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -538,6 +589,16 @@ export default function ImageStackInspectionPanel({
               {t('modals.imageStack.inspection.revealReport')}
             </button>
           )}
+          {inspection && (
+            <button
+              className="flex items-center gap-1.5 rounded-lg bg-card-active px-2.5 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onClick={handleExportDiagnosticSummary}
+              type="button"
+            >
+              <Download aria-hidden="true" size={14} />
+              {t('modals.imageStack.inspection.exportDiagnosticSummary')}
+            </button>
+          )}
           <input
             accept=".json,application/json"
             className="hidden"
@@ -546,9 +607,9 @@ export default function ImageStackInspectionPanel({
             type="file"
           />
         </div>
-        {loadedFileName && (
-          <p className="truncate text-[10px] text-text-secondary" title={loadedFileName}>
-            {loadedFileName}
+        {effectiveLoadedFileName && (
+          <p className="truncate text-[10px] text-text-secondary" title={effectiveLoadedFileName}>
+            {effectiveLoadedFileName}
           </p>
         )}
         {loadError && (
@@ -662,73 +723,136 @@ export default function ImageStackInspectionPanel({
 
           {inspection.qualityGate.criteria.length > 0 && (
             <section className="space-y-2 border-t border-border-color pt-3">
-              <h4 className="text-xs font-semibold text-text-primary">
-                {t('modals.imageStack.inspection.criteriaTitle')}
-              </h4>
-              <ul className="space-y-1">
-                {inspection.qualityGate.criteria.map((criterion) => (
-                  <li
-                    className="flex items-center justify-between gap-2 rounded-md bg-bg-primary/30 px-2 py-1.5 text-[11px]"
-                    key={criterion.name}
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-semibold text-text-primary">
+                  {t('modals.imageStack.inspection.criteriaTitle')}
+                </h4>
+                <div className="flex items-center gap-1">
+                  <button
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                      criterionFilter === 'all'
+                        ? 'bg-accent/15 text-text-primary'
+                        : 'bg-card-active text-text-secondary hover:text-text-primary'
+                    }`}
+                    onClick={() => setCriterionFilter('all')}
+                    type="button"
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-text-primary" title={criterion.name}>
-                        {criterion.name}
-                      </p>
-                      <p className="text-[10px] tabular-nums text-text-secondary">
-                        {`${criterion.worstValue !== null ? criterion.worstValue.toFixed(3) : '—'}${
-                          criterion.threshold !== null ? ` / ${criterion.threshold}` : ''
-                        } · n=${criterion.measurableCount}`}
-                      </p>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${criterionBadgeClass(criterion.verdict)}`}
+                    {t('modals.imageStack.inspection.filterAll')}
+                  </button>
+                  <button
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                      criterionFilter === 'issues'
+                        ? 'bg-status-error/15 text-status-error'
+                        : 'bg-card-active text-text-secondary hover:text-text-primary'
+                    }`}
+                    onClick={() => setCriterionFilter('issues')}
+                    type="button"
+                  >
+                    {t('modals.imageStack.inspection.filterIssues', { total: issueCriteriaCount })}
+                  </button>
+                </div>
+              </div>
+              {visibleCriteria.length === 0 ? (
+                <p className="rounded-md bg-bg-primary/25 px-2 py-1.5 text-[11px] text-text-secondary">
+                  {t('modals.imageStack.inspection.noMatchingCriteria')}
+                </p>
+              ) : (
+                <ul className="space-y-1">
+                  {visibleCriteria.map((criterion) => (
+                    <li
+                      className="flex items-center justify-between gap-2 rounded-md bg-bg-primary/30 px-2 py-1.5 text-[11px]"
+                      key={criterion.name}
                     >
-                      {criterion.verdict}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-text-primary" title={criterion.name}>
+                          {criterion.name}
+                        </p>
+                        <p className="text-[10px] tabular-nums text-text-secondary">
+                          {`${criterion.worstValue !== null ? criterion.worstValue.toFixed(3) : '—'}${
+                            criterion.threshold !== null ? ` / ${criterion.threshold}` : ''
+                          } · n=${criterion.measurableCount}`}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${criterionBadgeClass(criterion.verdict)}`}
+                      >
+                        {criterion.verdict}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
           )}
 
           {inspection.markers.length > 0 && (
             <section className="space-y-2 border-t border-border-color pt-3">
-              <h4 className="flex items-center gap-1.5 text-xs font-semibold text-text-primary">
-                <Crosshair aria-hidden="true" size={14} />
-                {t('modals.imageStack.inspection.markersTitle', { total: inspection.markers.length })}
-              </h4>
-              <ul className="max-h-44 space-y-1 overflow-y-auto pr-0.5">
-                {inspection.markers.map((marker) => {
-                  const isSelected = marker.id === selectedMarker?.id;
-                  return (
-                    <li key={marker.id}>
-                      <button
-                        className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                          isSelected
-                            ? 'bg-accent/15 text-text-primary ring-1 ring-inset ring-accent'
-                            : 'bg-bg-primary/30 text-text-secondary hover:bg-card-active hover:text-text-primary'
-                        }`}
-                        onClick={() => onFocusMarker(marker)}
-                        type="button"
-                      >
-                        <span className="min-w-0 flex-1 truncate" title={marker.detail}>
-                          {marker.label}
-                        </span>
-                        <span
-                          className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                            marker.kind === 'qg_fail'
-                              ? 'bg-status-error/15 text-status-error'
-                              : 'bg-status-warning/15 text-status-warning'
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                <h4 className="flex items-center gap-1.5 text-xs font-semibold text-text-primary">
+                  <Crosshair aria-hidden="true" size={14} />
+                  {t('modals.imageStack.inspection.markersTitle', { total: visibleMarkers.length })}
+                </h4>
+                <div className="flex flex-wrap items-center gap-1">
+                  {(
+                    [
+                      ['all', t('modals.imageStack.inspection.filterAll')],
+                      ['qg_fail', t('modals.imageStack.inspection.filterMarkerQgFail')],
+                      ['qg_unmeasurable', t('modals.imageStack.inspection.filterMarkerUnmeasurable')],
+                      ['tone_violation', t('modals.imageStack.inspection.filterMarkerTone')],
+                    ] as Array<[MarkerFilter, string]>
+                  ).map(([kind, label]) => (
+                    <button
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                        markerFilter === kind
+                          ? 'bg-accent/15 text-text-primary'
+                          : 'bg-card-active text-text-secondary hover:text-text-primary'
+                      }`}
+                      key={kind}
+                      onClick={() => setMarkerFilter(kind)}
+                      type="button"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {visibleMarkers.length === 0 ? (
+                <p className="rounded-md bg-bg-primary/25 px-2 py-1.5 text-[11px] text-text-secondary">
+                  {t('modals.imageStack.inspection.noMatchingMarkers')}
+                </p>
+              ) : (
+                <ul className="max-h-44 space-y-1 overflow-y-auto pr-0.5">
+                  {visibleMarkers.map((marker) => {
+                    const isSelected = marker.id === selectedMarker?.id;
+                    return (
+                      <li key={marker.id}>
+                        <button
+                          className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                            isSelected
+                              ? 'bg-accent/15 text-text-primary ring-1 ring-inset ring-accent'
+                              : 'bg-bg-primary/30 text-text-secondary hover:bg-card-active hover:text-text-primary'
                           }`}
+                          onClick={() => onFocusMarker(marker)}
+                          type="button"
                         >
-                          {`${Math.round(marker.worldBox.x)},${Math.round(marker.worldBox.y)}`}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                          <span className="min-w-0 flex-1 truncate" title={marker.detail}>
+                            {marker.label}
+                          </span>
+                          <span
+                            className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                              marker.kind === 'qg_fail'
+                                ? 'bg-status-error/15 text-status-error'
+                                : 'bg-status-warning/15 text-status-warning'
+                            }`}
+                          >
+                            {`${Math.round(marker.worldBox.x)},${Math.round(marker.worldBox.y)}`}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </section>
           )}
 

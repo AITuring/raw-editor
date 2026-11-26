@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
@@ -14,7 +15,8 @@ const bundled = await build({
   write: false,
 });
 const moduleSource = Buffer.from(bundled.outputFiles[0].contents).toString('base64');
-const { parseStackReportInspection } = await import(`data:text/javascript;base64,${moduleSource}`);
+const { buildDiagnosticSummaryExport, filterInspectionCriteria, filterInspectionMarkers, parseStackReportInspection } =
+  await import(`data:text/javascript;base64,${moduleSource}`);
 
 // 1. Real sleeping-45 scale=1 shaped report: QG fail + local-scale ROIs + tone violations + density bypass.
 const sleepingReport = {
@@ -140,5 +142,47 @@ assert.ok(toneMarker.normalizedBox.y > 0.8 && toneMarker.normalizedBox.y < 0.9);
 assert.equal(parseStackReportInspection('{broken'), null);
 assert.equal(parseStackReportInspection(null), null);
 assert.equal(parseStackReportInspection([]), null);
+
+// 3. Task 21: Criterion sorting/filtering, marker filtering, diagnostic summary export, and backend auto-load plumbing.
+const sortedAllCriteria = filterInspectionCriteria(parsed.qualityGate.criteria, 'all');
+assert.equal(sortedAllCriteria[0].verdict, 'fail', 'failing criteria must sort ahead of passing ones');
+const issuesOnly = filterInspectionCriteria(parsed.qualityGate.criteria, 'issues');
+assert.equal(issuesOnly.length, 1);
+assert.equal(issuesOnly[0].name, 'local_scale_median');
+
+assert.equal(filterInspectionMarkers(parsed.markers, 'all').length, 2);
+assert.equal(filterInspectionMarkers(parsed.markers, 'qg_fail').length, 1);
+assert.equal(filterInspectionMarkers(parsed.markers, 'tone_violation').length, 1);
+assert.equal(filterInspectionMarkers(parsed.markers, 'qg_unmeasurable').length, 0);
+
+const summary = buildDiagnosticSummaryExport(
+  parsed,
+  {
+    activeLockCount: 2,
+    staleOrUnresolvedCount: 1,
+    manualReviewCount: 1,
+    sidecarSha256: 'ab'.repeat(32),
+  },
+  '2026-11-27T00:00:00.000Z',
+);
+assert.equal(summary.run_id, 'run-sleeping-45');
+assert.equal(summary.quality_gate.failing_criteria.length, 1);
+assert.equal(summary.marker_counts.qg_fail, 1);
+assert.equal(summary.marker_counts.tone_violation, 1);
+assert.equal(summary.excluded_sources.length, 1);
+assert.equal(summary.source_lock_summary?.active_locks, 2);
+
+const rustImageStack = fs.readFileSync(path.join(repoRoot, 'src-tauri/src/image_stack.rs'), 'utf8');
+const rustLib = fs.readFileSync(path.join(repoRoot, 'src-tauri/src/lib.rs'), 'utf8');
+const stackModal = fs.readFileSync(path.join(repoRoot, 'src/components/modals/ImageStackModal.tsx'), 'utf8');
+const stackReportPathEmissions = rustImageStack.match(/"stackReportPath":\s*outcome\.stack_report_path/g)?.length ?? 0;
+assert.equal(
+  stackReportPathEmissions,
+  2,
+  'image_stack.rs must emit stackReportPath on both image-stack-complete and image-stack-error',
+);
+assert.match(rustImageStack, /pub async fn read_stack_report_json\(/);
+assert.match(rustLib, /image_stack::read_stack_report_json/);
+assert.match(stackModal, /Invokes\.ReadStackReportJson/);
 
 console.log('Validated Stack_Report inspection parsing, failure explanations, source ledger, and marker coordinates.');
