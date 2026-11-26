@@ -1,7 +1,10 @@
 use std::sync::OnceLock;
 
 use base64::{Engine as _, engine::general_purpose};
-use moxcms::{ColorProfile, DataColorSpace, Layout, ParsingOptions, TransformOptions};
+use moxcms::{
+    CicpColorPrimaries, CicpProfile, ColorProfile, DataColorSpace, Layout, MatrixCoefficients,
+    ParsingOptions, TransferCharacteristics, TransformOptions,
+};
 use mozjpeg_rs::{Encoder, Preset};
 
 /// Compact ICC Profiles' CC0 sRGB v4 profile.
@@ -11,6 +14,14 @@ const SRGB_V4_BASE64: &str = "AAAB4GxjbXMEIAAAbW50clJHQiBYWVogB+IAAwAUAAkADgAdYW
 static SRGB_V4_PROFILE: OnceLock<Vec<u8>> = OnceLock::new();
 
 pub const MAX_EMBEDDED_ICC_BYTES: usize = 4 * 1024 * 1024;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IccColorSpace {
+    Rgb,
+    Gray,
+    Cmyk,
+    Other([u8; 4]),
+}
 
 /// IEC 61966-2-1 sRGB electro-optical transfer function for one encoded channel.
 ///
@@ -40,7 +51,13 @@ pub fn linear_to_srgb_channel(linear: f32) -> f32 {
     }
 }
 
-pub fn validate_icc_profile(profile: &[u8]) -> Result<(), String> {
+pub fn inspect_icc_profile_header(profile: &[u8]) -> Result<IccColorSpace, String> {
+    if profile.len() > MAX_EMBEDDED_ICC_BYTES {
+        return Err(format!(
+            "embedded ICC profile is {} bytes; limit is {MAX_EMBEDDED_ICC_BYTES}",
+            profile.len()
+        ));
+    }
     if profile.len() < 128 {
         return Err("ICC profile is shorter than its 128-byte header".to_string());
     }
@@ -59,10 +76,28 @@ pub fn validate_icc_profile(profile: &[u8]) -> Result<(), String> {
     if &profile[36..40] != b"acsp" {
         return Err("ICC profile signature is not acsp".to_string());
     }
-    if &profile[16..20] != b"RGB " {
-        return Err("ICC profile is not an RGB profile".to_string());
+
+    let space: [u8; 4] = profile[16..20]
+        .try_into()
+        .map_err(|_| "ICC profile color space field is missing".to_string())?;
+    Ok(match &space {
+        b"RGB " => IccColorSpace::Rgb,
+        b"GRAY" => IccColorSpace::Gray,
+        b"CMYK" => IccColorSpace::Cmyk,
+        _ => IccColorSpace::Other(space),
+    })
+}
+
+pub fn validate_icc_profile(profile: &[u8]) -> Result<(), String> {
+    match inspect_icc_profile_header(profile)? {
+        IccColorSpace::Rgb => Ok(()),
+        IccColorSpace::Gray => Err("ICC profile uses Gray color space, not RGB".to_string()),
+        IccColorSpace::Cmyk => Err("ICC profile uses CMYK color space, not RGB".to_string()),
+        IccColorSpace::Other(tag) => Err(format!(
+            "ICC profile is not an RGB profile (space {:?})",
+            String::from_utf8_lossy(&tag)
+        )),
     }
-    Ok(())
 }
 
 pub fn srgb_v4_profile() -> &'static [u8] {
@@ -75,6 +110,55 @@ pub fn srgb_v4_profile() -> &'static [u8] {
             profile
         })
         .as_slice()
+}
+
+fn bounded_icc_parsing_options() -> ParsingOptions {
+    ParsingOptions {
+        max_profile_size: MAX_EMBEDDED_ICC_BYTES + 1,
+        max_allowed_clut_size: MAX_EMBEDDED_ICC_BYTES,
+        max_allowed_trc_size: 65_536,
+    }
+}
+
+fn apply_rgb_profile_transform_to_srgb(
+    pixels: &mut [f32],
+    source_profile: &ColorProfile,
+) -> Result<(), String> {
+    let destination_profile = ColorProfile::new_srgb();
+    let transform_options = TransformOptions {
+        rendering_intent: source_profile.rendering_intent,
+        ..TransformOptions::default()
+    };
+
+    match source_profile.create_in_place_transform_f32(
+        Layout::Rgb,
+        &destination_profile,
+        transform_options,
+    ) {
+        Ok(transform) => transform
+            .transform(pixels)
+            .map_err(|error| format!("failed to apply embedded ICC profile: {error}"))?,
+        Err(_) => {
+            let transform = source_profile
+                .create_transform_f32(
+                    Layout::Rgb,
+                    &destination_profile,
+                    Layout::Rgb,
+                    transform_options,
+                )
+                .map_err(|error| format!("failed to create embedded ICC transform: {error}"))?;
+            let mut converted = vec![0.0; pixels.len()];
+            transform
+                .transform(pixels, &mut converted)
+                .map_err(|error| format!("failed to apply embedded ICC profile: {error}"))?;
+            pixels.copy_from_slice(&converted);
+        }
+    }
+
+    pixels
+        .iter_mut()
+        .for_each(|channel| *channel = channel.clamp(0.0, 1.0));
+    Ok(())
 }
 
 /// Converts encoded RGB samples from an embedded ICC profile into encoded sRGB.
@@ -102,13 +186,9 @@ pub fn normalize_encoded_rgb_profile_to_srgb(
         return Ok(false);
     }
 
-    let parsing_options = ParsingOptions {
-        max_profile_size: MAX_EMBEDDED_ICC_BYTES + 1,
-        max_allowed_clut_size: MAX_EMBEDDED_ICC_BYTES,
-        max_allowed_trc_size: 65_536,
-    };
-    let source_profile = ColorProfile::new_from_slice_with_options(profile, parsing_options)
-        .map_err(|error| format!("failed to parse embedded ICC profile: {error}"))?;
+    let source_profile =
+        ColorProfile::new_from_slice_with_options(profile, bounded_icc_parsing_options())
+            .map_err(|error| format!("failed to parse embedded ICC profile: {error}"))?;
     if source_profile.color_space != DataColorSpace::Rgb {
         return Err("embedded ICC profile is not an RGB profile".to_string());
     }
@@ -150,6 +230,201 @@ pub fn normalize_encoded_rgb_profile_to_srgb(
     Ok(true)
 }
 
+/// Converts grayscale samples (stored as replicated `[g, g, g]` encoded floats)
+/// from an embedded Gray ICC profile into encoded sRGB.
+///
+/// Non-Gray, malformed, or oversized profiles fail without mutating `pixels`.
+pub fn normalize_encoded_gray_profile_to_srgb(
+    pixels: &mut [f32],
+    profile: &[u8],
+) -> Result<bool, String> {
+    if !pixels.len().is_multiple_of(3) {
+        return Err("encoded RGB buffer does not contain complete pixels".to_string());
+    }
+    match inspect_icc_profile_header(profile)? {
+        IccColorSpace::Gray => {}
+        IccColorSpace::Rgb => {
+            return Err("embedded ICC profile uses RGB color space, expected Gray".to_string());
+        }
+        IccColorSpace::Cmyk => {
+            return Err("embedded ICC profile uses CMYK color space, expected Gray".to_string());
+        }
+        IccColorSpace::Other(tag) => {
+            return Err(format!(
+                "embedded ICC profile uses unsupported space {:?}, expected Gray",
+                String::from_utf8_lossy(&tag)
+            ));
+        }
+    }
+    if pixels.is_empty() {
+        return Ok(false);
+    }
+
+    let source_profile =
+        ColorProfile::new_from_slice_with_options(profile, bounded_icc_parsing_options())
+            .map_err(|error| format!("failed to parse embedded Gray ICC profile: {error}"))?;
+    if source_profile.color_space != DataColorSpace::Gray {
+        return Err("embedded ICC profile is not a Gray profile".to_string());
+    }
+
+    let destination_profile = ColorProfile::new_srgb();
+    let transform_options = TransformOptions {
+        rendering_intent: source_profile.rendering_intent,
+        ..TransformOptions::default()
+    };
+    let transform = source_profile
+        .create_transform_f32(
+            Layout::Gray,
+            &destination_profile,
+            Layout::Rgb,
+            transform_options,
+        )
+        .map_err(|error| format!("failed to create embedded Gray ICC transform: {error}"))?;
+
+    let gray: Vec<f32> = pixels.chunks_exact(3).map(|rgb| rgb[0]).collect();
+    let mut converted = vec![0.0_f32; pixels.len()];
+    transform
+        .transform(&gray, &mut converted)
+        .map_err(|error| format!("failed to apply embedded Gray ICC profile: {error}"))?;
+
+    for (dst, src) in pixels.iter_mut().zip(converted) {
+        *dst = src.clamp(0.0, 1.0);
+    }
+    Ok(true)
+}
+
+/// Extracts a 4-byte PNG `cICP` (Coding-Independent Code Points) chunk payload
+/// when present before `IDAT`/`IEND`. Returns `None` for non-PNG or malformed data.
+pub fn extract_png_cicp_chunk(bytes: &[u8]) -> Option<[u8; 4]> {
+    const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
+    if bytes.len() < PNG_SIGNATURE.len() || &bytes[..8] != PNG_SIGNATURE {
+        return None;
+    }
+
+    let mut offset = 8usize;
+    while offset.checked_add(12)? <= bytes.len() {
+        let length = u32::from_be_bytes(bytes[offset..offset + 4].try_into().ok()?) as usize;
+        let chunk_type = &bytes[offset + 4..offset + 8];
+        let data_start = offset + 8;
+        let data_end = data_start.checked_add(length)?;
+        let chunk_end = data_end.checked_add(4)?;
+        if chunk_end > bytes.len() {
+            return None;
+        }
+
+        if chunk_type == b"cICP" {
+            if length == 4 {
+                return bytes[data_start..data_end].try_into().ok();
+            }
+            return None;
+        }
+        if chunk_type == b"IDAT" || chunk_type == b"IEND" {
+            return None;
+        }
+        offset = chunk_end;
+    }
+    None
+}
+
+/// Converts encoded RGB pixels described solely by an ITU-T H.273 CICP 4-tuple
+/// `[color_primaries, transfer_characteristics, matrix_coefficients, video_full_range_flag]`
+/// into encoded sRGB.
+///
+/// Only full-range Identity-matrix SDR RGB CICP combinations are converted.
+/// HDR (PQ/HLG), narrow-range, YCbCr, and reserved/unspecified tuples fail closed
+/// without mutating `pixels`.
+pub fn normalize_encoded_rgb_cicp_to_srgb(
+    pixels: &mut [f32],
+    cicp: [u8; 4],
+) -> Result<bool, String> {
+    if !pixels.len().is_multiple_of(3) {
+        return Err("encoded RGB buffer does not contain complete pixels".to_string());
+    }
+
+    let [primaries_code, transfer_code, matrix_code, full_range_code] = cicp;
+    if matrix_code != 0 {
+        return Err(format!(
+            "unsupported CICP matrix_coefficients {matrix_code}; expected 0 (Identity RGB)"
+        ));
+    }
+    if full_range_code != 1 {
+        return Err(format!(
+            "unsupported CICP full_range flag {full_range_code}; expected 1 (full-range SDR)"
+        ));
+    }
+
+    let color_primaries = match primaries_code {
+        1 => CicpColorPrimaries::Bt709,
+        4 => CicpColorPrimaries::Bt470M,
+        5 => CicpColorPrimaries::Bt470Bg,
+        6 => CicpColorPrimaries::Bt601,
+        7 => CicpColorPrimaries::Smpte240,
+        9 => CicpColorPrimaries::Bt2020,
+        11 => CicpColorPrimaries::Smpte431,
+        12 => CicpColorPrimaries::Smpte432,
+        22 => CicpColorPrimaries::Ebu3213,
+        other => {
+            return Err(format!(
+                "unsupported or unspecified CICP color_primaries {other}"
+            ));
+        }
+    };
+
+    let transfer_characteristics = match transfer_code {
+        1 => TransferCharacteristics::Bt709,
+        4 => TransferCharacteristics::Bt470M,
+        5 => TransferCharacteristics::Bt470Bg,
+        6 => TransferCharacteristics::Bt601,
+        7 => TransferCharacteristics::Smpte240,
+        8 => TransferCharacteristics::Linear,
+        13 => TransferCharacteristics::Srgb,
+        16 => {
+            return Err(
+                "HDR PQ CICP transfer_characteristics (16) is outside the SDR sRGB contract"
+                    .to_string(),
+            );
+        }
+        18 => {
+            return Err(
+                "HDR HLG CICP transfer_characteristics (18) is outside the SDR sRGB contract"
+                    .to_string(),
+            );
+        }
+        other => {
+            return Err(format!(
+                "unsupported or unspecified CICP transfer_characteristics {other}"
+            ));
+        }
+    };
+
+    if color_primaries == CicpColorPrimaries::Bt709
+        && transfer_characteristics == TransferCharacteristics::Srgb
+    {
+        return Ok(false);
+    }
+    if pixels.is_empty() {
+        return Ok(false);
+    }
+
+    let source_profile = ColorProfile::new_from_cicp(CicpProfile {
+        color_primaries,
+        transfer_characteristics,
+        matrix_coefficients: MatrixCoefficients::Identity,
+        full_range: true,
+    });
+    if source_profile.red_trc.is_none()
+        || source_profile.green_trc.is_none()
+        || source_profile.blue_trc.is_none()
+    {
+        return Err(format!(
+            "failed to synthesize SDR RGB profile from CICP {cicp:?}"
+        ));
+    }
+
+    apply_rgb_profile_transform_to_srgb(pixels, &source_profile)?;
+    Ok(true)
+}
+
 pub fn srgb_preview_encoder(preset: Preset) -> Encoder {
     Encoder::new(preset).icc_profile(srgb_v4_profile().to_vec())
 }
@@ -170,6 +445,14 @@ mod tests {
             (actual - expected).abs() <= tolerance,
             "expected {expected}, got {actual}"
         );
+    }
+
+    fn synthetic_icc_header(color_space: &[u8; 4], declared_size: usize) -> Vec<u8> {
+        let mut profile = vec![0u8; declared_size.max(128)];
+        profile[0..4].copy_from_slice(&(declared_size as u32).to_be_bytes());
+        profile[16..20].copy_from_slice(color_space);
+        profile[36..40].copy_from_slice(b"acsp");
+        profile
     }
 
     #[test]
@@ -236,6 +519,99 @@ mod tests {
                 .is_err()
         );
         assert_eq!(oversized_pixels, original);
+
+        // Valid 128-byte RGB header with corrupt tag table must also fail closed without mutating pixels.
+        let mut corrupt_rgb = synthetic_icc_header(b"RGB ", 160);
+        corrupt_rgb[128..132].copy_from_slice(&999u32.to_be_bytes());
+        let mut corrupt_pixels = original;
+        assert!(normalize_encoded_rgb_profile_to_srgb(&mut corrupt_pixels, &corrupt_rgb).is_err());
+        assert_eq!(corrupt_pixels, original);
+    }
+
+    #[test]
+    fn cmyk_profile_is_classified_and_rejected_without_mutating_pixels() {
+        let cmyk_header = synthetic_icc_header(b"CMYK", 128);
+        assert_eq!(
+            inspect_icc_profile_header(&cmyk_header).unwrap(),
+            IccColorSpace::Cmyk
+        );
+
+        let original = [0.25, 0.5, 0.75];
+        let mut rgb_pixels = original;
+        let err = normalize_encoded_rgb_profile_to_srgb(&mut rgb_pixels, &cmyk_header)
+            .expect_err("CMYK profile must not be applied to RGB pixels");
+        assert!(err.contains("CMYK"));
+        assert_eq!(rgb_pixels, original);
+
+        let mut gray_pixels = [0.5, 0.5, 0.5];
+        let gray_err = normalize_encoded_gray_profile_to_srgb(&mut gray_pixels, &cmyk_header)
+            .expect_err("CMYK profile must not be applied to Gray pixels");
+        assert!(gray_err.contains("CMYK"));
+        assert_eq!(gray_pixels, [0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn gray_profile_normalizes_grayscale_pixels_and_rejects_mismatches() {
+        let gray_profile = ColorProfile::new_gray_with_gamma(1.8)
+            .encode()
+            .expect("encode deterministic Gray Gamma 1.8 profile");
+        assert_eq!(
+            inspect_icc_profile_header(&gray_profile).unwrap(),
+            IccColorSpace::Gray
+        );
+
+        // 0.5^1.8 = 0.28717459 linear -> sRGB OETF ≈ 0.5712
+        let mut pixels = [0.5_f32, 0.5, 0.5];
+        assert!(normalize_encoded_gray_profile_to_srgb(&mut pixels, &gray_profile).unwrap());
+        let expected = linear_to_srgb_channel(0.5_f32.powf(1.8));
+        assert_close(pixels[0], expected, 0.005);
+        assert_close(pixels[1], expected, 0.005);
+        assert_close(pixels[2], expected, 0.005);
+
+        // Applying an RGB profile through the Gray helper fails closed without mutating pixels.
+        let original = [0.3, 0.3, 0.3];
+        let mut mismatch = original;
+        assert!(normalize_encoded_gray_profile_to_srgb(&mut mismatch, srgb_v4_profile()).is_err());
+        assert_eq!(mismatch, original);
+    }
+
+    #[test]
+    fn cicp_sdr_profiles_normalize_and_hdr_or_invalid_cicp_fail_closed() {
+        // Standard sRGB CICP is an explicit no-op.
+        let mut srgb_pixels = [0.5, 0.25, 0.75];
+        assert!(!normalize_encoded_rgb_cicp_to_srgb(&mut srgb_pixels, [1, 13, 0, 1]).unwrap());
+        assert_eq!(srgb_pixels, [0.5, 0.25, 0.75]);
+
+        // Display P3 CICP ([12, 13, 0, 1]) matches Display P3 ICC conversion.
+        let mut p3_pixels = [0.5, 0.25, 0.75];
+        assert!(normalize_encoded_rgb_cicp_to_srgb(&mut p3_pixels, [12, 13, 0, 1]).unwrap());
+        assert_close(p3_pixels[0], 0.537, 0.004);
+        assert_close(p3_pixels[1], 0.232, 0.004);
+        assert_close(p3_pixels[2], 0.777, 0.004);
+
+        // Linear BT.709/sRGB CICP ([1, 8, 0, 1]) encodes linear 0.21404114 -> ~0.5 sRGB.
+        let mut linear_pixels = [0.214_041_14, 0.214_041_14, 0.214_041_14];
+        assert!(normalize_encoded_rgb_cicp_to_srgb(&mut linear_pixels, [1, 8, 0, 1]).unwrap());
+        assert_close(linear_pixels[0], 0.5, 0.003);
+
+        // HDR PQ/HLG, narrow-range, non-RGB matrix, and unspecified/reserved tuples must fail closed.
+        let original = [0.4, 0.5, 0.6];
+        for unsupported in [
+            [9, 16, 0, 1],  // BT.2020 PQ (HDR)
+            [9, 18, 0, 1],  // BT.2020 HLG (HDR)
+            [12, 13, 1, 1], // YCbCr matrix
+            [12, 13, 0, 0], // narrow range
+            [2, 13, 0, 1],  // unspecified primaries
+            [12, 2, 0, 1],  // unspecified transfer
+            [0, 13, 0, 1],  // reserved primaries
+        ] {
+            let mut pixels = original;
+            assert!(
+                normalize_encoded_rgb_cicp_to_srgb(&mut pixels, unsupported).is_err(),
+                "CICP {unsupported:?} must fail closed"
+            );
+            assert_eq!(pixels, original);
+        }
     }
 
     #[test]

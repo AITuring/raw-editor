@@ -80,6 +80,24 @@ for (const token of [
   expectIncludes(inputProfileNormalization, token, `embedded input profile conversion must contain ${token}`);
 }
 
+const grayProfileNormalization = functionBody(
+  colorManagement,
+  'normalize_encoded_gray_profile_to_srgb',
+  'embedded gray profile conversion',
+);
+for (const token of ['inspect_icc_profile_header(profile)', 'IccColorSpace::Gray', 'Layout::Gray', 'Layout::Rgb']) {
+  expectIncludes(grayProfileNormalization, token, `embedded gray profile conversion must contain ${token}`);
+}
+
+const cicpNormalization = functionBody(
+  colorManagement,
+  'normalize_encoded_rgb_cicp_to_srgb',
+  'CICP-only input conversion',
+);
+for (const token of ['ColorProfile::new_from_cicp', 'MatrixCoefficients::Identity', 'TransferCharacteristics::Srgb']) {
+  expectIncludes(cicpNormalization, token, `CICP-only input conversion must contain ${token}`);
+}
+
 const previewEncoder = functionBody(colorManagement, 'srgb_preview_encoder', 'WebView preview encoder');
 expectIncludes(
   previewEncoder,
@@ -131,6 +149,16 @@ expectIncludes(
   imageLoader,
   'normalize_encoded_rgb_profile_to_srgb(encoded_srgb.as_mut(), &profile)',
   'decoded non-RAW pixels must be normalized to encoded sRGB',
+);
+expectIncludes(
+  imageLoader,
+  'normalize_encoded_gray_profile_to_srgb(encoded_srgb.as_mut(), &profile)',
+  'decoded grayscale images with Gray ICC profiles must be normalized to encoded sRGB',
+);
+expectIncludes(
+  imageLoader,
+  'normalize_encoded_rgb_cicp_to_srgb(encoded_srgb.as_mut(), cicp)',
+  'CICP-only SDR PNG inputs must be normalized to encoded sRGB',
 );
 expectIncludes(imageProcessing, 'linear_to_srgb_channel(p[0])', 'RGBA CPU encoding must use the canonical OETF');
 expectIncludes(imageProcessing, 'srgb_to_linear_channel(p[0])', 'RGBA CPU decoding must use the canonical EOTF');

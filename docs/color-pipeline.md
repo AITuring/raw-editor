@@ -42,8 +42,7 @@ CPU 的唯一标量实现是
 
 ## 已知缺口
 
-1. **嵌入输入 ICC**：当前闭环覆盖解码器能暴露的 RGB profile，限制为 4 MiB。CMYK/Gray 输入、
-   profile 无法解析或超限时仍按 sRGB 兼容回退；CICP-only 输入尚未单独纳入合同。
+1. **嵌入输入 ICC**：当前闭环覆盖解码器暴露的 RGB 与灰度（Gray）ICC profile（限制为 4 MiB），以及无 `iCCP` 块时的全范围 SDR RGB PNG `cICP`（CICP-only，如 Display P3 / Linear sRGB / BT.2020）。CMYK、HDR（PQ/HLG）或窄范围 CICP、畸形/超限 profile 仍显式记录警告并按 sRGB 兼容回退，且不破坏原像素与解码流程。
 2. **显示器 ICC**：日常 SDR 显示依赖 WebView/系统合成器根据 sRGB ICC 或 sRGB surface 做逐显示器
    映射。应用尚未提供自定义显示 profile、软打样、纸张/油墨模拟或显示 profile 调试覆盖。
 3. 核心编辑 JPEG 已嵌入 ICC；旧 HDR/全景等非 basic 主链路的 PNG 预览仍依赖浏览器默认 sRGB，

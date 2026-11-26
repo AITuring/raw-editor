@@ -6,7 +6,11 @@
 
 use crate::Cursor;
 use crate::app_settings::AppSettings;
-use crate::color_management::normalize_encoded_rgb_profile_to_srgb;
+use crate::color_management::{
+    IccColorSpace, extract_png_cicp_chunk, inspect_icc_profile_header,
+    normalize_encoded_gray_profile_to_srgb, normalize_encoded_rgb_cicp_to_srgb,
+    normalize_encoded_rgb_profile_to_srgb,
+};
 use crate::formats::is_psd_file;
 use crate::formats::is_raw_file;
 use crate::image_processing::apply_orientation;
@@ -420,12 +424,51 @@ pub fn load_image_with_orientation(
     };
 
     check_cancel()?;
+    let is_grayscale_source = matches!(
+        oriented_image.color(),
+        image::ColorType::L8
+            | image::ColorType::La8
+            | image::ColorType::L16
+            | image::ColorType::La16
+    );
+    let embedded_cicp = if embedded_icc.is_none() && format == Some(image::ImageFormat::Png) {
+        extract_png_cicp_chunk(bytes)
+    } else {
+        None
+    };
     let mut encoded_srgb = oriented_image.to_rgb32f();
     if let Some(profile) = embedded_icc {
-        match normalize_encoded_rgb_profile_to_srgb(encoded_srgb.as_mut(), &profile) {
-            Ok(true) => log::debug!("Converted embedded RGB ICC profile to sRGB"),
+        match inspect_icc_profile_header(&profile) {
+            Ok(IccColorSpace::Gray) if is_grayscale_source => {
+                match normalize_encoded_gray_profile_to_srgb(encoded_srgb.as_mut(), &profile) {
+                    Ok(true) => log::debug!("Converted embedded Gray ICC profile to sRGB"),
+                    Ok(false) => {}
+                    Err(error) => {
+                        log::warn!("Ignoring unsupported embedded Gray ICC profile: {error}")
+                    }
+                }
+            }
+            Ok(IccColorSpace::Gray) => {
+                log::warn!(
+                    "Ignoring embedded Gray ICC profile on non-grayscale image; keeping sRGB fallback"
+                );
+            }
+            Ok(IccColorSpace::Cmyk) => {
+                log::warn!(
+                    "Ignoring embedded CMYK ICC profile after RGB decode; keeping sRGB fallback"
+                );
+            }
+            _ => match normalize_encoded_rgb_profile_to_srgb(encoded_srgb.as_mut(), &profile) {
+                Ok(true) => log::debug!("Converted embedded RGB ICC profile to sRGB"),
+                Ok(false) => {}
+                Err(error) => log::warn!("Ignoring unsupported embedded ICC profile: {error}"),
+            },
+        }
+    } else if let Some(cicp) = embedded_cicp {
+        match normalize_encoded_rgb_cicp_to_srgb(encoded_srgb.as_mut(), cicp) {
+            Ok(true) => log::debug!("Converted CICP-only PNG ({cicp:?}) to sRGB"),
             Ok(false) => {}
-            Err(error) => log::warn!("Ignoring unsupported embedded ICC profile: {error}"),
+            Err(error) => log::warn!("Ignoring unsupported CICP metadata ({cicp:?}): {error}"),
         }
     }
     check_cancel()?;

@@ -5,7 +5,7 @@ use image::{DynamicImage, ExtendedColorType, ImageBuffer, ImageEncoder, ImageRea
 use moxcms::ColorProfile;
 
 use super::{load_image_with_orientation, load_psd_image, read_embedded_icc};
-use crate::color_management::srgb_v4_profile;
+use crate::color_management::{MAX_EMBEDDED_ICC_BYTES, linear_to_srgb_channel, srgb_v4_profile};
 
 fn encode_rgb_png(pixel: [u8; 3], profile: Option<Vec<u8>>) -> Vec<u8> {
     let mut bytes = Vec::new();
@@ -119,6 +119,114 @@ fn untagged_or_malformed_profile_falls_back_to_srgb_assumption() {
 
     assert_pixel_close("untagged PNG", decoded_pixel(&untagged), expected, 1.0e-6);
     assert_pixel_close("malformed PNG", decoded_pixel(&malformed), expected, 1.0e-6);
+}
+
+fn png_crc32(chunk_type: &[u8; 4], payload: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFFu32;
+    for &byte in chunk_type.iter().chain(payload.iter()) {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xEDB8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}
+
+fn insert_png_chunk_before_idat(png: &[u8], chunk_type: &[u8; 4], payload: &[u8]) -> Vec<u8> {
+    let mut offset = 8usize;
+    while offset + 12 <= png.len() {
+        let len = u32::from_be_bytes(png[offset..offset + 4].try_into().unwrap()) as usize;
+        if &png[offset + 4..offset + 8] == b"IDAT" {
+            let mut out = Vec::with_capacity(png.len() + 12 + payload.len());
+            out.extend_from_slice(&png[..offset]);
+            out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+            out.extend_from_slice(chunk_type);
+            out.extend_from_slice(payload);
+            out.extend_from_slice(&png_crc32(chunk_type, payload).to_be_bytes());
+            out.extend_from_slice(&png[offset..]);
+            return out;
+        }
+        offset += 12 + len;
+    }
+    panic!("IDAT chunk not found in test PNG");
+}
+
+#[test]
+fn grayscale_png_with_gray_gamma_icc_normalizes_to_srgb() {
+    let gray_profile = ColorProfile::new_gray_with_gamma(1.8)
+        .encode()
+        .expect("encode Gray Gamma 1.8 profile");
+    let mut bytes = Vec::new();
+    let mut encoder = PngEncoder::new(&mut bytes);
+    encoder
+        .set_icc_profile(gray_profile)
+        .expect("attach Gray ICC profile");
+    encoder
+        .write_image(&[128u8], 1, 1, ExtendedColorType::L8)
+        .expect("encode grayscale PNG");
+
+    let expected_channel = linear_to_srgb_channel((128.0_f32 / 255.0).powf(1.8));
+    assert_pixel_close(
+        "Gray Gamma 1.8 PNG",
+        decoded_pixel(&bytes),
+        [expected_channel; 3],
+        0.008,
+    );
+}
+
+#[test]
+fn cmyk_and_oversized_icc_profiles_fall_back_safely_during_decode() {
+    let expected = [128.0 / 255.0, 64.0 / 255.0, 191.0 / 255.0];
+
+    let mut cmyk_icc = vec![0u8; 128];
+    cmyk_icc[0..4].copy_from_slice(&128u32.to_be_bytes());
+    cmyk_icc[16..20].copy_from_slice(b"CMYK");
+    cmyk_icc[36..40].copy_from_slice(b"acsp");
+    let cmyk_png = encode_rgb_png([128, 64, 191], Some(cmyk_icc));
+    assert_pixel_close(
+        "CMYK-tagged PNG",
+        decoded_pixel(&cmyk_png),
+        expected,
+        1.0e-6,
+    );
+
+    let mut oversized_icc = vec![0u8; MAX_EMBEDDED_ICC_BYTES + 4];
+    oversized_icc[0..4].copy_from_slice(&((MAX_EMBEDDED_ICC_BYTES + 4) as u32).to_be_bytes());
+    oversized_icc[16..20].copy_from_slice(b"RGB ");
+    oversized_icc[36..40].copy_from_slice(b"acsp");
+    let oversized_png = encode_rgb_png([128, 64, 191], Some(oversized_icc));
+    assert_pixel_close(
+        "oversized-ICC PNG",
+        decoded_pixel(&oversized_png),
+        expected,
+        1.0e-6,
+    );
+}
+
+#[test]
+fn cicp_only_display_p3_png_normalizes_and_hdr_cicp_falls_back_safely() {
+    let base_png = encode_rgb_png([128, 64, 191], None);
+    let p3_cicp_png = insert_png_chunk_before_idat(&base_png, b"cICP", &[12, 13, 0, 1]);
+    assert!(embedded_icc(&p3_cicp_png).is_none());
+    assert_pixel_close(
+        "CICP-only Display P3 PNG",
+        decoded_pixel(&p3_cicp_png),
+        [0.539, 0.233, 0.776],
+        0.008,
+    );
+
+    let pq_hdr_png = insert_png_chunk_before_idat(&base_png, b"cICP", &[9, 16, 0, 1]);
+    let expected = [128.0 / 255.0, 64.0 / 255.0, 191.0 / 255.0];
+    assert_pixel_close(
+        "CICP-only HDR PQ PNG fallback",
+        decoded_pixel(&pq_hdr_png),
+        expected,
+        1.0e-6,
+    );
 }
 
 #[test]
