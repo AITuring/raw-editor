@@ -351,7 +351,9 @@ flowchart LR
     - C1 已合入：睡觉45 0.25 density 生效（factor 1.379），闭环收敛，QG pass；原生拒绝只因 0.25 下 `local_scale_median` 为诊断项；tone degraded 2.0746/2处。
     - C6 已合入：马远2 scale=1 `effective_pixel_count` 由证据不足变 pass（0.99848），5 个配准失败、零 owner 的来源被排除并记录；TIFF 与改前相同（`60f58640…`）。剩余 QG 失败：边界 2 样本 3.0/1.0px、owner 163 处不可测。
     - C5 未达条件、不进生产：同二进制 5×5 时 owner 一项 pass，但 TIFF 变为 `1245e891…`，约 15.2% 字节不同。原因：`resolve_native_owner_geometry` 同时用于渲染和证据重放，stencil 半径会改输出像素，并非只改 QG 测量。默认保持 3×3，半径 2 开关仍为 test-only。
-    - 未做：赵佶 0.25（C1）对照，以及各条实测与 what-if 预测的逐项对表。
+    - 赵佶 0.25（C1）：density 由 rejected 变 applied（factor 1.293），闭环收敛，QG pass，与 what-if 预测一致；原生拒绝只因 0.25 下 `local_scale_median` 为诊断项。
+    - 睡觉45 scale=1（首次）：density 为 `nonidentity_world_residual` bypass（factor 1.0），C1 在 scale=1 不起作用；QG fail 只在 local-scale 两项，8 个 ROI 中两处约 0.90/0.91（世界 [6724,3284] DSC_6469、[1476,3412] DSC_6488）；tone degraded max 3.336/6 处；峰值 RSS 10.34GiB，约 113 分钟。读法：local-scale 失败对应 residual warp 绕过 density 规划，属 2B.8/C7，不是 C1 的问题。
+    - C1、C6 已按预测落地；2B.10 剩余内容转 2B.8/C7 之后。
 
 - [ ] 2B.11 候选素材推进到 D3 并入复看队列（线B）
   - 目标：新合同下至少 2 套素材到 D3 并进入复看队列（总数≤3）。

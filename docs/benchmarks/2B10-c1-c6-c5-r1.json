@@ -9,8 +9,13 @@
   },
   "user_decisions": "C1 approved; C3 rejected; C5 conditional on a same-binary A/B with byte-identical TIFF; C6 option a",
   "regression": {
-    "quick": {"matrix": "output/acceptance/2B.10/matrix-2b10-r1-quick/matrix.json", "status": "pass", "cases": "7/7"},
-    "medium": {"matrix": "output/acceptance/2B.10/matrix-2b10-r1-medium/matrix.json", "status": "pass", "cases": "5/5", "tiff_changes": 0}
+    "quick": { "matrix": "output/acceptance/2B.10/matrix-2b10-r1-quick/matrix.json", "status": "pass", "cases": "7/7" },
+    "medium": {
+      "matrix": "output/acceptance/2B.10/matrix-2b10-r1-medium/matrix.json",
+      "status": "pass",
+      "cases": "5/5",
+      "tiff_changes": 0
+    }
   },
   "runs": [
     {
@@ -33,7 +38,11 @@
       "directory": "output/acceptance/2B.10/mayuan-2-c6-mayuan2-s1-stencil3",
       "effective_pixel_count": "pass (0.99848), 5 registration-failed zero-owned sources excluded and recorded",
       "quality_gate": "fail",
-      "criteria": {"boundary_stroke_alignment": "fail (2 samples, 3.0/1.0 px)", "owner_sharpness_coverage": "insufficient_evidence (163 unresolved)", "others": "pass or not_applicable"},
+      "criteria": {
+        "boundary_stroke_alignment": "fail (2 samples, 3.0/1.0 px)",
+        "owner_sharpness_coverage": "insufficient_evidence (163 unresolved)",
+        "others": "pass or not_applicable"
+      },
       "tone": "max 0.64",
       "peak_rss_bytes": 13487685632,
       "wall_seconds": 11498.7,
@@ -45,7 +54,11 @@
       "dataset": "mayuan-2, scale 1, exclusive",
       "directory": "output/acceptance/2B.10/mayuan-2-c5-mayuan2-s1-stencil5",
       "quality_gate": "fail",
-      "criteria": {"boundary_stroke_alignment": "fail", "owner_sharpness_coverage": "pass", "others": "pass or not_applicable"},
+      "criteria": {
+        "boundary_stroke_alignment": "fail",
+        "owner_sharpness_coverage": "pass",
+        "others": "pass or not_applicable"
+      },
       "peak_rss_bytes": 11677466624,
       "wall_seconds": 10814.0,
       "tiff_sha256": "1245e8910f39be5c4bf1a9ea3596ae7919dec53a6365937bc0319d162959c0f0",
@@ -57,6 +70,40 @@
         "first_differing_offset": 534773760,
         "last_differing_offset": 1172242432
       }
+    },
+    {
+      "contract": "C1",
+      "dataset": "zhaoji 47, scale 0.25",
+      "directory": "output/acceptance/2B.10/zhaoji-c1-zhaoji-s025",
+      "before": "task17/zhaoji-d1-r1: density rejected (output_pixel_closure_limit_exceeded), QG not run",
+      "whatif_C1_prediction": "density applied, QG needs_rerun",
+      "density_factor": 1.29296875,
+      "closure": "converged",
+      "quality_gate": "pass",
+      "native_status": "rejected",
+      "native_reject_reason": "local_scale_median is diagnostic-only at scale 0.25",
+      "peak_rss_bytes": 11733090304,
+      "tiff_sha256": "6ffb5f83dd015135291e220b68e2e99b7e76d77273f8e68c5585ec6651a75ba4"
+    },
+    {
+      "contract": "C1 at full resolution",
+      "dataset": "sleeping 45, scale 1, exclusive (first scale-1 run of this set)",
+      "directory": "output/acceptance/2B.10/sleeping-c1-sleeping45-s1",
+      "density": "bypassed (nonidentity_world_residual), factor 1.0, so C1 does not take effect at scale 1",
+      "closure": "converged",
+      "stations": 15,
+      "output_px": [12113, 10280],
+      "quality_gate": "fail",
+      "criteria": {
+        "local_scale_median": "fail: 8 ROIs, two below 0.98 by a wide margin (0.8989 at world [6724,3284] DSC_6469, 0.9107 at [1476,3412] DSC_6488)",
+        "local_scale_pixel_ratio": "fail: the same two ROIs have pixel ratio 0.0",
+        "others": "pass or not_applicable"
+      },
+      "tone": "degraded, boundary Delta E00 max 3.336 (threshold 1.5), 6 violations, stations 10/13 among them",
+      "peak_rss_bytes": 11101618176,
+      "wall_seconds": 6759.5,
+      "tiff_sha256": "a75ba579aa2d9ebd7e274c308c7b0a2ad506a0549fa5abf9ea6e937cc1b4ab46",
+      "reading": "the local-scale failures sit where density planning is bypassed by the residual warp; this is the 2B.8/C7 problem, not a C1 problem"
     }
   ],
   "conclusion": {
