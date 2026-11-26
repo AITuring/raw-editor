@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "task": "2B.8",
+  "date": "2026-11-26",
+  "verified_by": "L0",
+  "commit": {
+    "frozen": "e4567e1c4aea4fa6c28e0436e7eb452f47a3a5b5",
+    "merged": "21192a38",
+    "note": "21192a38 is the same commit rebased onto v1 af6cbff0; src-tauri/src is identical to the frozen commit (v1 commits in between touch only UI, i18n, CI, tauri.conf.json and stack-lab determinism.py)"
+  },
+  "binary": {
+    "label": "2B8-residual-jacobian-l0-r1",
+    "sha256": "5d193eb42c607235e9dd239ae7899fe3d37b906bd9409b104b0fd1a4960576f6"
+  },
+  "fix": "option C: overlapping residual regions of one station are combined by edge-weight-normalized averaging; single-region stations keep the old bit pattern; forward and inverse share one helper; WarpRegionRecord.right_station is recorded (serde default for old reports); test-only plan_output_density_residual_aware; production nonidentity_world_residual bypass unchanged",
+  "tests": {"targeted": "20 passed / 0 failed (residual_warp 9, properties::residual_jacobian 2, output_density 8, report schema 1)"},
+  "regression": {
+    "quick": {"matrix": "output/acceptance/2B.8/matrix-2b8-l0-r1-quick-quick/matrix.json", "status": "pass"},
+    "medium": {"matrix": "output/acceptance/2B.8/matrix-2b8-l0-r1-medium-medium/matrix.json", "status": "pass", "tiff": "sleeping-9 cold/hot 718a903d, langyuan-10 0011ce0a, wenyuan-10 8ce0afa0 identical to 2B.10; lanting-framed case pass"}
+  },
+  "mayuan2_scale1_residual_density": {
+    "directory": "output/acceptance/2B.8/mayuan-2-mayuan2-s1-residual-density",
+    "baseline": "output/acceptance/task-16/mayuan-2-mayuan-2-native-residual-density-diagnostic-r1",
+    "tiff_sha256": "60f5864016550e6529d09f133354b58e15c1ce436f2b1f57cffd851986d5bad3",
+    "tiff_vs_2B10_control": "identical",
+    "peak_rss_bytes": 12542181376,
+    "samples": 1788082,
+    "per_sample_vs_task16": "all 1788082 samples bit-identical (0 changed, 0 added, 0 removed)",
+    "residual_regions": "17 regions, exactly one per station 1..17, no overlapping pair, so the fix takes the unchanged single-region path everywhere",
+    "all_samples": {"min": 0.01725085664235415, "p01": 0.8607329844052495, "median": 1.0560081586170793, "below_0_75": 3460, "worst": {"station": 8, "point": [8097, 5409], "source": 18}},
+    "excluding_station_x_ge_7500": {"samples": 1634705, "min": 0.7999895883496015, "p01": 0.8617942416421858, "below_0_75": 0, "worst": {"station": 16, "point": [2145, 2369], "source": 45}},
+    "all_3460_low_samples_at_station_x_ge_7500": true
+  },
+  "conclusion": "The overlapping-region discontinuity was a real defect and is fixed, with no output change on any regression or mayuan-2 run. It is not the cause of the mayuan-2 low composed scale: mayuan-2 has no overlapping regions, and every sample below 0.75 lies at station x >= 7500. Excluding those, the minimum is 0.80, above the 0.75 bound. The remaining suspect is the source right-edge mapping in FocusSourceSampling::mapping (focus_layers.rs), consistent with the 2B.9 langyuan folded probes. 2B.8 demo criterion (minimum back in contract range) is not met by this fix."
+}

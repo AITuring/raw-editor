@@ -331,6 +331,10 @@ flowchart LR
   - 修改：`panorama_utils/stack_pipeline/residual_warp.rs` 与 `residual_warp/`、`panorama_stitching/output_density.rs`（test-only 部分）。资源：`build`。依赖：2B.1。冲突：任务13–16、2B.10（站点求解组内串行）。
   - 测试：属性与回归测试；快速层；中等层中阆苑10/文苑10 TIFF 若变须逐项说明，否则视为修复失败。
   - 演示：马远2 重新导出诊断，合成尺度最小值回到合同范围；写出 `docs/benchmarks/residual-jacobian-contract-r1.json`。
+  - 进度（2026-11-26，L0 冻结 `2B8-residual-jacobian-l0-r1` 验证，提交 `21192a38` 已快进 v1）：修复选 C（同 station 重叠区域按边缘权重归一化加权，单区域保持旧位模式）。定向测试 20/20，快速层、中等层通过，TIFF 不变。见[摘要](../../../docs/benchmarks/residual-jacobian-contract-r1.json)。
+    - 马远2 scale=1 诊断与任务16逐样本完全相同（1,788,082 个，0 变化），TIFF 仍为 `60f58640…`：马远2 共 17 个区域，每个 station 只有一个，没有重叠，所以修复走的是不变的单区域路径。
+    - 全部样本 min 0.01725；剔除 station x≥7500 后 min 0.7999895883496015，<0.75 为 0 个；3460 个低尺度样本全部在 x≥7500。
+    - 结论：重叠区域跳变是真实缺陷，已修复；但它不是马远2低尺度的原因，演示标准未达成，本项不勾选。剩余嫌疑为 `focus_layers.rs` 的源图右缘映射（与 2B.9 阆苑折叠探针一致），需新开一项。
 
 - [x] 2B.9 阆苑无效探针与 tone 内容匹配诊断（线B，test-only，2026-11-23）
   - 目标：为 C2、C4、C7 提供缺少的测量。
