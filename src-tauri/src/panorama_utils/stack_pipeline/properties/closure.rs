@@ -97,6 +97,7 @@ pub(super) fn closure_direct_pair_p95_numeric_oracle(
     closure_summary_numeric_oracle(errors).1
 }
 
+#[allow(clippy::type_complexity)]
 pub(super) fn accepted_closure_fixture(
     seed: u64,
 ) -> (

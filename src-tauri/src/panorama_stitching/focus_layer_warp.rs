@@ -335,12 +335,12 @@ pub(super) fn foreground_edge_samples(
                     run_start = Some(y);
                 }
                 last_occupied = Some(y);
-            } else if let (Some(start), Some(last)) = (run_start, last_occupied) {
-                if y - last > maximum_gap {
-                    runs.push((start, last));
-                    run_start = None;
-                    last_occupied = None;
-                }
+            } else if let (Some(start), Some(last)) = (run_start, last_occupied)
+                && y - last > maximum_gap
+            {
+                runs.push((start, last));
+                run_start = None;
+                last_occupied = None;
             }
         }
         if let (Some(start), Some(last)) = (run_start, last_occupied) {

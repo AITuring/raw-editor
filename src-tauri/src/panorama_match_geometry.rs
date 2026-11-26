@@ -515,13 +515,8 @@ pub(super) fn verify_match_geometry(
         // brush strokes often produce a large projective consensus while the
         // constrained similarity fit has a much larger residual; retaining
         // those points would let a false edge reorder the whole mosaic.
-        let Some(similarity) = estimate_similarity(&inlier_points) else {
-            return None;
-        };
-        let Some((similarity, model_inliers, _)) = panorama_model_fit(similarity, &inlier_points)
-        else {
-            return None;
-        };
+        let similarity = estimate_similarity(&inlier_points)?;
+        let (similarity, model_inliers, _) = panorama_model_fit(similarity, &inlier_points)?;
         if model_inliers.len() < minimum_inliers {
             return None;
         }

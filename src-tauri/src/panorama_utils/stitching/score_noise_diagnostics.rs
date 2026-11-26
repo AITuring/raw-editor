@@ -461,6 +461,7 @@ impl ScoreNoiseDiagnostics {
                 ScoreNoiseAttributionCounts,
             ),
         > = HashMap::new();
+        #[allow(clippy::needless_range_loop)]
         for cell in 0..self.geometry.cell_count() {
             let candidates = self.candidates[cell].clone();
             let mut ranked = candidates

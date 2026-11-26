@@ -124,6 +124,7 @@ fn add_neighbor_pairs(
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn pairs_to_match_for_images(
     images: &[ImageInfo],
     blend_mode: BlendMode,

@@ -54,6 +54,7 @@ use crate::panorama_utils::{processing, stitching};
 pub use crate::panorama_utils::shared::{
     Descriptor, Feature, ImageInfo, KeyPoint, Match, MatchInfo,
 };
+#[allow(dead_code)]
 pub const BRIEF_DESCRIPTOR_SIZE: usize = crate::panorama_utils::shared::BRIEF_DESCRIPTOR_SIZE;
 pub(crate) use crate::panorama_utils::shared::{FocusLayerWarp, FocusWarpBand};
 

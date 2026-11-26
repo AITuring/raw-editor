@@ -138,6 +138,7 @@ pub(super) struct BoundaryEdge {
 pub(super) struct BoundaryPairEvidence {
     pub(super) world: (f64, f64),
     pub(super) error: f64,
+    #[allow(dead_code)]
     pub(super) strength: f64,
     pub(super) owner_path: String,
 }
@@ -180,6 +181,7 @@ pub(super) fn boundary_observation_can_replace(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn boundary_edge_on_side_matching<F>(
     image: &Rgb32FImage,
     coverage: &GrayImage,
@@ -426,6 +428,7 @@ where
     Ok(best)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn boundary_edge_on_side(
     image: &Rgb32FImage,
     coverage: &GrayImage,
@@ -483,6 +486,7 @@ pub(super) fn boundary_pair_error(
     Ok((left, right))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn boundary_pair_error_for_stations_with_threshold(
     image: &Rgb32FImage,
     coverage: &GrayImage,
@@ -709,6 +713,7 @@ pub(super) fn boundary_rejection_priority(reason: &str) -> u8 {
 /// contribute at most one independently detected two-sided stroke pair; this
 /// keeps the sample population spatially deterministic and prevents jagged
 /// one-pixel owner transitions from inflating the criterion.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn measure_large_boundaries(
     image: &Rgb32FImage,
     coverage: &GrayImage,

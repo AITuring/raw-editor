@@ -739,8 +739,8 @@ pub(super) fn contrasted_native_control_location(
                     base.masked(px, py - 1.0),
                     base.masked(px, py + 1.0),
                 ) {
-                    let gx = f64::from(luma(r) - luma(l)) * 0.5;
-                    let gy = f64::from(luma(b) - luma(t)) * 0.5;
+                    let gx = (luma(r) - luma(l)) * 0.5;
+                    let gy = (luma(b) - luma(t)) * 0.5;
                     maximum = maximum.max(gx.hypot(gy));
                     xx += gx * gx;
                     xy += gx * gy;

@@ -100,8 +100,10 @@ fn native_artifact_export_reports_verified_tiff_and_preserves_quality_evidence()
     };
     let directory = tempfile::tempdir().unwrap();
     let report_path = directory.path().join("report.json");
-    let mut original = StackReport::default();
-    original.run_id = "artifact-test".into();
+    let mut original = StackReport {
+        run_id: "artifact-test".into(),
+        ..StackReport::default()
+    };
     original.quality_gate.verdict = QualityGateVerdict::Pass;
     std::fs::write(&report_path, serde_json::to_vec(&original).unwrap()).unwrap();
     let image = DynamicImage::ImageRgba16(ImageBuffer::from_fn(3, 2, |x, y| {
@@ -133,8 +135,10 @@ fn native_artifact_export_failure_cannot_be_hidden_by_quality_gate_pass() {
     };
     let directory = tempfile::tempdir().unwrap();
     let report_path = directory.path().join("report.json");
-    let mut report = StackReport::default();
-    report.run_id = "artifact-failure-test".into();
+    let mut report = StackReport {
+        run_id: "artifact-failure-test".into(),
+        ..StackReport::default()
+    };
     report.quality_gate.verdict = QualityGateVerdict::Pass;
     std::fs::write(&report_path, serde_json::to_vec(&report).unwrap()).unwrap();
     let blocked = directory.path().join("blocked");

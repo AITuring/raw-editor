@@ -648,8 +648,9 @@ pub(super) fn source_raw_direct_grid_centers(
     let (columns, rows) = SOURCE_RAW_DIRECT_GRID;
     (0..rows)
         .flat_map(|row| {
-            (0..columns).filter_map(move |column| {
-                ((column + row) % 2 != fold % 2).then(|| {
+            (0..columns)
+                .filter(move |&column| (column + row) % 2 != fold % 2)
+                .map(move |column| {
                     (
                         (column, row),
                         Point2::new(
@@ -658,7 +659,6 @@ pub(super) fn source_raw_direct_grid_centers(
                         ),
                     )
                 })
-            })
         })
         .collect()
 }

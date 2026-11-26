@@ -377,6 +377,7 @@ pub async fn preview_batch_geometry_correction(
 /// when available, the matching Lensfun distortion calibration. It deliberately
 /// bypasses existing editor sidecars so the workflow never changes source edits or files.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn batch_geometry_correction(
     paths: Vec<String>,
     output_folder: String,
@@ -519,7 +520,7 @@ pub async fn batch_geometry_correction(
     };
 
     let export_settings = ExportSettings {
-        bit_depth: default_export_bit_depth_for_format(&output_format),
+        bit_depth: default_export_bit_depth_for_format(output_format),
         jpeg_quality: jpeg_quality.clamp(1, 100),
         resize: None,
         keep_metadata: true,

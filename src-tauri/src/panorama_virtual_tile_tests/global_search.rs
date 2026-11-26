@@ -445,7 +445,7 @@ fn unrelated_global_proposals_do_not_bypass_dense_station_relation_gates() {
     let right = GrayImage::from_fn(width, height, |x, y| {
         image::Luma([((x * 71 + y * 29 + x * y * 3) % 251) as u8])
     });
-    let coverages = vec![full_coverage(width, height), full_coverage(width, height)];
+    let coverages = [full_coverage(width, height), full_coverage(width, height)];
     let tiles = vec![plane_info(0, left.clone()), plane_info(1, right.clone())];
     let mut pyramid = VirtualTileMatchPyramid::new(vec![1], 2);
     pyramid

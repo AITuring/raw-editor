@@ -215,14 +215,17 @@ impl ProxyCoordinateTransform {
         })
     }
 
+    #[allow(dead_code)]
     pub(crate) fn full_to_proxy(&self, x: f64, y: f64) -> Option<(f64, f64)> {
         (x.is_finite() && y.is_finite()).then_some((x * self.scale_x, y * self.scale_y))
     }
 
+    #[allow(dead_code)]
     pub(crate) fn proxy_to_full(&self, x: f64, y: f64) -> Option<(f64, f64)> {
         (x.is_finite() && y.is_finite()).then_some((x / self.scale_x, y / self.scale_y))
     }
 
+    #[allow(dead_code)]
     pub(crate) fn round_trip_error(&self, x: f64, y: f64) -> Option<f64> {
         let (proxy_x, proxy_y) = self.full_to_proxy(x, y)?;
         let (full_x, full_y) = self.proxy_to_full(proxy_x, proxy_y)?;
@@ -276,6 +279,7 @@ impl ProxyImage {
         })
     }
 
+    #[allow(dead_code)]
     pub(crate) fn coordinate_transform(&self) -> Result<ProxyCoordinateTransform, String> {
         ProxyCoordinateTransform::new(
             self.full_width,

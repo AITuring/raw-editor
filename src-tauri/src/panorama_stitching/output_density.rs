@@ -241,7 +241,7 @@ pub(super) fn native_density_samples(
                     result.boundary_probes += 1;
                     continue;
                 }
-                if let Some(source_per_station) = differential(&map, point) {
+                if let Some(source_per_station) = differential(map, point) {
                     result.samples.push(DensitySample {
                         source_id,
                         point,

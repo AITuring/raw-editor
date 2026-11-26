@@ -56,6 +56,7 @@ pub(super) fn masked_rgb_at(
     rgb_at(image, x, y)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn streaming_analysis_disagreement(
     base: &Rgb32FImage,
     base_mask: &GrayImage,
@@ -680,6 +681,7 @@ pub(super) fn streaming_ownership_with_long_side(
     ownership_grid(base, base_mask, sampler, tone, width, height, size, true)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn ownership_grid(
     base: &Rgb32FImage,
     base_mask: &GrayImage,

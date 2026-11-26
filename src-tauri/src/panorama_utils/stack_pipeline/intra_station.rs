@@ -29,9 +29,11 @@ use super::report::{
 pub(crate) const INTRA_STATION_ANALYSIS_LONG_SIDE: u32 = 1_400;
 
 /// Hard upper bound for the actual intra-station analysis long side (需求 2.2).
+#[allow(dead_code)]
 pub(crate) const INTRA_STATION_ANALYSIS_MAX_LONG_SIDE: u32 = 2_048;
 
 /// Finite native-pixel ceiling for neighbouring refinement controls (需求 2.3).
+#[allow(dead_code)]
 pub(crate) const INTRA_STATION_CONTROL_POINT_MAX_SPACING_PX: f64 = 112.0;
 
 /// Maximum refinement-grid spacing relative to the ownership cell side.
@@ -40,10 +42,12 @@ pub(crate) const INTRA_STATION_CONTROL_POINT_MAX_SPACING_PX: f64 = 112.0;
 /// estimates a smooth geometric field, while ownership routes pixel source
 /// labels around detail. Bounding the ratio prevents the former from becoming
 /// arbitrarily sparse without claiming both grids have equal density.
+#[allow(dead_code)]
 pub(crate) const INTRA_STATION_CONTROL_POINT_MAX_OWNERSHIP_RATIO: f64 = 8.0;
 
 /// Whether a measured native control-point spacing obeys the bounded feasible
 /// rule `s <= min(112px, 8c)` (需求 2.3).
+#[allow(dead_code)]
 pub(crate) fn control_point_spacing_is_bounded(spacing_px: f64, ownership_cell_px: u32) -> bool {
     spacing_px.is_finite()
         && spacing_px >= 0.0

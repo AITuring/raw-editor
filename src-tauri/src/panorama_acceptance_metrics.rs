@@ -740,7 +740,11 @@ mod tests {
 
     fn striped(width: u32, height: u32, period: u32) -> LumaF32 {
         LumaF32::from_fn(width, height, |x, _| {
-            Luma([if (x / period) % 2 == 0 { 0.2 } else { 0.8 }])
+            Luma([if (x / period).is_multiple_of(2) {
+                0.2
+            } else {
+                0.8
+            }])
         })
     }
 

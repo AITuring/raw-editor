@@ -47,6 +47,7 @@ pub(super) fn focus_tile_ownership_should_replace(
 /// source sample is farther from its own border owns the pixel; this favours
 /// native, sharp interior pixels and prevents averaging two slightly displaced
 /// focus results.
+#[allow(dead_code)]
 pub fn focus_tile_ownership_stitcher<R: Runtime, F>(
     images: &[&ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,

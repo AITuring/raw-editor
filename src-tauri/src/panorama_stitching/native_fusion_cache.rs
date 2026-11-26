@@ -332,19 +332,21 @@ mod tests {
 
     #[test]
     fn state_fingerprint_ignores_frame_record_arrival_order_but_keeps_evidence() {
-        let mut station = IntraStationReport::default();
-        station.frames = vec![
-            IntraStationFrameRecord {
-                path: "b.NEF".to_string(),
-                inliers: 30,
-                ..Default::default()
-            },
-            IntraStationFrameRecord {
-                path: "a.NEF".to_string(),
-                inliers: 40,
-                ..Default::default()
-            },
-        ];
+        let mut station = IntraStationReport {
+            frames: vec![
+                IntraStationFrameRecord {
+                    path: "b.NEF".to_string(),
+                    inliers: 30,
+                    ..Default::default()
+                },
+                IntraStationFrameRecord {
+                    path: "a.NEF".to_string(),
+                    inliers: 40,
+                    ..Default::default()
+                },
+            ],
+            ..IntraStationReport::default()
+        };
         let fingerprint = state_fingerprint(Some(&station));
         station.frames.reverse();
         assert_eq!(state_fingerprint(Some(&station)), fingerprint);

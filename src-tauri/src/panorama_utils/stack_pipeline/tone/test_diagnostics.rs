@@ -26,6 +26,7 @@ pub(super) fn tone_distribution_pair(first: [f32; 3], second: [f32; 3]) -> serde
 }
 
 #[cfg(test)]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn write_tone_diagnostics(
     before: &Rgb32FImage,
     after: &Rgb32FImage,
@@ -191,10 +192,10 @@ pub(super) fn write_tone_diagnostics(
             },
         },
     });
-    if let Ok(bytes) = serde_json::to_vec_pretty(&payload) {
-        if let Err(error) = std::fs::write(directory.join("tone-final-world.json"), bytes) {
-            eprintln!("cannot write tone diagnostics: {error}");
-        }
+    if let Ok(bytes) = serde_json::to_vec_pretty(&payload)
+        && let Err(error) = std::fs::write(directory.join("tone-final-world.json"), bytes)
+    {
+        eprintln!("cannot write tone diagnostics: {error}");
     }
 
     let maximum = windows.iter().max_by(|left, right| {

@@ -184,6 +184,7 @@ pub(super) fn save_image_stack_output_for_result(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub(super) fn write_image_stack_output_with_settings(
     image: &DynamicImage,
     output_path: &Path,

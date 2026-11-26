@@ -203,6 +203,7 @@ pub(super) fn source_roi_for_quality(
 /// decode; additional owners are retained in `images` for later ROIs, capped
 /// at 512 MiB. An oversized member is sampled once and dropped after its ROI
 /// pixels; it never bypasses that cache budget by remaining in the map.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn source_roi_for_station_quality(
     images: &mut BTreeMap<u16, Rgb32FImage>,
     primary_owner: u16,
@@ -230,6 +231,7 @@ pub(crate) fn source_roi_for_station_quality(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn source_roi_for_station_quality_with_budget(
     images: &mut BTreeMap<u16, Rgb32FImage>,
     primary_owner: u16,

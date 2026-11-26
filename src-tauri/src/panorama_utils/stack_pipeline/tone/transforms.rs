@@ -138,7 +138,7 @@ pub(super) fn build_spatial_fields(
                 continue;
             };
             if checkerboard_train_only
-                && ((cell % width as usize) + (cell / width as usize)) % 2 != 0
+                && !((cell % width as usize) + (cell / width as usize)).is_multiple_of(2)
             {
                 continue;
             }

@@ -717,7 +717,7 @@ pub(crate) fn prefilter_source_reference(
         .as_ref()
         .map(|n| n.source_prefilter_divisor)
         .unwrap_or(1.0);
-    if !divisor.is_finite() || divisor < 1.0 || divisor > 65536.0 {
+    if !divisor.is_finite() || !(1.0..=65536.0).contains(&divisor) {
         return Err("invalid native reference source prefilter divisor".into());
     }
     if divisor.log2().fract().abs() > 1e-12 {

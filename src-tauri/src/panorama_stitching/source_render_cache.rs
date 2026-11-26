@@ -39,6 +39,7 @@ pub(super) struct SourceRenderCache {
     stats: SourceRenderCacheReport,
 }
 impl SourceRenderCache {
+    #[allow(dead_code)]
     pub(super) fn new(max_bytes: usize) -> Self {
         Self::with_backing(max_bytes, 0)
     }

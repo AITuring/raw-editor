@@ -328,6 +328,7 @@ mod tests {
             bands: vec![band()],
         };
         let baseline = inputs.cache_key(&matrices, Projection::Planar, Some(&warp), 0, 0);
+        #[allow(clippy::type_complexity)]
         let changes: Vec<Box<dyn Fn(&mut FocusWarpBand)>> = vec![
             Box::new(|b| b.homographies.get_mut(&0).unwrap()[(1, 2)] = 0.25),
             Box::new(|b| {
@@ -366,6 +367,7 @@ mod tests {
     fn native_fusion_source_snapshot_tracks_pixels_masks_features_and_support_metadata() {
         let original = source(0);
         let baseline = NativeFusionSourceKey::new(&[&original], [0; 32]).0;
+        #[allow(clippy::type_complexity)]
         let changes: Vec<Box<dyn Fn(&mut ImageInfo)>> = vec![
             Box::new(|s| s.alignment_image.put_pixel(2, 1, Luma([128]))),
             Box::new(|s| s.foreground_mask = Some(GrayImage::from_pixel(4, 3, Luma([255])))),

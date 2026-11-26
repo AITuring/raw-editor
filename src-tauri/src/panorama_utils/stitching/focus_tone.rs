@@ -87,8 +87,11 @@ pub(super) fn harmonize_focus_background_tone(
             continue;
         }
         let start = index * 3;
-        for channel in 0..3 {
-            global_channels[channel].push(analysis_image.as_raw()[start + channel]);
+        for (dst, &val) in global_channels
+            .iter_mut()
+            .zip(&analysis_image.as_raw()[start..start + 3])
+        {
+            dst.push(val);
         }
     }
     let global_tone = [
@@ -155,6 +158,7 @@ pub(super) fn harmonize_focus_background_tone(
         .enumerate()
         .for_each(|(y, row)| {
             let y_sample = y_samples[y];
+            #[allow(clippy::needless_range_loop)]
             for x in 0..width as usize {
                 let full_index = y * width as usize + x;
                 if full_mask[full_index] == 0 {
@@ -370,9 +374,7 @@ pub(super) fn harmonize_focus_background_tone_with_owners(
         }
         let start = index * 3;
         let owner_correction = owner_corrections[owner_analysis.as_raw()[index] as usize];
-        for channel in 0..3 {
-            correction_pixels[start + channel] = owner_correction[channel];
-        }
+        correction_pixels[start..start + 3].copy_from_slice(&owner_correction);
     }
     let correction_image =
         Rgb32FImage::from_raw(analysis_width, analysis_height, correction_pixels)
@@ -464,6 +466,7 @@ pub(super) fn harmonize_focus_background_tone_with_owners(
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(super) fn harmonize_focus_background_with_reference(
     image: &mut Rgb32FImage,
     image_mask: &GrayImage,

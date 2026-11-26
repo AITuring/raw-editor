@@ -55,6 +55,7 @@ pub fn find_homography_ransac_points(
     )
 }
 
+#[allow(dead_code)]
 pub fn find_homography_ransac_points_stable(
     points: &[(Point2<f64>, Point2<f64>)],
     inlier_threshold: f64,

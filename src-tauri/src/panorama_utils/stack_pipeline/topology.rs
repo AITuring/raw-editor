@@ -125,9 +125,11 @@ fn observation_order(left: &StationObservation, right: &StationObservation) -> O
             .then_with(|| left_y.total_cmp(&right_y))
             // Filenames are consulted only for an exact displacement tie.
             .then_with(|| {
-                (left_x.to_bits() == right_x.to_bits() && left_y.to_bits() == right_y.to_bits())
-                    .then(|| left.filename.cmp(&right.filename))
-                    .unwrap_or(Ordering::Equal)
+                if left_x.to_bits() == right_x.to_bits() && left_y.to_bits() == right_y.to_bits() {
+                    left.filename.cmp(&right.filename)
+                } else {
+                    Ordering::Equal
+                }
             })
             .then_with(|| left.station_index.cmp(&right.station_index)),
         (Some(_), None) => Ordering::Less,
@@ -267,9 +269,13 @@ pub(crate) fn infer_station_topology(
                 // Filename is the last geometric tie-break and is reached only
                 // when both estimated centre displacements are exactly equal.
                 .then_with(|| {
-                    (left_x.to_bits() == right_x.to_bits() && left_y.to_bits() == right_y.to_bits())
-                        .then(|| by_station[left].filename.cmp(&by_station[right].filename))
-                        .unwrap_or(Ordering::Equal)
+                    if left_x.to_bits() == right_x.to_bits()
+                        && left_y.to_bits() == right_y.to_bits()
+                    {
+                        by_station[left].filename.cmp(&by_station[right].filename)
+                    } else {
+                        Ordering::Equal
+                    }
                 })
                 .then_with(|| left.cmp(&right))
         });

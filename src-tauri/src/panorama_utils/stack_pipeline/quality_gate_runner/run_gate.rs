@@ -43,6 +43,7 @@ mod source_visual_capture;
 
 /// Execute all nine criteria in record-only mode. No decision from the return
 /// value is applied to export; callers decide whether to block in a later task.
+#[allow(dead_code)]
 pub(crate) fn run_quality_gate(
     input: &QualityGateInput<'_>,
     load_source: &mut SourceLoader<'_>,

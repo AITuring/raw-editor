@@ -198,8 +198,7 @@ fn virtual_tile_polished_station_match_recovers_a_perturbed_seed_on_noisy_planes
     assert_eq!(model_ranks, [0, 1, 2], "all model families must survive");
     let relation = hypotheses
         .into_iter()
-        .filter(|relation| virtual_tile_hypothesis_model_rank(&relation.homography) == 2)
-        .last()
+        .rfind(|relation| virtual_tile_hypothesis_model_rank(&relation.homography) == 2)
         .unwrap_or_else(|| panic!("polish must recover the projective seed: {diagnostic:?}"));
     assert_eq!(diagnostic.failure_stage, "fitted");
     assert_eq!(diagnostic.residual_model, "polished_multi_hypothesis");

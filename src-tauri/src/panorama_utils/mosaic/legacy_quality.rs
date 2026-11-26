@@ -62,6 +62,7 @@ impl LegacyQualityCapture {
         self.repairs = regions;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn observe(
         &mut self,
         owner: u8,

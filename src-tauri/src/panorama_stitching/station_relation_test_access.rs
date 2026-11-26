@@ -20,6 +20,7 @@ pub(crate) fn covered_features(
     virtual_tile_covered_features(pixels, coverage, brief_pairs)
 }
 
+#[allow(dead_code)]
 pub(crate) fn station_matches(tiles: &[ImageInfo]) -> HashMap<(usize, usize), MatchInfo> {
     all_image_pairs(tiles.len())
         .into_iter()

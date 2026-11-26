@@ -26,6 +26,7 @@ use super::{
 /// applied to a different selection.  This helper is test-only; normal builds
 /// never read an environment variable or write this file.
 #[cfg(test)]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn write_alignment_cache(
     path: &Path,
     images: &[ImageInfo],
@@ -207,7 +208,7 @@ pub(super) fn write_alignment_cache(
         "projection": projection_name,
         "canvas": { "width": canvas_width, "height": canvas_height },
         "sources": source_records,
-        "ordered_ids": ordered_indices.iter().map(|id| *id).collect::<Vec<_>>(),
+        "ordered_ids": ordered_indices.to_vec(),
         "global_homographies": homographies,
         "matches": match_records,
         "focus_warp": focus_bands,

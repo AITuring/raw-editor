@@ -17,6 +17,7 @@ const MAX_GRAPH_CELLS: usize = 512 * 512;
 pub(crate) enum StationSeamSolver {
     GraphCut,
     CenterlineFallback,
+    #[allow(dead_code)]
     NotRun,
 }
 
@@ -56,12 +57,7 @@ fn centerline_labels(width: usize, height: usize, input: &StationSeamInput) -> V
     for y in 0..height {
         for x in 0..width {
             let index = y * width + x;
-            if input.candidate_coverage[index] && !input.base_coverage[index] {
-                labels[index] = 255;
-            } else if input.base_coverage[index]
-                && input.candidate_coverage[index]
-                && x >= width / 2
-            {
+            if input.candidate_coverage[index] && (!input.base_coverage[index] || x >= width / 2) {
                 labels[index] = 255;
             }
         }

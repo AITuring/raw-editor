@@ -17,6 +17,7 @@ use super::{
 };
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(super) fn solve_focus_capture_group_poses(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
@@ -60,6 +61,7 @@ pub(super) fn solve_focus_capture_group_poses_with_report(
     )
 }
 
+#[allow(dead_code)]
 pub(super) fn solve_virtual_tile_station_hypotheses_with_report(
     tiles: &[ImageInfo],
     coverages: VirtualTileSolverCoverages<'_>,

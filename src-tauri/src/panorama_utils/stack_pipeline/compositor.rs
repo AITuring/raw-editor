@@ -218,6 +218,7 @@ pub(crate) fn seam_candidate_cost_with_alignment(
 /// The seam cost penalizes the native 16px coverage boundary band. Covered
 /// pixels are not penalized merely for belonging to that source: such an
 /// area penalty can force a short, visibly worse cut along its coverage edge.
+#[allow(dead_code)]
 pub(crate) fn layered_seam_cut(
     width: usize,
     height: usize,
@@ -841,6 +842,7 @@ pub(crate) fn minimum_vertical_seam(
 /// seam is its geometric centre line.  The boolean identifies a vertical
 /// line; the returned coordinates are one cross-axis coordinate per along-axis
 /// row/column and are deterministic for even widths/heights.
+#[allow(dead_code)]
 pub(crate) fn narrow_overlap_centerline(width: usize, height: usize) -> Option<(bool, Vec<usize>)> {
     if width == 0 || height == 0 || width.max(height) >= 32 {
         return None;

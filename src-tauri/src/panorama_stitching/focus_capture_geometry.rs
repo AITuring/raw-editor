@@ -459,6 +459,7 @@ pub(super) fn focus_geometry_capture_order(
     best_order.map(|(_, _, _, _, order)| order)
 }
 
+#[allow(dead_code)]
 pub(super) fn focus_geometry_group_compositor_order(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,

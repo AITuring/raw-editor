@@ -150,9 +150,11 @@ pub(super) fn sparse_rois_for_side(
         for x in 0..=width {
             let label = if x < width {
                 let index = (y * width + x) as usize;
-                (coverage.as_raw()[index] != 0)
-                    .then_some(evidence_ownership[index])
-                    .unwrap_or(0)
+                if coverage.as_raw()[index] != 0 {
+                    evidence_ownership[index]
+                } else {
+                    0
+                }
             } else {
                 0
             };

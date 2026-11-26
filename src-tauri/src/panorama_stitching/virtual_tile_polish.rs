@@ -536,7 +536,7 @@ pub(super) fn virtual_tile_polished_station_match(
             ))
         })
         .collect::<Vec<_>>();
-    measured.sort_by(|left, right| left.0.cmp(&right.0));
+    measured.sort_by_key(|left| left.0);
     let mut deduplicated = Vec::<(
         VirtualTilePolishModel,
         Matrix3<f64>,

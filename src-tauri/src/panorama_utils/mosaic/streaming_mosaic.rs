@@ -841,41 +841,39 @@ where
                 tone_diagnostics.push(serde_json::json!({"source":info.filename,"owner":source_owner_id,"evidence":summary}));
             }
         }
-        if panorama_transition {
-            if let Some((candidate, candidate_mask)) = overlap_candidate.as_ref() {
-                owner_overlap_gain.observe(
-                    source_owner_id,
-                    &base_analysis,
-                    &base_analysis_mask,
-                    &base_analysis_owner,
-                    candidate,
-                    candidate_mask,
-                    &write_tone,
-                    left,
-                    top,
-                    layer_scale,
-                );
-            }
+        if panorama_transition && let Some((candidate, candidate_mask)) = overlap_candidate.as_ref()
+        {
+            owner_overlap_gain.observe(
+                source_owner_id,
+                &base_analysis,
+                &base_analysis_mask,
+                &base_analysis_owner,
+                candidate,
+                candidate_mask,
+                &write_tone,
+                left,
+                top,
+                layer_scale,
+            );
         }
         // Accumulate only overlap-supported, low-frequency candidate
         // pixels.  This is deliberately before ownership writes: the
         // final correction compares the consensus target with the
         // materialised source-owned output, so no detail is averaged.
-        if !panorama_transition
-            || std::env::var_os("RAW_EDITOR_ENABLE_FLAT_ARTWORK_CONSENSUS").is_some()
+        if (!panorama_transition
+            || std::env::var_os("RAW_EDITOR_ENABLE_FLAT_ARTWORK_CONSENSUS").is_some())
+            && let Some((candidate, candidate_mask)) = overlap_candidate.as_ref()
         {
-            if let Some((candidate, candidate_mask)) = overlap_candidate.as_ref() {
-                low_frequency_consensus.observe_overlap(
-                    left,
-                    top,
-                    layer_scale,
-                    &base_analysis,
-                    &base_analysis_mask,
-                    candidate,
-                    candidate_mask,
-                    &write_tone,
-                );
-            }
+            low_frequency_consensus.observe_overlap(
+                left,
+                top,
+                layer_scale,
+                &base_analysis,
+                &base_analysis_mask,
+                candidate,
+                candidate_mask,
+                &write_tone,
+            );
         }
         println!(
             "    - Streaming '{}': projected region {}..{} x {}..{}, shared analysis {}x{}",

@@ -499,6 +499,7 @@ fn median(values: &mut [f64]) -> f64 {
 /// geometry, which is what makes the measured displacement applicable to those
 /// pixels.
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub(crate) fn register_station_frame_native(
     base: &Rgb32FImage,
     base_mask: &GrayImage,

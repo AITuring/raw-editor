@@ -1021,6 +1021,7 @@ where
         let mut owner_deltas: Vec<[Vec<f32>; 3]> = (0..=u8::MAX as usize)
             .map(|_| [Vec::new(), Vec::new(), Vec::new()])
             .collect();
+        #[allow(clippy::needless_range_loop)]
         for index in 0..tone_mask.as_raw().len() {
             if tone_mask.as_raw()[index] == 0 || tone_count[index] < 2 {
                 continue;

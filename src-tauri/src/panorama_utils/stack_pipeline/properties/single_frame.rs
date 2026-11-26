@@ -248,7 +248,7 @@ proptest! {
         branches |= 1;
 
         // 3. The published Virtual_Tile of a real one-frame render.
-        if case % SINGLE_FRAME_RENDER_STRIDE == 0 {
+        if case.is_multiple_of(SINGLE_FRAME_RENDER_STRIDE) {
             let side = SINGLE_FRAME_SOURCE_SIDE;
             let info = single_frame_info(0, side);
             let infos = vec![info];
@@ -735,7 +735,7 @@ proptest! {
         );
 
         let mut branches = usize::from(exact_tie);
-        if case % SINGLE_FRAME_DEGRADATION_RENDER_STRIDE == 0 {
+        if case.is_multiple_of(SINGLE_FRAME_DEGRADATION_RENDER_STRIDE) {
             let selected_original = scores
                 .iter()
                 .enumerate()

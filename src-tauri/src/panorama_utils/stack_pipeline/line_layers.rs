@@ -430,13 +430,10 @@ impl LineLayers {
                 .unwrap();
             let mut placed = BTreeSet::from([root]);
             let mut reports = Vec::new();
-            loop {
-                let Some(edge) = edges
-                    .iter()
-                    .find(|e| placed.contains(&e.a) ^ placed.contains(&e.b))
-                else {
-                    break;
-                };
+            while let Some(edge) = edges
+                .iter()
+                .find(|e| placed.contains(&e.a) ^ placed.contains(&e.b))
+            {
                 let (parent, child, sign) = if placed.contains(&edge.a) {
                     (edge.a, edge.b, 1.0)
                 } else {
@@ -531,6 +528,48 @@ impl LineLayers {
     }
 }
 
+/// Resampled detail is used only to plan ownership. The compositor rebuilds
+/// every affected tone field through its original RAW sampler before fitting
+/// the final radiometry; these estimates never supply output pixels.
+pub(crate) fn warp_planning_detail(
+    tile: &mut super::tone::ToneTile,
+    layers: &LineLayers,
+    offset: (f64, f64),
+) {
+    if !layers.has_station(tile.station_index) {
+        return;
+    }
+    let Some(native) = tile.native_detail.as_ref() else {
+        return;
+    };
+    let stride = tile.world_stride / 4.0;
+    let shifted = Rgb32FImage::from_fn(native.width(), native.height(), |x, y| {
+        let world = Point2::new(
+            tile.world_origin.0 + x as f64 * stride + (stride - 1.0) * 0.5 - offset.0,
+            tile.world_origin.1 + y as f64 * stride + (stride - 1.0) * 0.5 - offset.1,
+        );
+        let source = layers.inverse(world, tile.station_index);
+        if source == world {
+            return *native.get_pixel(x, y);
+        }
+        let u = (source.x + offset.0 - tile.world_origin.0 - (stride - 1.0) * 0.5) / stride;
+        let a = u.floor() as i64;
+        let b = a + 1;
+        if a < 0
+            || b >= native.width() as i64
+            || tile.validity.get_pixel(a as u32 / 4, y / 4)[0] != super::tone::TONE_CELL_SAMPLE
+            || tile.validity.get_pixel(b as u32 / 4, y / 4)[0] != super::tone::TONE_CELL_SAMPLE
+        {
+            return *native.get_pixel(x, y);
+        }
+        let t = (u - u.floor()) as f32;
+        image::Rgb(std::array::from_fn(|c| {
+            native.get_pixel(a as u32, y)[c] * (1.0 - t) + native.get_pixel(b as u32, y)[c] * t
+        }))
+    });
+    tile.native_detail = Some(shifted);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -584,46 +623,4 @@ mod tests {
             .is_empty()
         );
     }
-}
-
-/// Resampled detail is used only to plan ownership. The compositor rebuilds
-/// every affected tone field through its original RAW sampler before fitting
-/// the final radiometry; these estimates never supply output pixels.
-pub(crate) fn warp_planning_detail(
-    tile: &mut super::tone::ToneTile,
-    layers: &LineLayers,
-    offset: (f64, f64),
-) {
-    if !layers.has_station(tile.station_index) {
-        return;
-    }
-    let Some(native) = tile.native_detail.as_ref() else {
-        return;
-    };
-    let stride = tile.world_stride / 4.0;
-    let shifted = Rgb32FImage::from_fn(native.width(), native.height(), |x, y| {
-        let world = Point2::new(
-            tile.world_origin.0 + x as f64 * stride + (stride - 1.0) * 0.5 - offset.0,
-            tile.world_origin.1 + y as f64 * stride + (stride - 1.0) * 0.5 - offset.1,
-        );
-        let source = layers.inverse(world, tile.station_index);
-        if source == world {
-            return *native.get_pixel(x, y);
-        }
-        let u = (source.x + offset.0 - tile.world_origin.0 - (stride - 1.0) * 0.5) / stride;
-        let a = u.floor() as i64;
-        let b = a + 1;
-        if a < 0
-            || b >= native.width() as i64
-            || tile.validity.get_pixel(a as u32 / 4, y / 4)[0] != super::tone::TONE_CELL_SAMPLE
-            || tile.validity.get_pixel(b as u32 / 4, y / 4)[0] != super::tone::TONE_CELL_SAMPLE
-        {
-            return *native.get_pixel(x, y);
-        }
-        let t = (u - u.floor()) as f32;
-        image::Rgb(std::array::from_fn(|c| {
-            native.get_pixel(a as u32, y)[c] * (1.0 - t) + native.get_pixel(b as u32, y)[c] * t
-        }))
-    });
-    tile.native_detail = Some(shifted);
 }

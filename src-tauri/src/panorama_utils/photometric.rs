@@ -93,6 +93,7 @@ impl PhotometricModel {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub(crate) struct PhotometricPairDiagnostic {
     pub(crate) first: usize,
     pub(crate) second: usize,

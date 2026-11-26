@@ -450,8 +450,9 @@ pub(in crate::panorama_utils::stack_pipeline) fn sample_tile_detail_bilinear(
                 } else {
                     v - v.floor()
                 });
-                for c in 0..3 {
-                    sum[c] += w * f64::from(native.get_pixel(px as u32, py as u32)[c]);
+                let pixel = native.get_pixel(px as u32, py as u32).0;
+                for (acc, &channel_value) in sum.iter_mut().zip(&pixel) {
+                    *acc += w * f64::from(channel_value);
                 }
                 mass += w;
             }

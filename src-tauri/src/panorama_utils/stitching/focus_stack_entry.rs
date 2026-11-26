@@ -30,6 +30,7 @@ use super::{
     focus_stack_stitcher_with_margin_policy,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub fn focus_stack_stitcher<R: Runtime, F>(
     images: &[&ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,

@@ -451,7 +451,7 @@ proptest! {
             REQUIRED_LOW_SHARPNESS_PERCENTILE * 100.0
         );
         prop_assert!(
-            winning.iter().any(|score| *score == threshold),
+            winning.contains(&threshold),
             "the percentile must be a value the station really produced, so a uniformly sharp \
              station has no cell strictly below it: threshold {threshold}"
         );
@@ -465,9 +465,9 @@ proptest! {
                     .filter(|frame| frame.covered[cell])
                     .map(|frame| frame.sharpness[cell])
                     .collect::<Vec<_>>();
-                let all_below = !covering.is_empty()
-                    && covering.iter().all(|score| *score < threshold);
-                all_below
+
+                !covering.is_empty()
+                    && covering.iter().all(|score| *score < threshold)
             })
             .collect::<Vec<_>>();
         for cell in 0..cells {

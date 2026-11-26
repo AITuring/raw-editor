@@ -187,6 +187,7 @@ pub(super) fn station_seam_edge_strength_weight() -> f64 {
 /// sampled owners.  Authoritative pose-graph seams keep their existing
 /// objective, while a local relation is only used for the explicitly measured
 /// closure defects that need this protection.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn station_seam_foreground_penalty(
     local_relation: Option<&Matrix3<f64>>,
     left: &ImageInfo,
@@ -285,6 +286,7 @@ pub(super) fn projected_coverage_boundary_distance(
     Some(source_edge * local_scale)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn station_seam_sample(
     image: &ImageInfo,
     image_pixels: &Rgb32FImage,
@@ -322,6 +324,7 @@ pub(super) fn station_seam_sample(
 /// relative geometry at a rejected closure edge without changing the global
 /// pose graph or any accepted relation.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::type_complexity)]
 pub(super) fn station_seam_pair_sample(
     first: &ImageInfo,
     first_pixels: &Rgb32FImage,

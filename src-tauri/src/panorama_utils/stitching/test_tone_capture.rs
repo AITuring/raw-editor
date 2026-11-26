@@ -175,10 +175,11 @@ pub(super) fn capture_test_tone_fields(
     let filtered_owners = owners
         .iter()
         .map(|owner| {
-            selected_owner_ids
-                .contains(owner)
-                .then_some(*owner)
-                .unwrap_or(0)
+            if selected_owner_ids.contains(owner) {
+                *owner
+            } else {
+                0
+            }
         })
         .collect::<Vec<_>>();
     let owner_plane = if station_filter.is_some() {

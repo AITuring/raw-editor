@@ -239,6 +239,7 @@ impl CoverageMask {
         &self.covered
     }
 
+    #[allow(dead_code)]
     pub(crate) fn covered_pixels(&self) -> u64 {
         self.covered.iter().filter(|&&value| value > 0).count() as u64
     }
@@ -275,11 +276,8 @@ impl CoverageMask {
 /// keeps the required geometry without allocating a full-canvas `f32` plane.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ConfidenceMap {
-    Uniform {
-        width: u32,
-        height: u32,
-        value: f32,
-    },
+    #[allow(dead_code)]
+    Uniform { width: u32, height: u32, value: f32 },
     PerPixel {
         width: u32,
         height: u32,

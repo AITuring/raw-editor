@@ -156,6 +156,7 @@ fn select_content_rois(
 /// Search and measure sparse criteria independently of the dense ROI list.
 /// References go through the existing bounded ROI cache and production
 /// source loader; only eligible output candidates incur source resampling.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn measure_criterion_specific_rois(
     input: &QualityGateInput<'_>,
     evidence: &[u16],

@@ -8,6 +8,7 @@ use nalgebra::{Matrix3, Point2};
 /// Split the measured overlap itself into four regions before selecting held
 /// points. Whole-image checkerboard cells collapse a narrow overlap into one
 /// row and can leave a physically populated region almost absent from holdout.
+#[allow(clippy::type_complexity)]
 fn overlap_stratified_holdout(
     points: &[(Point2<f64>, Point2<f64>)],
 ) -> (
@@ -40,13 +41,12 @@ fn overlap_stratified_holdout(
         for i in (0..region.len()).step_by(2) {
             selected[i] = true;
         }
-        let mut count = selected.iter().filter(|&&v| v).count();
-        for i in (1..region.len()).step_by(2) {
-            if count >= desired {
-                break;
-            }
+        let existing = selected.iter().filter(|&&v| v).count();
+        for i in (1..region.len())
+            .step_by(2)
+            .take(desired.saturating_sub(existing))
+        {
             selected[i] = true;
-            count += 1;
         }
         for (&pair, &is_held) in region.iter().zip(&selected) {
             if is_held {

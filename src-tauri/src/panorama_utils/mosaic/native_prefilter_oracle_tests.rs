@@ -129,6 +129,7 @@ fn reused_prefilter_is_bit_identical_with_origins_pyramids_and_nonidentity_maps(
             2.0 * (p.y - 16.0) - 0.125,
         ))
     };
+    #[allow(clippy::type_complexity)]
     let maps: [Option<&(dyn Fn(Point3<f64>) -> Option<Point2<f64>> + Sync)>; 2] =
         [None, Some(&mapping)];
     let mut successes = 0;

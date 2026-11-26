@@ -564,6 +564,7 @@ fn supported_analysis_cell_sample(
     None
 }
 
+#[allow(clippy::too_many_arguments)]
 fn extend_supported_parameters(
     parameters: &mut [[f32; 6]],
     degree: &[[f32; 3]],
@@ -624,10 +625,10 @@ fn support_extension_radii() -> Vec<usize> {
             .and_then(|value| value.parse::<usize>().ok())
             .filter(|value| *value <= 64)
             .unwrap_or(64);
-        return [4usize, 8, 16, 32, 64]
+        [4usize, 8, 16, 32, 64]
             .into_iter()
             .take_while(|radius| *radius <= max_radius)
-            .collect();
+            .collect()
     }
     #[cfg(not(test))]
     {

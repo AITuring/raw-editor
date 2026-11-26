@@ -487,6 +487,7 @@ impl SyntheticScan {
     /// Points are searched on a grid over the source tile and kept only where
     /// the mapped position lands inside the target tile — the region a real
     /// feature match could come from.
+    #[allow(clippy::type_complexity)]
     pub fn correspondence_pairs(&self) -> Vec<((usize, usize), Vec<(Point2<f64>, Point2<f64>)>)> {
         let mut pairs = Vec::new();
         for left in 0..self.sources.len() {

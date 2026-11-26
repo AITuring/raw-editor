@@ -17,12 +17,14 @@ use super::{
 // A real neighbouring capture can move by almost one frame width when the
 // camera advances to the next tile. A descriptor match that moves the frame
 // farther than this is almost certainly a repeated character/seal match.
+#[allow(dead_code)]
 pub(super) const FOCUS_SEQUENCE_MAX_LINK_MOTION_RATIO: f64 = 1.35;
 
 pub(super) const FOCUS_AUTO_ORDER_MOTION_SCALE_FLOOR: f64 = 0.01;
 
 pub(super) const FOCUS_AUTO_ORDER_MOTION_EXPONENT: f64 = 4.0;
 
+#[allow(dead_code)]
 pub(super) const FOCUS_AUTO_ORDER_GAP_PENALTY: f64 = 4.0;
 
 pub(super) const FOCUS_AUTO_ORDER_MISSING_EDGE_PENALTY: f64 = 32.0;
@@ -390,6 +392,7 @@ pub(super) fn focus_auto_order_greedy_path(
     best_order
 }
 
+#[allow(dead_code)]
 pub(super) fn build_focus_sequence_homographies(
     order: &[usize],
     images: &[ImageInfo],
@@ -466,6 +469,7 @@ pub(super) fn build_focus_sequence_homographies(
     Some(global_homographies)
 }
 
+#[allow(dead_code)]
 pub(super) fn focus_sequence_link_motion_ratio(
     source: &ImageInfo,
     target: &ImageInfo,

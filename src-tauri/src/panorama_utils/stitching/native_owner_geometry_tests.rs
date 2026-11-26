@@ -79,6 +79,7 @@ fn resolve(sources: &FocusTileSources, point: Point2<f64>) -> Option<NativeOwner
 
 /// Frozen pre-fallback implementation. Keep its winner selection, arithmetic,
 /// coordinate mapping and RGB interpolation independent of the new resolver.
+#[allow(clippy::type_complexity)]
 fn old_nearest_sample(
     sources: &FocusTileSources,
     point: Point2<f64>,

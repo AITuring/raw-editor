@@ -210,6 +210,7 @@ pub(super) fn determinism_images(scan: &SyntheticScan) -> Vec<ImageInfo> {
 /// signatures, with its documented filename fallback for deliberately
 /// featureless fixtures. The result is inverted back into the `(min, max)` key
 /// orientation exactly like `stitch_images_with_options` does.
+#[allow(clippy::type_complexity)]
 pub(super) fn fit_synthetic_matches(
     scan: &SyntheticScan,
     images: &[ImageInfo],

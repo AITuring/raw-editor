@@ -501,12 +501,14 @@ pub fn match_features_with_ratio(
 /// descriptor attrition without changing the production matcher. Retrieval is
 /// counted once a source descriptor has both a nearest and second-nearest
 /// target; ratio survivors are counted before the reverse-best mutual gate.
+#[allow(dead_code)]
 pub(crate) struct DescriptorMatchAttrition {
     pub(crate) retrieval_count: usize,
     pub(crate) ratio_filter_count: usize,
     pub(crate) mutual_matches: Vec<Match>,
 }
 
+#[allow(dead_code)]
 pub(crate) fn match_features_with_ratio_attrition(
     features1: &[Feature],
     features2: &[Feature],

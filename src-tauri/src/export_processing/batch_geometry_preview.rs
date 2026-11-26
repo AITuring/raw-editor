@@ -100,6 +100,7 @@ pub(super) struct PreparedBatchGeometrySource {
 /// Does the per-source disk IO and CPU work away from the Tauri async executor.
 /// The outer command awaits one source at a time because the shared CLIP session
 /// serializes inference anyway; this bounds decoded-image and RAW-byte memory.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn prepare_batch_geometry_source(
     image_path: String,
     apply_distortion: bool,

@@ -39,6 +39,7 @@ use super::{
 /// direct-pair gates, so repeated-content edges are downweighted without
 /// changing the local focus ownership.
 #[cfg(test)]
+#[allow(clippy::type_complexity)]
 pub(super) fn refine_focus_group_projective_tree_poses(
     images: &[ImageInfo],
     groups: &[FocusCaptureGroup],
@@ -67,6 +68,7 @@ pub(super) fn refine_focus_group_projective_tree_poses(
 }
 
 #[cfg(test)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub(super) fn refine_focus_group_projective_tree_poses_with_report(
     images: &[ImageInfo],
     groups: &[FocusCaptureGroup],
@@ -92,6 +94,7 @@ pub(super) fn refine_focus_group_projective_tree_poses_with_report(
     )
 }
 
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub(super) fn refine_focus_group_projective_tree_poses_with_report_protected(
     images: &[ImageInfo],
     groups: &[FocusCaptureGroup],
@@ -338,223 +341,220 @@ pub(super) fn refine_focus_group_projective_tree_poses_with_report_protected(
             weight: observation.weight,
         })
         .collect::<Vec<_>>();
-    if affine_needed && projective_observations.len() >= groups.len() {
-        if let Some(projective) = solve_robust_closure_projective(
+    if affine_needed
+        && projective_observations.len() >= groups.len()
+        && let Some(projective) = solve_robust_closure_projective(
             groups.len(),
             reference_group,
             &projective_observations,
             affine_coordinate_scale,
-        ) {
-            let mut corrections = projective.corrections;
-            let projective_clamp = clamp_station_projective_corrections(
-                images,
-                groups,
-                group_edges,
-                base_poses,
-                &mut corrections,
-                affine_coordinate_scale,
-            );
-            if let Some((maximum_correction, clamped_stations)) = projective_clamp {
-                let mut projective_poses = Vec::with_capacity(groups.len());
-                for (station, pose) in base_poses.iter().enumerate() {
-                    let corrected =
-                        projective_delta_matrix(&corrections[station], affine_coordinate_scale)
-                            * pose;
-                    if corrected.try_inverse().is_none()
-                        || !homography_preserves_focus_orientation(
-                            &corrected,
-                            images[groups[station].anchor].dimensions(),
-                        )
-                    {
-                        projective_poses.clear();
-                        break;
-                    }
-                    projective_poses.push(corrected);
+        )
+    {
+        let mut corrections = projective.corrections;
+        let projective_clamp = clamp_station_projective_corrections(
+            images,
+            groups,
+            group_edges,
+            base_poses,
+            &mut corrections,
+            affine_coordinate_scale,
+        );
+        if let Some((maximum_correction, clamped_stations)) = projective_clamp {
+            let mut projective_poses = Vec::with_capacity(groups.len());
+            for (station, pose) in base_poses.iter().enumerate() {
+                let corrected =
+                    projective_delta_matrix(&corrections[station], affine_coordinate_scale) * pose;
+                if corrected.try_inverse().is_none()
+                    || !homography_preserves_focus_orientation(
+                        &corrected,
+                        images[groups[station].anchor].dimensions(),
+                    )
+                {
+                    projective_poses.clear();
+                    break;
                 }
-                if projective_poses.len() == groups.len() {
-                    let mut projective_residuals = projective_observations
+                projective_poses.push(corrected);
+            }
+            if projective_poses.len() == groups.len() {
+                let mut projective_residuals = projective_observations
+                    .iter()
+                    .filter_map(|observation| {
+                        let left_point = [
+                            observation.left_world[0] / affine_coordinate_scale,
+                            observation.left_world[1] / affine_coordinate_scale,
+                        ];
+                        let right_point = [
+                            observation.right_world[0] / affine_coordinate_scale,
+                            observation.right_world[1] / affine_coordinate_scale,
+                        ];
+                        let left = projective_delta_projection(
+                            &corrections[observation.left],
+                            left_point,
+                        )?;
+                        let right = projective_delta_projection(
+                            &corrections[observation.right],
+                            right_point,
+                        )?;
+                        Some(
+                            (left.0[0] - right.0[0]).hypot(left.0[1] - right.0[1])
+                                * affine_coordinate_scale,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                if let Some((projective_median, projective_p95)) =
+                    closure_residual_summary(&mut projective_residuals)
+                {
+                    let direct_pairs =
+                        closure_direct_pair_p95s(images, groups, group_edges, &projective_poses);
+                    if let Some(pair) = direct_pairs
                         .iter()
-                        .filter_map(|observation| {
-                            let left_point = [
-                                observation.left_world[0] / affine_coordinate_scale,
-                                observation.left_world[1] / affine_coordinate_scale,
-                            ];
-                            let right_point = [
-                                observation.right_world[0] / affine_coordinate_scale,
-                                observation.right_world[1] / affine_coordinate_scale,
-                            ];
-                            let left = projective_delta_projection(
-                                &corrections[observation.left],
-                                left_point,
-                            )?;
-                            let right = projective_delta_projection(
-                                &corrections[observation.right],
-                                right_point,
-                            )?;
-                            Some(
-                                (left.0[0] - right.0[0]).hypot(left.0[1] - right.0[1])
-                                    * affine_coordinate_scale,
-                            )
+                        .copied()
+                        .filter(|pair| {
+                            !pair.p95_px.is_finite()
+                                || pair.p95_px > CLOSURE_DIRECT_PAIR_P95_LIMIT_PX
                         })
-                        .collect::<Vec<_>>();
-                    if let Some((projective_median, projective_p95)) =
-                        closure_residual_summary(&mut projective_residuals)
+                        .max_by(|left, right| left.p95_px.total_cmp(&right.p95_px))
                     {
-                        let direct_pairs = closure_direct_pair_p95s(
-                            images,
-                            groups,
-                            group_edges,
-                            &projective_poses,
-                        );
-                        if let Some(pair) = direct_pairs
+                        closure_report.max_direct_pair_p95_px = pair.p95_px;
+                        closure_report.offending_pair =
+                            Some(closure_offending_pair_record(pair, station_topology));
+                    }
+                    if closure_acceptance(
+                        groups.len(),
+                        group_edges.len(),
+                        projective.converged,
+                        projective.iterations,
+                        projective_median,
+                        &direct_pairs,
+                    ) == ClosureAcceptance::Accepted
+                    {
+                        closure_report.iterations = projective.iterations;
+                        closure_report.residual_median_px = projective_median;
+                        closure_report.residual_p95_px = projective_p95;
+                        closure_report.max_direct_pair_p95_px = direct_pairs
                             .iter()
-                            .copied()
-                            .filter(|pair| {
-                                !pair.p95_px.is_finite()
-                                    || pair.p95_px > CLOSURE_DIRECT_PAIR_P95_LIMIT_PX
-                            })
-                            .max_by(|left, right| left.p95_px.total_cmp(&right.p95_px))
-                        {
-                            closure_report.max_direct_pair_p95_px = pair.p95_px;
-                            closure_report.offending_pair =
-                                Some(closure_offending_pair_record(pair, station_topology));
-                        }
-                        if closure_acceptance(
-                            groups.len(),
-                            group_edges.len(),
-                            projective.converged,
+                            .map(|pair| pair.p95_px)
+                            .max_by(f64::total_cmp)
+                            .unwrap_or(0.0);
+                        closure_report.status = stack_report::ClosureStatus::Converged;
+                        closure_report.max_corner_correction_px = maximum_correction;
+                        closure_report.clamped_stations = clamped_stations;
+                        println!(
+                            "  - Focus capture-group projective closure accepted: {} samples, {} iteration(s), median/P95 residual {:.2}/{:.2}px, maximum direct-pair P95 {:.2}px",
+                            projective_observations.len(),
                             projective.iterations,
                             projective_median,
-                            &direct_pairs,
-                        ) == ClosureAcceptance::Accepted
-                        {
-                            closure_report.iterations = projective.iterations;
-                            closure_report.residual_median_px = projective_median;
-                            closure_report.residual_p95_px = projective_p95;
-                            closure_report.max_direct_pair_p95_px = direct_pairs
-                                .iter()
-                                .map(|pair| pair.p95_px)
-                                .max_by(f64::total_cmp)
-                                .unwrap_or(0.0);
-                            closure_report.status = stack_report::ClosureStatus::Converged;
-                            closure_report.max_corner_correction_px = maximum_correction;
-                            closure_report.clamped_stations = clamped_stations;
-                            println!(
-                                "  - Focus capture-group projective closure accepted: {} samples, {} iteration(s), median/P95 residual {:.2}/{:.2}px, maximum direct-pair P95 {:.2}px",
-                                projective_observations.len(),
-                                projective.iterations,
-                                projective_median,
-                                projective_p95,
-                                closure_report.max_direct_pair_p95_px,
-                            );
-                            return Some(projective_poses);
-                        }
+                            projective_p95,
+                            closure_report.max_direct_pair_p95_px,
+                        );
+                        return Some(projective_poses);
                     }
                 }
             }
         }
     }
-    if affine_needed && affine_observations.len() >= groups.len() {
-        if let Some(affine) = solve_robust_closure_affine(
+    if affine_needed
+        && affine_observations.len() >= groups.len()
+        && let Some(affine) = solve_robust_closure_affine(
             groups.len(),
             reference_group,
             &affine_observations,
             affine_coordinate_scale,
-        ) {
-            let mut corrections = affine.corrections;
-            let affine_clamp = clamp_station_affine_corrections(
-                images,
-                groups,
-                group_edges,
-                base_poses,
-                &mut corrections,
-                affine_coordinate_scale,
-            );
-            if let Some((maximum_correction, clamped_stations)) = affine_clamp {
-                let mut affine_poses = Vec::with_capacity(groups.len());
-                for (station, pose) in base_poses.iter().enumerate() {
-                    let corrected =
-                        affine_delta_matrix(&corrections[station], affine_coordinate_scale) * pose;
-                    if corrected.try_inverse().is_none()
-                        || !homography_preserves_focus_orientation(
-                            &corrected,
-                            images[groups[station].anchor].dimensions(),
-                        )
-                    {
-                        affine_poses.clear();
-                        break;
-                    }
-                    affine_poses.push(corrected);
+        )
+    {
+        let mut corrections = affine.corrections;
+        let affine_clamp = clamp_station_affine_corrections(
+            images,
+            groups,
+            group_edges,
+            base_poses,
+            &mut corrections,
+            affine_coordinate_scale,
+        );
+        if let Some((maximum_correction, clamped_stations)) = affine_clamp {
+            let mut affine_poses = Vec::with_capacity(groups.len());
+            for (station, pose) in base_poses.iter().enumerate() {
+                let corrected =
+                    affine_delta_matrix(&corrections[station], affine_coordinate_scale) * pose;
+                if corrected.try_inverse().is_none()
+                    || !homography_preserves_focus_orientation(
+                        &corrected,
+                        images[groups[station].anchor].dimensions(),
+                    )
+                {
+                    affine_poses.clear();
+                    break;
                 }
-                if affine_poses.len() == groups.len() {
-                    let mut affine_residuals = affine_observations
+                affine_poses.push(corrected);
+            }
+            if affine_poses.len() == groups.len() {
+                let mut affine_residuals = affine_observations
+                    .iter()
+                    .map(|observation| {
+                        let left = affine_delta_apply(
+                            &corrections[observation.left],
+                            [
+                                observation.left_world[0] / affine_coordinate_scale,
+                                observation.left_world[1] / affine_coordinate_scale,
+                            ],
+                        );
+                        let right = affine_delta_apply(
+                            &corrections[observation.right],
+                            [
+                                observation.right_world[0] / affine_coordinate_scale,
+                                observation.right_world[1] / affine_coordinate_scale,
+                            ],
+                        );
+                        (left[0] - right[0]).hypot(left[1] - right[1]) * affine_coordinate_scale
+                    })
+                    .collect::<Vec<_>>();
+                if let Some((affine_median, affine_p95)) =
+                    closure_residual_summary(&mut affine_residuals)
+                {
+                    let direct_pairs =
+                        closure_direct_pair_p95s(images, groups, group_edges, &affine_poses);
+                    if let Some(pair) = direct_pairs
                         .iter()
-                        .map(|observation| {
-                            let left = affine_delta_apply(
-                                &corrections[observation.left],
-                                [
-                                    observation.left_world[0] / affine_coordinate_scale,
-                                    observation.left_world[1] / affine_coordinate_scale,
-                                ],
-                            );
-                            let right = affine_delta_apply(
-                                &corrections[observation.right],
-                                [
-                                    observation.right_world[0] / affine_coordinate_scale,
-                                    observation.right_world[1] / affine_coordinate_scale,
-                                ],
-                            );
-                            (left[0] - right[0]).hypot(left[1] - right[1]) * affine_coordinate_scale
+                        .copied()
+                        .filter(|pair| {
+                            !pair.p95_px.is_finite()
+                                || pair.p95_px > CLOSURE_DIRECT_PAIR_P95_LIMIT_PX
                         })
-                        .collect::<Vec<_>>();
-                    if let Some((affine_median, affine_p95)) =
-                        closure_residual_summary(&mut affine_residuals)
+                        .max_by(|left, right| left.p95_px.total_cmp(&right.p95_px))
                     {
-                        let direct_pairs =
-                            closure_direct_pair_p95s(images, groups, group_edges, &affine_poses);
-                        if let Some(pair) = direct_pairs
+                        closure_report.max_direct_pair_p95_px = pair.p95_px;
+                        closure_report.offending_pair =
+                            Some(closure_offending_pair_record(pair, station_topology));
+                    }
+                    if closure_acceptance(
+                        groups.len(),
+                        group_edges.len(),
+                        affine.converged,
+                        affine.iterations,
+                        affine_median,
+                        &direct_pairs,
+                    ) == ClosureAcceptance::Accepted
+                    {
+                        closure_report.iterations = affine.iterations;
+                        closure_report.residual_median_px = affine_median;
+                        closure_report.residual_p95_px = affine_p95;
+                        closure_report.max_direct_pair_p95_px = direct_pairs
                             .iter()
-                            .copied()
-                            .filter(|pair| {
-                                !pair.p95_px.is_finite()
-                                    || pair.p95_px > CLOSURE_DIRECT_PAIR_P95_LIMIT_PX
-                            })
-                            .max_by(|left, right| left.p95_px.total_cmp(&right.p95_px))
-                        {
-                            closure_report.max_direct_pair_p95_px = pair.p95_px;
-                            closure_report.offending_pair =
-                                Some(closure_offending_pair_record(pair, station_topology));
-                        }
-                        if closure_acceptance(
-                            groups.len(),
-                            group_edges.len(),
-                            affine.converged,
+                            .map(|pair| pair.p95_px)
+                            .max_by(f64::total_cmp)
+                            .unwrap_or(0.0);
+                        closure_report.status = stack_report::ClosureStatus::Converged;
+                        closure_report.max_corner_correction_px = maximum_correction;
+                        closure_report.clamped_stations = clamped_stations;
+                        println!(
+                            "  - Focus capture-group affine closure accepted: {} samples, {} iteration(s), median/P95 residual {:.2}/{:.2}px, maximum direct-pair P95 {:.2}px",
+                            affine_observations.len(),
                             affine.iterations,
                             affine_median,
-                            &direct_pairs,
-                        ) == ClosureAcceptance::Accepted
-                        {
-                            closure_report.iterations = affine.iterations;
-                            closure_report.residual_median_px = affine_median;
-                            closure_report.residual_p95_px = affine_p95;
-                            closure_report.max_direct_pair_p95_px = direct_pairs
-                                .iter()
-                                .map(|pair| pair.p95_px)
-                                .max_by(f64::total_cmp)
-                                .unwrap_or(0.0);
-                            closure_report.status = stack_report::ClosureStatus::Converged;
-                            closure_report.max_corner_correction_px = maximum_correction;
-                            closure_report.clamped_stations = clamped_stations;
-                            println!(
-                                "  - Focus capture-group affine closure accepted: {} samples, {} iteration(s), median/P95 residual {:.2}/{:.2}px, maximum direct-pair P95 {:.2}px",
-                                affine_observations.len(),
-                                affine.iterations,
-                                affine_median,
-                                affine_p95,
-                                closure_report.max_direct_pair_p95_px,
-                            );
-                            return Some(affine_poses);
-                        }
+                            affine_p95,
+                            closure_report.max_direct_pair_p95_px,
+                        );
+                        return Some(affine_poses);
                     }
                 }
             }
@@ -725,14 +725,13 @@ pub(super) fn refine_focus_group_projective_tree_poses_with_report_protected(
                         &BTreeSet::new(),
                         &mut balanced_report,
                     )
+                    && balanced_report.status == stack_report::ClosureStatus::Converged
                 {
-                    if balanced_report.status == stack_report::ClosureStatus::Converged {
-                        balanced_report.balanced_retry_attempted = true;
-                        balanced_report.balanced_retry_accepted = true;
-                        balanced_report.before_retry_max_direct_pair_p95_px = Some(pair.p95_px);
-                        *closure_report = balanced_report;
-                        return Some(balanced);
-                    }
+                    balanced_report.balanced_retry_attempted = true;
+                    balanced_report.balanced_retry_accepted = true;
+                    balanced_report.before_retry_max_direct_pair_p95_px = Some(pair.p95_px);
+                    *closure_report = balanced_report;
+                    return Some(balanced);
                 }
             }
             let offending = closure_offending_pair_record(pair, station_topology);

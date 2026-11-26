@@ -206,6 +206,7 @@ pub(super) fn correspondence_record(
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub(super) fn solve_structural_direction(
     source_station: usize,
     target_station: usize,

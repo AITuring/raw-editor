@@ -161,6 +161,7 @@ where
 /// are supplied as RGBA because that is the common compositor/export
 /// contract; alpha is discarded at the file boundary.
 #[cfg(not(target_os = "android"))]
+#[allow(dead_code)]
 pub(crate) fn encode_streaming_bigtiff_rgb8<F>(
     output: &mut fs::File,
     width: u32,

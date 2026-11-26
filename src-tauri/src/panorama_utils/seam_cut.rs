@@ -177,6 +177,7 @@ impl Graph {
         Some(levels)
     }
 
+    #[allow(dead_code)]
     fn source_side(self, source: usize, sink: usize) -> Vec<bool> {
         self.source_side_metered(source, sink, &mut CutWork::unlimited())
             .expect("an unlimited meter never runs out")

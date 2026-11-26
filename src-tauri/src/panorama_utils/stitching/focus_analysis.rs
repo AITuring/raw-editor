@@ -164,6 +164,7 @@ pub(super) fn focus_decision_for_layer(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn commit_focus_analysis_scores(
     best_focus: &mut [f32],
     candidate_focus: &[f32],

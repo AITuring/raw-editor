@@ -445,10 +445,8 @@ pub(super) fn decompose_geometry(
         .zip(&b)
         .zip(&corner_limits)
         .any(|((&a, &b), limit)| project(&gauge, a).is_none_or(|p| (p - b).norm() > *limit));
-    if needs_geometric_fit {
-        if let Some(refined) = geometric_gauge(&a, &b, &corner_limits, gauge) {
-            gauge = refined;
-        }
+    if needs_geometric_fit && let Some(refined) = geometric_gauge(&a, &b, &corner_limits, gauge) {
+        gauge = refined;
     }
     let translations: &[f64] = if needs_geometric_fit {
         &[-4.0, -2.0, 0.0, 2.0, 4.0]

@@ -308,7 +308,7 @@ proptest! {
         let case = SOURCE_OWNERSHIP_CURSOR.fetch_add(1, Ordering::Relaxed);
         // Rotate deterministically so the final run necessarily sees both geometry branches even
         // if proptest's random booleans happen to cluster.
-        let projective = if case % SOURCE_OWNERSHIP_RENDER_STRIDE == 0 {
+        let projective = if case.is_multiple_of(SOURCE_OWNERSHIP_RENDER_STRIDE) {
             (case / SOURCE_OWNERSHIP_RENDER_STRIDE) % 2 == 1
         } else {
             projective_draw
@@ -339,7 +339,7 @@ proptest! {
             }
         }
 
-        if case % SOURCE_OWNERSHIP_RENDER_STRIDE == 0 {
+        if case.is_multiple_of(SOURCE_OWNERSHIP_RENDER_STRIDE) {
             let side = SOURCE_OWNERSHIP_SIDE;
             let infos = vec![single_frame_info(0, side), single_frame_info(1, side)];
             let sources = vec![ownership_source(side, seed, 0), ownership_source(side, seed, 1)];

@@ -85,6 +85,7 @@ impl ToneOwnerOracleSnapshot {
             .copied()
     }
 
+    #[allow(clippy::type_complexity)]
     pub(crate) fn field_sample(
         &self,
         owner: u16,
@@ -162,8 +163,8 @@ impl ToneOwnerOracleSnapshot {
                         continue;
                     }
                     let value = field.log_gain.get_pixel(x, y).0;
-                    for channel in 0..3 {
-                        let gain = f64::from(value[channel]).exp();
+                    for &channel_value in &value {
+                        let gain = f64::from(channel_value).exp();
                         minimum_gain = minimum_gain.min(gain);
                         maximum_gain = maximum_gain.max(gain);
                     }
@@ -261,6 +262,7 @@ pub(crate) fn take_tone_owner_oracle_snapshot() -> Option<ToneOwnerOracleSnapsho
 }
 
 #[cfg(test)]
+#[allow(clippy::type_complexity)]
 pub(super) fn tone_oracle_cell_sets(
     tiles: &[ToneTile],
     relations: &[ToneRelation],

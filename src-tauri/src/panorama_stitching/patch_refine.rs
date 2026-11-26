@@ -308,6 +308,7 @@ pub(super) fn collect_foreground_feature_points(
     points
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn refine_match_point_from_homography(
     image1: &ImageInfo,
     image2: &ImageInfo,

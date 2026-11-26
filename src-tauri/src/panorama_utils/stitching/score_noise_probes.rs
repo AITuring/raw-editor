@@ -416,7 +416,7 @@ pub(super) fn score_noise_primary_attribution(
     aggregation_instability: bool,
     low_texture_or_confidence: bool,
 ) -> Option<&'static str> {
-    is_shortfall.then(|| {
+    is_shortfall.then_some({
         // This is the causal ordering: when the production owner differs from
         // the minimum of the actual data terms, the pairwise term directly made
         // the choice. Other, potentially overlapping properties are exported as

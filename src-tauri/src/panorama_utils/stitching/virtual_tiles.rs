@@ -56,6 +56,7 @@ impl VirtualTile {
     ///    the pixel geometry of `pixels` (需求 3.11 / 4.6);
     /// 4. the valid pixel extent equals the union bounds of the covered pixels
     ///    (需求 4.7).
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         station_index: usize,
         tile_to_world: Matrix3<f64>,
@@ -236,6 +237,7 @@ pub(crate) fn focus_stack_virtual_tile_geometry(
 /// particular number of layers.  Every group's existing global homographies
 /// are retained, so the returned translation maps tile pixels back into the
 /// same world coordinates used by the normal pose graph.
+#[allow(dead_code)]
 pub(crate) fn focus_stack_virtual_tiles<R: Runtime, F>(
     groups: &[&[&ImageInfo]],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
@@ -292,6 +294,7 @@ where
 /// Assemble a Virtual_Tile from a station render.  Every invariant is checked
 /// by [`VirtualTile::new`]; this only turns the renderer's internal masks into
 /// the published structure (需求 4.1 / 4.2 / 4.6 / 4.7).
+#[allow(dead_code)]
 pub(crate) fn virtual_tile_from_render(
     station_index: usize,
     tile_to_world: Matrix3<f64>,

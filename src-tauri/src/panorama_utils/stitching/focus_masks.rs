@@ -268,6 +268,7 @@ pub(super) fn build_focus_background_foreground_envelope(
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(super) fn build_focus_background_reference_mask(
     analysis_image: &Rgb32FImage,
     analysis_mask: &GrayImage,
@@ -300,6 +301,7 @@ pub(super) fn build_focus_background_reference_mask(
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(super) fn update_focus_background_reference(
     reference_image: &mut Rgb32FImage,
     reference_mask: &mut GrayImage,

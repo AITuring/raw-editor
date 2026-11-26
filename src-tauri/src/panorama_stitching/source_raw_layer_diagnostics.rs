@@ -95,6 +95,7 @@ pub(super) fn source_raw_consensus_clusters(
     let mut remaining = (0..models.len()).collect::<BTreeSet<_>>();
     let mut clusters = Vec::new();
     while !remaining.is_empty() {
+        #[allow(clippy::type_complexity)]
         let mut best: Option<(usize, usize, f64, [u64; 9], usize, Vec<usize>, Vec<usize>)> = None;
         for &representative in &remaining {
             let members = remaining
@@ -291,6 +292,7 @@ pub(super) fn source_raw_seed_points(
         .collect()
 }
 
+#[allow(clippy::type_complexity)]
 pub(super) fn source_raw_normalize_validated_match(
     relation: &MatchInfo,
     match_direction_reversed: bool,

@@ -167,14 +167,14 @@ where
 
     let base_img_info = images[0];
     let mut base_image = load_image(base_img_info)?;
-    if let Some((models, absolute_gains)) = photometric_models.as_ref() {
-        if let Some(model) = models.get(0) {
-            apply_photometric_model_to_image(
-                &mut base_image,
-                model,
-                absolute_gains.get(0).copied().unwrap_or(1.0),
-            );
-        }
+    if let Some((models, absolute_gains)) = photometric_models.as_ref()
+        && let Some(model) = models.first()
+    {
+        apply_photometric_model_to_image(
+            &mut base_image,
+            model,
+            absolute_gains.first().copied().unwrap_or(1.0),
+        );
     }
     let h_base = &global_homographies[&base_img_info.id];
     let h_base_inv = h_base
@@ -262,14 +262,13 @@ where
                 .iter()
                 .enumerate()
                 .find(|(_, image)| image.id == img_to_add_info.id)
+                && let Some(model) = models.get(model_index)
             {
-                if let Some(model) = models.get(model_index) {
-                    apply_photometric_model_to_image(
-                        &mut img_to_add,
-                        model,
-                        absolute_gains.get(model_index).copied().unwrap_or(1.0),
-                    );
-                }
+                apply_photometric_model_to_image(
+                    &mut img_to_add,
+                    model,
+                    absolute_gains.get(model_index).copied().unwrap_or(1.0),
+                );
             }
         }
         let (candidate_left, candidate_right, candidate_top, candidate_bottom) =

@@ -212,6 +212,6 @@ mod tests {
         }
         let result = compute_focus_pyramid(16, 8, &[smooth, edge], FocusPyramidConfig::default())
             .expect("valid focus pyramid");
-        assert!(result.winner_map.iter().any(|&winner| winner == 1));
+        assert!(result.winner_map.contains(&1));
     }
 }

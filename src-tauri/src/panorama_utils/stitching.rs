@@ -354,8 +354,7 @@ pub(crate) fn focus_stack_pixel_is_canvas_like(pixel: &[f32]) -> bool {
     // Darkened paper from a long scan can fall below the original 0.12
     // floor.  Keep a small margin above true black ink so the low-frequency
     // tone field can still see those paper samples.
-    luma >= 0.08
-        && luma <= 0.78
+    (0.08..=0.78).contains(&luma)
         && red >= green
         && green >= blue
         && green_ratio >= 0.42

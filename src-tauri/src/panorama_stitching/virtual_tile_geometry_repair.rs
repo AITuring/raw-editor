@@ -61,8 +61,7 @@ pub(super) fn virtual_tile_prior_repair_is_bounded(
     correction_scale_ratio: f64,
 ) -> bool {
     center_shift_px.is_finite()
-        && center_shift_px >= 0.0
-        && center_shift_px <= CLOSURE_MAX_CORNER_CORRECTION_PX
+        && (0.0..=CLOSURE_MAX_CORNER_CORRECTION_PX).contains(&center_shift_px)
         && correction_scale_ratio.is_finite()
         && (STATION_RELATION_SCALE_RATIO_MIN..=STATION_RELATION_SCALE_RATIO_MAX)
             .contains(&correction_scale_ratio)

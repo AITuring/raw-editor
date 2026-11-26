@@ -507,8 +507,8 @@ fn real_focus_pair_diagnostics_from_env() {
                     m.homography
                 ))
             );
-            if result.is_none() {
-                if let Some(m) = match_image_pair(
+            if result.is_none()
+                && let Some(m) = match_image_pair(
                     &images[a],
                     &images[b],
                     Projection::Planar,
@@ -517,49 +517,49 @@ fn real_focus_pair_diagnostics_from_env() {
                     true,
                     true,
                     false,
-                ) {
-                    println!(
-                        "PANORAMA_CANDIDATE {:?} quality={:?}",
-                        m.homography,
-                        focus_overlap_quality(&images[a], &images[b], &m.homography)
-                    );
-                    for factor in [1u32, 2, 4] {
-                        let structural = |info: &ImageInfo| ImageInfo {
-                            id: info.id,
-                            filename: info.filename.clone(),
-                            width: info.width,
-                            height: info.height,
-                            scale_factor: info.scale_factor * factor as f64,
-                            alignment_image: imageproc::filter::gaussian_blur_f32(
-                                &image::imageops::resize(
-                                    &info.alignment_image,
-                                    info.alignment_image.width() / factor,
-                                    info.alignment_image.height() / factor,
-                                    image::imageops::FilterType::Triangle,
-                                ),
-                                1.0,
+                )
+            {
+                println!(
+                    "PANORAMA_CANDIDATE {:?} quality={:?}",
+                    m.homography,
+                    focus_overlap_quality(&images[a], &images[b], &m.homography)
+                );
+                for factor in [1u32, 2, 4] {
+                    let structural = |info: &ImageInfo| ImageInfo {
+                        id: info.id,
+                        filename: info.filename.clone(),
+                        width: info.width,
+                        height: info.height,
+                        scale_factor: info.scale_factor * factor as f64,
+                        alignment_image: imageproc::filter::gaussian_blur_f32(
+                            &image::imageops::resize(
+                                &info.alignment_image,
+                                info.alignment_image.width() / factor,
+                                info.alignment_image.height() / factor,
+                                image::imageops::FilterType::Triangle,
                             ),
-                            full_image: None,
-                            focal_length_35mm: info.focal_length_35mm,
-                            source_footprint: info.source_footprint,
-                            features: Vec::new(),
-                            top_features: Vec::new(),
-                            overview_reference: false,
-                            foreground_range: None,
-                            foreground_mask: None,
-                            horizontal_edge_rows: Vec::new(),
-                            vertical_edge_columns: Vec::new(),
-                        };
-                        println!(
-                            "STRUCTURAL factor={} quality={:?}",
-                            factor,
-                            focus_overlap_quality(
-                                &structural(&images[a]),
-                                &structural(&images[b]),
-                                &m.homography
-                            )
-                        );
-                    }
+                            1.0,
+                        ),
+                        full_image: None,
+                        focal_length_35mm: info.focal_length_35mm,
+                        source_footprint: info.source_footprint,
+                        features: Vec::new(),
+                        top_features: Vec::new(),
+                        overview_reference: false,
+                        foreground_range: None,
+                        foreground_mask: None,
+                        horizontal_edge_rows: Vec::new(),
+                        vertical_edge_columns: Vec::new(),
+                    };
+                    println!(
+                        "STRUCTURAL factor={} quality={:?}",
+                        factor,
+                        focus_overlap_quality(
+                            &structural(&images[a]),
+                            &structural(&images[b]),
+                            &m.homography
+                        )
+                    );
                 }
             }
         }

@@ -183,8 +183,9 @@ impl PairField {
                         tile.cell_coverage
                             [py as usize * tile.cell_mean.width() as usize + px as usize],
                     );
-                    for c in 0..3 {
-                        rgb[c] += f64::from(tile.cell_mean.get_pixel(px, py)[c]) * weight;
+                    let mean = tile.cell_mean.get_pixel(px, py).0;
+                    for (acc, &channel_value) in rgb.iter_mut().zip(&mean) {
+                        *acc += f64::from(channel_value) * weight;
                     }
                 }
             }

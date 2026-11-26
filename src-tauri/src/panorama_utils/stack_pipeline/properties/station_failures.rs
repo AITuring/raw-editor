@@ -408,7 +408,7 @@ proptest! {
         );
 
         let mut branches = 0usize;
-        if case % PARTIAL_REGISTRATION_RENDER_STRIDE == 0 {
+        if case.is_multiple_of(PARTIAL_REGISTRATION_RENDER_STRIDE) {
             let sources = (0..total)
                 .map(|id| partial_registration_source(id, failed_ids.contains(&id)))
                 .collect::<Vec<_>>();

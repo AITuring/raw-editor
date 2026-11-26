@@ -258,6 +258,7 @@ pub(super) fn assert_topology_identical(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Strictness {
     /// Partition only (需求 1.3).
+    #[allow(dead_code)]
     Partition,
     /// Partition plus the station order and the compositor order (需求 5.8).
     Topology,

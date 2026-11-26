@@ -183,6 +183,7 @@ pub(super) fn maximum_station_corner_displacement(
     })
 }
 
+#[allow(clippy::type_complexity)]
 pub(super) fn clamp_station_translation_corrections(
     images: &[ImageInfo],
     groups: &[FocusCaptureGroup],
@@ -266,6 +267,7 @@ pub(super) fn clamp_station_translation_corrections(
 /// displacement budget as the translation closure.  Scaling all six deltas
 /// together preserves the measured shear/scale direction while ensuring that
 /// one weak edge cannot move an entire station outside its overlap evidence.
+#[allow(clippy::type_complexity)]
 pub(super) fn clamp_station_affine_corrections(
     images: &[ImageInfo],
     groups: &[FocusCaptureGroup],
@@ -335,6 +337,7 @@ pub(super) fn clamp_station_affine_corrections(
     Some((actual_maximum, clamped_stations))
 }
 
+#[allow(clippy::type_complexity)]
 pub(super) fn clamp_station_projective_corrections(
     images: &[ImageInfo],
     groups: &[FocusCaptureGroup],
@@ -470,6 +473,7 @@ pub(super) fn closure_acceptance(
 /// Station_Relation. The fixed 11×11 source-plane lattice is clipped by the
 /// relation into the target tile, so every retained sample belongs to the
 /// geometric overlap and repeated runs inspect identical world positions.
+#[allow(clippy::type_complexity)]
 pub(super) fn closure_direct_pair_p95s(
     images: &[ImageInfo],
     groups: &[FocusCaptureGroup],
@@ -571,6 +575,7 @@ pub(super) fn station_relation_pair_matches(
     (left.min(right), left.max(right)) == (pair.0.min(pair.1), pair.0.max(pair.1))
 }
 
+#[allow(clippy::type_complexity)]
 pub(super) fn relation_edge_removal_preserves_connectivity(
     station_count: usize,
     group_edges: &[(f64, usize, usize, Matrix3<f64>, usize, f64)],
@@ -597,6 +602,7 @@ pub(super) fn relation_edge_removal_preserves_connectivity(
 /// the relation no longer participates in the authoritative graph or closure
 /// report.  The graph must stay connected, so this cannot silently discard a
 /// tree edge and turn the solve into independent components.
+#[allow(clippy::type_complexity)]
 pub(super) fn reject_global_closure_relation(
     station_count: usize,
     group_edges: &mut Vec<(f64, usize, usize, Matrix3<f64>, usize, f64)>,

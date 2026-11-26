@@ -26,6 +26,7 @@ pub(super) struct OwnerOverlapGain {
 }
 
 impl OwnerOverlapGain {
+    #[allow(clippy::too_many_arguments)]
     pub fn observe(
         &mut self,
         owner: u8,

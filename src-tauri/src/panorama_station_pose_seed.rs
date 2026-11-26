@@ -20,6 +20,7 @@ use super::{
     transform_is_stable_for_focus_stack, transformed_point,
 };
 
+#[allow(clippy::type_complexity)]
 pub(super) fn solve_focus_group_translation_poses(
     images: &[ImageInfo],
     groups: &[FocusCaptureGroup],

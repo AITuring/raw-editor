@@ -16,6 +16,7 @@ use super::{
     symmetric_reprojection_rmse, transformed_point,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn match_image_pair(
     source_image: &ImageInfo,
     target_image: &ImageInfo,
@@ -259,6 +260,7 @@ pub(super) fn match_image_pair_with_seed(
     ))
 }
 
+#[allow(clippy::type_complexity)]
 pub(super) fn estimate_mixed_focal_coarse_registration(
     source: &ImageInfo,
     target: &ImageInfo,

@@ -231,24 +231,22 @@ where
     // the registrar reaches below.  The anchor carries the identity transform,
     // so it is registered by definition.
     let mut station_members = Vec::<StationMember>::new();
-    if intra_station_path {
-        if let Some(info) = images.first() {
-            intra_station::record_run_frame(
-                station_index,
-                &anchor_path,
-                IntraStationFrameRecord {
-                    path: info.filename.clone(),
-                    status: IntraStationFrameStatus::Anchor,
-                    inlier_area_coverage: 1.0,
-                    ..Default::default()
-                },
-            );
-            station_members.push(StationMember {
+    if intra_station_path && let Some(info) = images.first() {
+        intra_station::record_run_frame(
+            station_index,
+            &anchor_path,
+            IntraStationFrameRecord {
                 path: info.filename.clone(),
-                median_sharpness: station_member_median_sharpness(info),
                 status: IntraStationFrameStatus::Anchor,
-            });
-        }
+                inlier_area_coverage: 1.0,
+                ..Default::default()
+            },
+        );
+        station_members.push(StationMember {
+            path: info.filename.clone(),
+            median_sharpness: station_member_median_sharpness(info),
+            status: IntraStationFrameStatus::Anchor,
+        });
     }
     println!("  - Detail-preserving mosaic canvas: {width}x{height}");
     for (index, &info) in images.iter().enumerate() {

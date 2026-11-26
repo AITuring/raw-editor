@@ -422,56 +422,6 @@ fn narrow_native_probe_grid(bounds: (f64, f64, f64, f64)) -> Vec<Point2<f64>> {
     points
 }
 
-#[cfg(test)]
-mod native_probe_tests {
-    use super::*;
-    #[test]
-    fn cross_scale_affine_is_only_a_bounded_proposal() {
-        let mask = stitching::CoverageMask::from_gray(GrayImage::from_pixel(
-            1024,
-            1024,
-            image::Luma([255]),
-        ));
-        let h = Matrix3::new(0.82, 0.0, 60.0, 0.0, 0.82, 60.0, 0.0, 0.0, 1.0);
-        let points = (128..896)
-            .step_by(64)
-            .flat_map(|y| {
-                (128..896).step_by(64).map(move |x| {
-                    let p = Point2::new(x as f64, y as f64);
-                    (p, transformed_point(&h, p).unwrap())
-                })
-            })
-            .collect::<Vec<_>>();
-        assert!(
-            native_station_affine_candidate(&points, (1024, 1024), (1024, 1024), &mask, &mask)
-                .is_none()
-        );
-        let proposed = native_station_cross_scale_affine_candidate(
-            &points,
-            (1024, 1024),
-            (1024, 1024),
-            &mask,
-            &mask,
-        )
-        .unwrap();
-        assert!(median_symmetric_error(&proposed, &points) < 1e-6);
-    }
-    #[test]
-    fn narrow_native_probes_are_bounded_spatial_and_independent() {
-        let p = narrow_native_probe_grid((0.0, 5000.0, 8000.0, 5500.0));
-        assert_eq!(p.len(), 64 * 15);
-        let mut quadrants = [0; 4];
-        for v in &p {
-            quadrants[usize::from(v.x >= 4000.0) + 2 * usize::from(v.y >= 5250.0)] += 1;
-        }
-        assert!(quadrants.iter().all(|&n| n >= 24));
-        assert!(p[1].x - p[0].x >= 32.0);
-        assert!(narrow_native_probe_grid((0.0, 0.0, 1e6, 1e6)).len() <= 2048);
-        assert!(narrow_native_probe_grid((0.0, 0.0, f64::NAN, 1.0)).is_empty());
-        assert!(narrow_native_probe_grid((0.0, 0.0, 10.0, 10.0)).is_empty());
-    }
-}
-
 pub(super) fn virtual_tile_native_station_polish(
     left: &(GrayImage, stitching::CoverageMask),
     right: &(GrayImage, stitching::CoverageMask),
@@ -591,23 +541,22 @@ pub(super) fn virtual_tile_native_station_polish(
     let mut native_verified_points = measure(&probes, "coarse_seed_verification");
     // Retry based on measured native evidence, not the number of coarse
     // proposals. Failed proposals must not suppress nearby independent probes.
-    if native_verified_points.len() < 120 {
-        if let Some(bounds) = predicted_bounds {
-            if narrow_overlap {
-                let extra = narrow_native_probe_grid(bounds)
-                    .into_iter()
-                    .filter(|source| {
-                        !native_verified_points
-                            .iter()
-                            .any(|(p, _, _)| (p - source).norm_squared() < 32.0 * 32.0)
-                    })
-                    .filter_map(|source| {
-                        transformed_point(&seed.homography, source).map(|target| (source, target))
-                    })
-                    .collect::<Vec<_>>();
-                native_verified_points.extend(measure(&extra, "independent_native_grid"));
-            }
-        }
+    if native_verified_points.len() < 120
+        && let Some(bounds) = predicted_bounds
+        && narrow_overlap
+    {
+        let extra = narrow_native_probe_grid(bounds)
+            .into_iter()
+            .filter(|source| {
+                !native_verified_points
+                    .iter()
+                    .any(|(p, _, _)| (p - source).norm_squared() < 32.0 * 32.0)
+            })
+            .filter_map(|source| {
+                transformed_point(&seed.homography, source).map(|target| (source, target))
+            })
+            .collect::<Vec<_>>();
+        native_verified_points.extend(measure(&extra, "independent_native_grid"));
     }
     let points = native_verified_points
         .iter()
@@ -685,4 +634,54 @@ pub(super) fn virtual_tile_native_station_polish(
         native_verified_points,
         ..seed.clone()
     })
+}
+
+#[cfg(test)]
+mod native_probe_tests {
+    use super::*;
+    #[test]
+    fn cross_scale_affine_is_only_a_bounded_proposal() {
+        let mask = stitching::CoverageMask::from_gray(GrayImage::from_pixel(
+            1024,
+            1024,
+            image::Luma([255]),
+        ));
+        let h = Matrix3::new(0.82, 0.0, 60.0, 0.0, 0.82, 60.0, 0.0, 0.0, 1.0);
+        let points = (128..896)
+            .step_by(64)
+            .flat_map(|y| {
+                (128..896).step_by(64).map(move |x| {
+                    let p = Point2::new(x as f64, y as f64);
+                    (p, transformed_point(&h, p).unwrap())
+                })
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            native_station_affine_candidate(&points, (1024, 1024), (1024, 1024), &mask, &mask)
+                .is_none()
+        );
+        let proposed = native_station_cross_scale_affine_candidate(
+            &points,
+            (1024, 1024),
+            (1024, 1024),
+            &mask,
+            &mask,
+        )
+        .unwrap();
+        assert!(median_symmetric_error(&proposed, &points) < 1e-6);
+    }
+    #[test]
+    fn narrow_native_probes_are_bounded_spatial_and_independent() {
+        let p = narrow_native_probe_grid((0.0, 5000.0, 8000.0, 5500.0));
+        assert_eq!(p.len(), 64 * 15);
+        let mut quadrants = [0; 4];
+        for v in &p {
+            quadrants[usize::from(v.x >= 4000.0) + 2 * usize::from(v.y >= 5250.0)] += 1;
+        }
+        assert!(quadrants.iter().all(|&n| n >= 24));
+        assert!(p[1].x - p[0].x >= 32.0);
+        assert!(narrow_native_probe_grid((0.0, 0.0, 1e6, 1e6)).len() <= 2048);
+        assert!(narrow_native_probe_grid((0.0, 0.0, f64::NAN, 1.0)).is_empty());
+        assert!(narrow_native_probe_grid((0.0, 0.0, 10.0, 10.0)).is_empty());
+    }
 }

@@ -454,6 +454,7 @@ impl StreamingMosaicStore {
                 };
             }
             stack.clear();
+            #[allow(clippy::needless_range_loop)]
             for x in 0..=width {
                 let height = if x == width { 0 } else { heights[x] };
                 let mut left = x;
@@ -641,6 +642,7 @@ pub(super) fn materialize_streaming_focus_output(
     store.materialize(crop)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn copy_streaming_tile_region(
     tile: &mut Rgb32FImage,
     tile_mask: &mut GrayImage,
@@ -680,6 +682,7 @@ pub(super) fn copy_streaming_tile_region(
         });
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn copy_streaming_owned_tile_region(
     tile: &mut Rgb32FImage,
     tile_mask: &mut GrayImage,

@@ -53,6 +53,7 @@ pub(super) fn focus_rescue_match_is_verified(
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(super) fn focus_indices_share_component(
     left: usize,
     right: usize,
@@ -64,6 +65,7 @@ pub(super) fn focus_indices_share_component(
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(super) fn insert_recovered_focus_match(
     images: &[ImageInfo],
     left_index: usize,
@@ -102,6 +104,7 @@ pub(super) fn insert_recovered_focus_match(
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(super) fn attach_focus_orphan_components(
     images: &[ImageInfo],
     matches: &mut HashMap<(usize, usize), MatchInfo>,
@@ -164,6 +167,7 @@ pub(super) fn attach_focus_orphan_components(
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(super) fn recover_adjacent_focus_position_match(
     source: &ImageInfo,
     target: &ImageInfo,

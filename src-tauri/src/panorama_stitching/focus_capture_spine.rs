@@ -27,6 +27,7 @@ use super::{
 // capture runs, but cannot replace an already verified local backbone.
 pub(super) const FOCUS_CAPTURE_SEQUENCE_GRAPH_WEIGHT_BOOST: f64 = 128.0;
 
+#[allow(dead_code)]
 pub(super) fn largest_focus_match_component(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,
@@ -150,6 +151,7 @@ pub(super) fn focus_alignment_support(image: &ImageInfo) -> usize {
     image.features.len().max(image.top_features.len())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn focus_position_recovery_accepts(
     capture_gap: u64,
     same_focal: bool,

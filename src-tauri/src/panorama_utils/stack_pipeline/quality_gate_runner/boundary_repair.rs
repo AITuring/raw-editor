@@ -22,6 +22,7 @@ use super::{
 /// The owner ledger remains unchanged; this repairs a local station-layer
 /// sampling offset while retaining the exact provenance and all gate limits.
 /// A candidate is kept only when the same boundary metric strictly improves.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn repair_failed_boundary_samples<F>(
     output: &mut Rgb32FImage,
     coverage: &GrayImage,

@@ -287,7 +287,7 @@ pub(crate) fn scan_capture_settings(images: &[&ImageInfo]) -> CaptureSettingsSca
             images.len()
         ));
     }
-    groups.sort_by(|a, b| b.1.cmp(&a.1));
+    groups.sort_by_key(|group| std::cmp::Reverse(group.1));
     let listed = groups
         .iter()
         .map(|(settings, count)| format!("{count} x {}", settings.describe()))

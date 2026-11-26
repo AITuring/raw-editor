@@ -177,8 +177,10 @@ fn station_candidate_failure_summary_is_order_independent_and_keeps_measurement_
             candidate
         })
         .collect::<Vec<_>>();
-    let mut report = stack_report::StationRelationsReport::default();
-    report.candidates = candidates.clone();
+    let mut report = stack_report::StationRelationsReport {
+        candidates: candidates.clone(),
+        ..stack_report::StationRelationsReport::default()
+    };
     report.summarize_candidate_measurements();
     assert_eq!(report.unmeasured_count, stages.len() - 1);
     assert_eq!(report.rejected_by_failure_stage.len(), stages.len());
@@ -186,8 +188,10 @@ fn station_candidate_failure_summary_is_order_independent_and_keeps_measurement_
     assert_eq!(report.rejected_count, 0); // Solver accounting is separate.
 
     candidates.reverse();
-    let mut reversed = stack_report::StationRelationsReport::default();
-    reversed.candidates = candidates;
+    let mut reversed = stack_report::StationRelationsReport {
+        candidates,
+        ..stack_report::StationRelationsReport::default()
+    };
     reversed.summarize_candidate_measurements();
     assert_eq!(reversed.unmeasured_count, report.unmeasured_count);
     assert_eq!(

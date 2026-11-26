@@ -251,6 +251,7 @@ pub(super) struct FocusStackSourceDigests {
 ///
 /// The ingredients are sorted after hashing, so neither the import order nor the
 /// completion order of the `rayon` tasks reaches the key.
+#[allow(dead_code)]
 pub(super) fn focus_stack_cache_key_inputs(image_paths: &[String]) -> FocusStackSourceDigests {
     let digests = focus_stack_source_digests(image_paths);
     let sources = image_paths

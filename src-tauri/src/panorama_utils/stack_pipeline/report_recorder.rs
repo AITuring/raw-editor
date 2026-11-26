@@ -95,6 +95,7 @@ impl StackReportRecorder {
         self
     }
 
+    #[allow(dead_code)]
     pub(crate) fn with_source_preflight_observation(
         self,
         observation: SourcePreflightObservation,
@@ -194,6 +195,7 @@ impl StackReportRecorder {
         self.update(|report| report.performance.stage_seconds.prepare_seconds = seconds);
     }
 
+    #[allow(dead_code)]
     pub(crate) fn record_matching_seconds(
         &self,
         seconds: f64,

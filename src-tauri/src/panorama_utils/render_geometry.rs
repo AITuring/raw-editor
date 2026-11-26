@@ -165,6 +165,7 @@ pub(super) fn focus_output_bounds(
     (min_x, max_x, min_y, max_y)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn focus_transformed_image_region(
     image: &ImageInfo,
     homography: &Matrix3<f64>,
@@ -178,11 +179,8 @@ pub(super) fn focus_transformed_image_region(
     if out_width == 0 || out_height == 0 {
         return None;
     }
-    let Some((mut min_x, mut max_x, mut min_y, mut max_y)) =
-        transformed_source_bounds(image, homography, projection, 0.0, 1.0)
-    else {
-        return None;
-    };
+    let (mut min_x, mut max_x, mut min_y, mut max_y) =
+        transformed_source_bounds(image, homography, projection, 0.0, 1.0)?;
     if let Some(focus_warp) = focus_warp {
         for band in &focus_warp.bands {
             let Some(band_homography) = band.homographies.get(&image.id) else {

@@ -18,7 +18,7 @@ use super::super::residual_warp::{OverlapResidual, ResidualWarp, WarpObservation
 // fields use smaller constant displacements, so this full-contract bound is
 // deliberately conservative for their partition-of-unity composition).
 const CONTRACT_JACOBIAN_PERTURBATION_BOUND: f64 =
-    1.4142135623730951 * 8.0 / 64.0 + 32.0 * 1.5 / 128.0;
+    std::f64::consts::SQRT_2 * 8.0 / 64.0 + 32.0 * 1.5 / 128.0;
 const JACOBIAN_SIGMA_FLOOR: f64 = 1.0 - CONTRACT_JACOBIAN_PERTURBATION_BOUND;
 
 fn observations(world: WorldRect, displacement: [f64; 2]) -> Vec<WarpObservation> {

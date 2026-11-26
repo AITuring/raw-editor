@@ -214,16 +214,20 @@ pub(super) fn fit_streaming_tone_plane(
             }
             augmented.swap(pivot, pivot_row);
             let divisor = augmented[pivot][pivot];
-            for column in pivot..4 {
-                augmented[pivot][column] /= divisor;
+            for cell in &mut augmented[pivot][pivot..4] {
+                *cell /= divisor;
             }
             for row in 0..3 {
                 if row == pivot {
                     continue;
                 }
                 let factor = augmented[row][pivot];
-                for column in pivot..4 {
-                    augmented[row][column] -= factor * augmented[pivot][column];
+                let pivot_row_values = augmented[pivot];
+                for (dst, &src) in augmented[row][pivot..4]
+                    .iter_mut()
+                    .zip(&pivot_row_values[pivot..4])
+                {
+                    *dst -= factor * src;
                 }
             }
         }

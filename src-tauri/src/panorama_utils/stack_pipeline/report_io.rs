@@ -153,6 +153,7 @@ pub(crate) fn assign_stack_report_result_id(
 /// Record the metadata observed by reopening a successfully published output.
 /// The rewrite uses the same temporary-file-plus-rename boundary as the initial
 /// report, so readers never observe a partially updated document.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn update_stack_report_output(
     report_path: &Path,
     result_id: &str,

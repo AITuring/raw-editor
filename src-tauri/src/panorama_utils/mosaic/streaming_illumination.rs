@@ -241,38 +241,6 @@ fn box_mean(
     output
 }
 
-#[cfg(test)]
-mod material_tests {
-    use super::*;
-    #[test]
-    fn artwork_filter_preserves_bright_hardware_and_small_exposure_correction() {
-        assert_eq!(material_guarded_gain(0.75, 0.30), 1.0);
-        assert_eq!(material_guarded_gain(0.20, 0.50), 1.0);
-        assert!((material_guarded_gain(0.30, 0.315) - 1.05).abs() < 1e-6);
-        let original = Rgb32FImage::from_fn(512, 256, |x, y| {
-            let level = if (90..130).contains(&y) {
-                0.75
-            } else if x < 256 {
-                0.30
-            } else {
-                0.33
-            };
-            Rgb([level, level * 0.9, level * 0.8])
-        });
-        let mut corrected = original.clone();
-        smooth_artwork_low_frequency_illumination(&mut corrected);
-        assert!(corrected.get_pixel(256, 110)[0] > 0.74);
-        let before = (original.get_pixel(230, 210)[0] - original.get_pixel(282, 210)[0]).abs();
-        let after = (corrected.get_pixel(230, 210)[0] - corrected.get_pixel(282, 210)[0]).abs();
-        assert!(
-            after < before,
-            "small same-material exposure step must soften"
-        );
-        let pixel = corrected.get_pixel(256, 110);
-        assert!((pixel[1] / pixel[0] - 0.9).abs() < 1e-6);
-    }
-}
-
 /// Correct source-sized exposure fields after ownership has selected the
 /// pixels that carry the painting detail.  A single canvas blur cannot tell a
 /// frame-sized exposure step from a real broad paper gradient: at the centre
@@ -656,4 +624,36 @@ pub(super) fn sample_luma_f32(
     let top = p00 * (1.0 - tx) + p10 * tx;
     let bottom = p01 * (1.0 - tx) + p11 * tx;
     top * (1.0 - ty) + bottom * ty
+}
+
+#[cfg(test)]
+mod material_tests {
+    use super::*;
+    #[test]
+    fn artwork_filter_preserves_bright_hardware_and_small_exposure_correction() {
+        assert_eq!(material_guarded_gain(0.75, 0.30), 1.0);
+        assert_eq!(material_guarded_gain(0.20, 0.50), 1.0);
+        assert!((material_guarded_gain(0.30, 0.315) - 1.05).abs() < 1e-6);
+        let original = Rgb32FImage::from_fn(512, 256, |x, y| {
+            let level = if (90..130).contains(&y) {
+                0.75
+            } else if x < 256 {
+                0.30
+            } else {
+                0.33
+            };
+            Rgb([level, level * 0.9, level * 0.8])
+        });
+        let mut corrected = original.clone();
+        smooth_artwork_low_frequency_illumination(&mut corrected);
+        assert!(corrected.get_pixel(256, 110)[0] > 0.74);
+        let before = (original.get_pixel(230, 210)[0] - original.get_pixel(282, 210)[0]).abs();
+        let after = (corrected.get_pixel(230, 210)[0] - corrected.get_pixel(282, 210)[0]).abs();
+        assert!(
+            after < before,
+            "small same-material exposure step must soften"
+        );
+        let pixel = corrected.get_pixel(256, 110);
+        assert!((pixel[1] / pixel[0] - 0.9).abs() < 1e-6);
+    }
 }

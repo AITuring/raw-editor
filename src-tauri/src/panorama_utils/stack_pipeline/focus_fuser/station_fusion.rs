@@ -209,6 +209,7 @@ impl StationFusion {
             2,
         );
         let mut base_owners = vec![NO_OWNER; count];
+        #[allow(clippy::needless_range_loop)]
         for cell in 0..count {
             let owned = self.owners[cell] != NO_OWNER;
             let candidate = cells.covered.get(cell).copied().unwrap_or(false);

@@ -91,13 +91,13 @@ pub(super) fn refine_layer_from_analysis(
                 continue;
             }
             let p = Point2::new(x as f64, y as f64);
-            let Some(found) = refine_warped_patch(&a, &b, &Matrix3::identity(), p, 9, 7) else {
+            let Some(found) = refine_warped_patch(a, b, &Matrix3::identity(), p, 9, 7) else {
                 continue;
             };
             if found.correlation < 0.88 {
                 continue;
             }
-            let Some(back) = refine_warped_patch(&b, &a, &Matrix3::identity(), found.target, 9, 7)
+            let Some(back) = refine_warped_patch(b, a, &Matrix3::identity(), found.target, 9, 7)
             else {
                 continue;
             };

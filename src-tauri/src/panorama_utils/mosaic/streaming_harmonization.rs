@@ -92,8 +92,7 @@ impl StreamingLowFrequencyConsensus {
                 let base_luma = luma(base_pixel);
                 let target_luma = luma(target_pixel);
                 if base_luma < 0.06
-                    || target_luma < 0.06
-                    || target_luma > 0.93
+                    || !(0.06..=0.93).contains(&target_luma)
                     // Keep the overlap solver useful across the larger
                     // exposure steps that remain after the per-layer tone
                     // field.  Dark ink is still excluded by the near-black
@@ -454,6 +453,7 @@ pub(super) fn streaming_seam_harmonization(
     Ok(Some((gains, scale)))
 }
 
+#[allow(dead_code)]
 pub(super) fn streaming_group_tone_relations_from_analysis(
     base: &Rgb32FImage,
     base_mask: &GrayImage,

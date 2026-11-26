@@ -406,6 +406,7 @@ fn reduced_exact(
     });
     ranked.truncate(maximum_options.max(count));
     let mut best: Option<(u64, Vec<usize>, Vec<u16>)> = None;
+    #[allow(clippy::too_many_arguments)]
     fn visit(
         input: &OracleInput,
         options: &[RoiOption],
@@ -418,13 +419,13 @@ fn reduced_exact(
         best: &mut Option<(u64, Vec<usize>, Vec<u16>)>,
     ) {
         if selected.len() == count {
-            if let Some((cost, labels)) = selected_cost(input, selected, options, limit) {
-                if best.as_ref().is_none_or(|(best_cost, best_selected, _)| {
+            if let Some((cost, labels)) = selected_cost(input, selected, options, limit)
+                && best.as_ref().is_none_or(|(best_cost, best_selected, _)| {
                     cost < *best_cost
                         || (cost == *best_cost && selected.as_slice() < best_selected.as_slice())
-                }) {
-                    *best = Some((cost, selected.clone(), labels));
-                }
+                })
+            {
+                *best = Some((cost, selected.clone(), labels));
             }
             return;
         }

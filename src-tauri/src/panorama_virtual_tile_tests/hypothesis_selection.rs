@@ -361,6 +361,7 @@ fn station_relation_coordinate_diagnostics_preserve_unequal_tiles_crop_and_rever
 
 // Ported from codex/layered-focus-modularize-2026-10-26 (7e3a0488, fc22136f):
 // selector and solver share one canonical measurement, independent of import order.
+#[allow(clippy::type_complexity)]
 fn projective_hypothesis_fixture(
     transform: Matrix3<f64>,
     target_gain: f64,
@@ -548,6 +549,7 @@ fn selector_and_solver_share_exposure_compensated_photometric_verdict() {
     assert_eq!(solved.len(), 2);
 }
 
+#[allow(clippy::type_complexity)]
 fn canonical_edge_ratio_fixture(
     source_span: u8,
     target_span: u8,

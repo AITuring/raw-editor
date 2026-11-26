@@ -122,6 +122,7 @@ impl TilePlan {
 /// A source provider used by a tile compositor. Implementations must perform
 /// bounded, read-only region reads; returning a full-frame decode here would
 /// violate the 21.7 memory contract even if the caller later crops it.
+#[allow(dead_code)]
 pub(crate) trait FullResSource {
     fn dimensions(&self) -> (u32, u32);
     fn source_sha256(&self) -> &str;

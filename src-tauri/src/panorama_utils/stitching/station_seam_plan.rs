@@ -27,6 +27,7 @@ use super::{
 /// Solve one deterministic minimum-cost seam for each accepted station pair.
 /// This is intentionally an analysis-grid operation; applying the plan later
 /// resamples only pixels that actually change owner.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn build_station_seam_plans<F, T>(
     images: &[&ImageInfo],
     global_homographies: &HashMap<usize, Matrix3<f64>>,
@@ -277,7 +278,7 @@ where
                 SeamOrientation::Vertical => (cross, along),
                 SeamOrientation::Horizontal => (along, cross),
             };
-            let Some(((left_pixel, left_source), (right_pixel, right_source))) =
+            let ((left_pixel, left_source), (right_pixel, right_source)) =
                 station_seam_pair_sample(
                     left,
                     &left_pixels,
@@ -292,10 +293,7 @@ where
                     y,
                     offset_x,
                     offset_y,
-                )
-            else {
-                return None;
-            };
+                )?;
             let disagreement = left_pixel
                 .0
                 .iter()
@@ -433,7 +431,7 @@ where
                     cross_samples: vec![center, center],
                     current_cross_samples: Vec::new(),
                     first_on_low_side,
-                    local_relation: local_relation.clone(),
+                    local_relation,
                     local_tone: local_tone.clone(),
                 };
                 let topology = tone::run_topology_snapshot().unwrap_or_default();
@@ -746,6 +744,7 @@ pub(super) fn station_transition_first_on_low_side(
 /// majority in the bounded relation band; an ambiguous island must remain
 /// untouched rather than becoming a reason to rewrite both sides.
 #[cfg(test)]
+#[allow(dead_code)]
 pub(super) fn station_current_second_on_low_side(
     plan: &StationSeamPlan,
     source_owner_ids: &[u16],

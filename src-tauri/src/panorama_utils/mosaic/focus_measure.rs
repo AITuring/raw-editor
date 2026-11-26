@@ -125,6 +125,7 @@ pub(in crate::panorama_utils) fn acutance_with_step(
     let mut level = 0.0;
     for y in 2..7 {
         for x in 2..7 {
+            #[allow(clippy::needless_range_loop)]
             for c in 0..3 {
                 let dx = (smooth[y][x + 2][c] - smooth[y][x - 2][c]) * 0.25;
                 let dy = (smooth[y + 2][x][c] - smooth[y - 2][x][c]) * 0.25;

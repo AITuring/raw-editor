@@ -78,6 +78,7 @@ pub(super) fn validated_owner_slots<'a>(
 }
 
 pub(super) struct OwnerEvidence {
+    #[allow(dead_code)]
     pub geometry: NativeOwnerGeometry,
     pub raw_owner: u16,
     pub confidence: f32,

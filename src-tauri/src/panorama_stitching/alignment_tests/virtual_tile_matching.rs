@@ -81,6 +81,7 @@ fn guided_repeated_texture_fixture() -> (
     )
 }
 
+#[allow(clippy::type_complexity)]
 fn direct_projective_fixture() -> (
     Vec<ImageInfo>,
     Vec<stitching::CoverageMask>,
@@ -140,6 +141,7 @@ fn direct_projective_fixture() -> (
     )
 }
 
+#[allow(clippy::type_complexity)]
 fn nonzero_origin_virtual_tile_fixture() -> (
     Vec<ImageInfo>,
     Vec<stitching::CoverageMask>,

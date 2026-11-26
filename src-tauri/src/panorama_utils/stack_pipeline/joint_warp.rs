@@ -73,6 +73,7 @@ pub(crate) struct PairValidation {
 
 pub(crate) struct Fit {
     pub fields: Vec<StationField>,
+    #[allow(dead_code)]
     pub validation: Vec<PairValidation>,
 }
 

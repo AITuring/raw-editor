@@ -114,6 +114,7 @@ pub(super) fn ordered_horizontal_capture_shift(
     Some((score, dx as f64 * scale, dy as f64 * scale))
 }
 
+#[allow(dead_code)]
 pub(super) fn synthetic_capture_sequence_bridge(
     source: &ImageInfo,
     target: &ImageInfo,
@@ -231,6 +232,7 @@ pub(super) fn synthetic_capture_sequence_bridge(
     })
 }
 
+#[allow(dead_code)]
 pub(super) fn synthetic_overview_overlay_bridge(
     source: &ImageInfo,
     target: &ImageInfo,
@@ -274,6 +276,7 @@ pub(super) fn synthetic_overview_overlay_bridge(
     })
 }
 
+#[allow(dead_code)]
 pub(super) fn synthetic_overview_gap_bridges(
     left: &ImageInfo,
     overview: &ImageInfo,
@@ -513,6 +516,7 @@ pub(super) fn add_capture_sequence_bridges(
 /// is no honest feature correspondence to feed the optimizer, but the capture
 /// still belongs between the two neighbouring focal-length runs. The inserted
 /// links remain priors and carry no artwork observations.
+#[allow(dead_code)]
 pub(super) fn add_unmatched_overview_gap_bridges(
     images: &mut [ImageInfo],
     matches: &mut HashMap<(usize, usize), MatchInfo>,

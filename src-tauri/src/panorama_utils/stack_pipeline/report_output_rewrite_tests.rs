@@ -8,8 +8,10 @@ fn read_raw(path: &Path) -> RawFields {
 }
 
 fn difficult_report(path: &Path) -> RawFields {
-    let mut report = StackReport::default();
-    report.run_id = "raw-output-evidence".into();
+    let mut report = StackReport {
+        run_id: "raw-output-evidence".into(),
+        ..StackReport::default()
+    };
     // These decimal values were observed drifting during the native v18
     // whole-report deserialize/serialize cycle. They must not be parsed by an
     // output-only update at all.

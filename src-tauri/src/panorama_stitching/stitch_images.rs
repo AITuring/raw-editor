@@ -427,6 +427,7 @@ pub(crate) fn stitch_images_with_options<R: Runtime>(
 /// One solve and render of `image_paths` without the frames in `left_out`,
 /// which the first attempt found the scan should be solved without; `None`
 /// on the first attempt.
+#[allow(clippy::too_many_arguments)]
 fn stitch_images_attempt<R: Runtime>(
     image_paths: Vec<String>,
     // The active solve may be a retry with unaligned/oblique frames removed;
@@ -1515,7 +1516,7 @@ fn stitch_images_attempt<R: Runtime>(
         #[cfg(test)]
         if std::env::var_os("RAW_EDITOR_STACK_PAIR_HARNESS_STOP_AFTER_RELATIONS").is_some() {
             stitching_order =
-                pair_harness_disconnected_focus_geometry(&image_data, &pairwise_matches);
+                pair_harness_disconnected_focus_geometry(&image_data, pairwise_matches);
         }
         let disconnected_component_count = station_relations.connectivity.components;
         if !defer_authoritative_station_solve {
@@ -3573,34 +3574,30 @@ fn stitch_images_attempt<R: Runtime>(
                     apply_test_station_jacobian_scale(&tile_infos, &mut tile_homographies);
                     #[cfg(test)]
                     if std::env::var("RAW_EDITOR_TEST_MODE").as_deref() == Ok("density_diagnostics")
-                    {
-                        if let Some(directory) =
+                        && let Some(directory) =
                             std::env::var_os("RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR")
-                        {
-                            super::output_density::write_density_diagnostics(
-                                &station_density_samples,
-                                &tile_homographies,
-                                &tile_infos.iter().map(|tile| tile.id).collect::<Vec<_>>(),
-                                &Path::new(&directory).join("density"),
-                            )?;
-                        }
+                    {
+                        super::output_density::write_density_diagnostics(
+                            &station_density_samples,
+                            &tile_homographies,
+                            &tile_infos.iter().map(|tile| tile.id).collect::<Vec<_>>(),
+                            &Path::new(&directory).join("density"),
+                        )?;
                     }
                     #[cfg(test)]
                     if std::env::var("RAW_EDITOR_TEST_MODE").as_deref()
                         == Ok("residual_density_diagnostics")
-                    {
-                        if let Some(directory) =
+                        && let Some(directory) =
                             std::env::var_os("RAW_EDITOR_STREAMING_MOSAIC_DIAGNOSTICS_DIR")
-                        {
-                            super::output_density::write_residual_density_diagnostics(
-                                &station_density_samples,
-                                &tile_homographies,
-                                &tile_infos.iter().map(|tile| tile.id).collect::<Vec<_>>(),
-                                &residual_warp::run_model_snapshot(),
-                                &density_closure_evidence,
-                                &Path::new(&directory).join("residual-density"),
-                            )?;
-                        }
+                    {
+                        super::output_density::write_residual_density_diagnostics(
+                            &station_density_samples,
+                            &tile_homographies,
+                            &tile_infos.iter().map(|tile| tile.id).collect::<Vec<_>>(),
+                            &residual_warp::run_model_snapshot(),
+                            &density_closure_evidence,
+                            &Path::new(&directory).join("residual-density"),
+                        )?;
                     }
                     if compositor_choice == StackCompositorChoice::LayeredVirtualTile {
                         let mut density = super::output_density::plan_output_density(
@@ -4569,6 +4566,7 @@ fn stitch_images_attempt<R: Runtime>(
             };
         });
     }
+    #[cfg_attr(not(test), allow(unused_mut))]
     if let Some((
         coverage,
         mut ownership,

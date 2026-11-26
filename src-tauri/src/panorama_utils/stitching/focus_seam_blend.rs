@@ -425,6 +425,7 @@ pub(super) fn blend_focus_seam_band(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn hard_select_focus_layer_outside_patch(
     base: &mut Rgb32FImage,
     base_mask: &mut GrayImage,

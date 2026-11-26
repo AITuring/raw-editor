@@ -91,6 +91,7 @@ pub(crate) fn solve_station_poses_with_report(
 ///
 /// Returns the solved per-source world homographies together with the
 /// `translation_geometry_verified` flag the caller receives out-of-band.
+#[allow(dead_code)]
 pub(crate) fn solve_station_poses(
     images: &[ImageInfo],
     matches: &HashMap<(usize, usize), MatchInfo>,

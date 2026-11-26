@@ -162,6 +162,7 @@ fn apply_reference_tone(image: Rgb32FImage, calibration: Option<ToneCalibration>
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn prewarp_reference_source(
     source: &Rgb32FImage,
     homography: &Matrix3<f64>,

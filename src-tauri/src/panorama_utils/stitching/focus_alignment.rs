@@ -58,6 +58,7 @@ pub(super) fn focus_alignment_gradient_at(
     Some((horizontal, vertical))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn focus_full_resolution_patch_score(
     candidate: &RenderedFocusLayer,
     merged: &Rgb32FImage,

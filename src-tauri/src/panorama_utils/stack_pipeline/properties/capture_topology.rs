@@ -565,7 +565,7 @@ proptest! {
             }
         }
 
-        if case % PROPERTY_28_RELATION_STRIDE == 0 {
+        if case.is_multiple_of(PROPERTY_28_RELATION_STRIDE) {
             PROPERTY_28_RELATION_RUNS.fetch_add(1, Ordering::Relaxed);
             let original_relation_features = original_features
                 .iter()

@@ -78,6 +78,7 @@ mod features;
 
 #[cfg(test)]
 use features::local_contrast_detector_image;
+#[cfg(test)]
 pub(crate) use features::match_features_with_ratio_attrition;
 pub use features::{
     count_mutual_descriptor_matches_with_ratio, find_features, find_features_multiscale,

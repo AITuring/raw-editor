@@ -141,6 +141,7 @@ pub(super) fn write_station_owner_trace(
 /// station-pair owners is changed, and the image pixel is copied from the
 /// adjacent owner on the same side so the image/provenance planes stay in
 /// lockstep.  Wider runs and any third-owner boundary remain untouched.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn copy_station_owner_pixel(
     panorama: &mut Rgb32FImage,
     owner_map: &mut GrayImage,
@@ -319,6 +320,7 @@ pub(super) fn cleanup_station_pair_owner_islands(
     changed
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn apply_station_seam_plans<F, T>(
     plans: &[StationSeamPlan],
     panorama: &mut Rgb32FImage,
@@ -609,13 +611,14 @@ where
                         };
                         pixel = original;
                     }
-                    if desired_owner == second_owner && local_second_band {
-                        if let Some(solve) = plan.local_tone.as_ref() {
-                            for channel in 0..3 {
-                                pixel[channel] = (solve.gain[channel] * pixel[channel]
-                                    + solve.offset[channel])
-                                    .clamp(0.0, 1.0);
-                            }
+                    if desired_owner == second_owner
+                        && local_second_band
+                        && let Some(solve) = plan.local_tone.as_ref()
+                    {
+                        for channel in 0..3 {
+                            pixel[channel] = (solve.gain[channel] * pixel[channel]
+                                + solve.offset[channel])
+                                .clamp(0.0, 1.0);
                         }
                     }
                     let index = y as usize * panorama.width() as usize + x as usize;

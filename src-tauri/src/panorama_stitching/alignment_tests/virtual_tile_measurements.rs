@@ -67,7 +67,7 @@ fn virtual_tile_features_ignore_every_uncovered_pixel() {
         .collect::<Vec<_>>();
     let coverage = stitching::CoverageMask::from_bytes(width, height, covered).unwrap();
     let covered_value = |x: u32, y: u32| {
-        if ((x / 6) + (y / 6)) % 2 == 0 {
+        if ((x / 6) + (y / 6)).is_multiple_of(2) {
             0.1
         } else {
             0.9

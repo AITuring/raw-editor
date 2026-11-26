@@ -149,7 +149,7 @@ pub(crate) fn register_station_frame_native_with_mapping(
     let record = intra_station_frame_record(&info.filename, into_anchor, &outcome);
     Some(StationFrameRegistration {
         record,
-        displacement: (!outcome.skipped).then(|| NativeResidualDisplacement {
+        displacement: (!outcome.skipped).then_some(NativeResidualDisplacement {
             field: sampler.residual,
             left,
             top,

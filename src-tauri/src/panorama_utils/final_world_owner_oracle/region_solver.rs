@@ -328,6 +328,7 @@ pub(super) fn relaxation_lower_bound(options: &[RegionOption], count: usize) -> 
     costs.get(count - 1).copied()
 }
 
+#[allow(clippy::type_complexity)]
 pub(super) fn reduced_exact(
     input: &OracleInput,
     options: &[RegionOption],
@@ -404,6 +405,7 @@ pub(super) fn reduced_exact(
         })
         .collect::<Vec<_>>();
     let mut best = None::<(i128, f64, Vec<usize>)>;
+    #[allow(clippy::too_many_arguments)]
     fn visit(
         input: &OracleInput,
         options: &[RegionOption],

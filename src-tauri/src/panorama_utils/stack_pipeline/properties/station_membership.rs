@@ -472,7 +472,7 @@ pub(super) fn station_identity_partition(
                 .collect::<BTreeSet<_>>()
         })
         .collect::<BTreeSet<_>>();
-    for index in 0..identities.len() {
+    for (index, &identity) in identities.iter().enumerate() {
         let in_station = grouping
             .components
             .iter()
@@ -480,7 +480,7 @@ pub(super) fn station_identity_partition(
         if in_station || grouping.isolated.contains(&index) {
             continue;
         }
-        partition.insert(BTreeSet::from([identities[index]]));
+        partition.insert(BTreeSet::from([identity]));
     }
     partition
 }

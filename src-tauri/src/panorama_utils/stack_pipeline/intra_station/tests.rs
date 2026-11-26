@@ -73,10 +73,13 @@ fn task_7_31_patch_geometry_satisfies_window_and_search_bounds() {
         INTRA_STATION_PATCH_HALF
     ));
     assert_eq!(INTRA_STATION_PATCH_HALF, 40);
-    assert!(
-        INTRA_STATION_MATCH_RADIUS + 2 * INTRA_STATION_SEARCH_SAMPLES < INTRA_STATION_PATCH_HALF,
-        "the reverse centre can move by the full forward search extent"
-    );
+    const {
+        assert!(
+            INTRA_STATION_MATCH_RADIUS + 2 * INTRA_STATION_SEARCH_SAMPLES
+                < INTRA_STATION_PATCH_HALF,
+            "the reverse centre can move by the full forward search extent"
+        );
+    };
     assert!(!patch_support_fits(
         INTRA_STATION_SEARCH_RADIUS as i32,
         INTRA_STATION_SEARCH_SAMPLES,
@@ -538,7 +541,7 @@ fn accepted_cells_accumulate_over_the_refinement_passes() {
 #[test]
 fn task_7_31_analysis_budget_and_report_use_actual_configured_value() {
     assert_eq!(INTRA_STATION_ANALYSIS_LONG_SIDE, 1_400);
-    assert!(INTRA_STATION_ANALYSIS_LONG_SIDE <= INTRA_STATION_ANALYSIS_MAX_LONG_SIDE);
+    const { assert!(INTRA_STATION_ANALYSIS_LONG_SIDE <= INTRA_STATION_ANALYSIS_MAX_LONG_SIDE) };
     assert!((analysis_probe_spacing(1_024) - 1.0).abs() < 1e-12);
     assert!((analysis_probe_spacing(2_800) - 2.0).abs() < 1e-12);
     // A probe grid of 48 samples stays well inside a small analysis image.
