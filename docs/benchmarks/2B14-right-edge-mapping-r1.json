@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "task": "2B.14",
+  "date": "2026-11-27",
+  "binary": {"label": "2B14-right-edge-r1", "sha256": "56a7880e4bba5856145869b510e3b57455807c799e7ff49aef7d609716e05fd3", "commit": "56ac07797722517ea97fe8b9480e19cada25e7ae", "branch": "lane/2B.14/right-edge-mapping", "merged": false},
+  "fix_1": "FocusSourceSampling::mapping blends the unfiltered global sample with the band sample and checks source support once on the final point, instead of dropping the global sample first and switching to the bare local sample",
+  "offline_model": ".agents/artifacts/2B14-right-edge/ (mapping_model.py, classify_jumps.py, variants.py, ramp_ratio.py)",
+  "tests": "35 passed / 0 failed, including right_edge_mapping (2 new)",
+  "regression": {
+    "quick": {"matrix": "output/acceptance/2B.14/matrix-2b14-r1-quick-quick/matrix.json", "status": "pass"},
+    "medium": {"matrix": "output/acceptance/2B.14/matrix-2b14-r1-medium-medium/matrix.json", "status": "pass", "tiff": "all 5 identical to 2B.8: sleeping-9 cold/hot 718a903d, langyuan-10 0011ce0a, wenyuan-10 8ce0afa0, lanting-framed 29852099"}
+  },
+  "mayuan2_scale1": {
+    "directory": "output/acceptance/2B.14/mayuan-2-mayuan2-s1-residual-density",
+    "control": "output/acceptance/2B.8/mayuan-2-mayuan2-s1-residual-density",
+    "tiff_sha256": "3830159dc4460752f880afcf51c7293c3e66f7a287292fb212807f9863e489b4",
+    "output_px": {"control": [13299, 11019], "fix_1": [13255, 10974]},
+    "note": "every common sample changed: the same mapping feeds native registration (focus_alignment.rs), so the station solve moved",
+    "composed_scale": {
+      "control": {"samples": 1788082, "min": 0.01725, "p01": 0.8607, "median": 1.056, "below_0_75": 3460, "below_0_5": 793},
+      "fix_1": {"samples": 1786961, "min": 0.036, "p01": 0.8486, "median": 1.0435, "below_0_75": 3996, "below_0_5": 922},
+      "all_low_samples_at_station_x_ge_7500": true,
+      "control_low_samples_fixed": 23
+    },
+    "quality_gate": {
+      "control": "fail: boundary 2 samples [3.0, 1.0]; owner insufficient (163 unresolved); tone max 0.644",
+      "fix_1": "fail: boundary 1 sample [2.0]; owner insufficient (200 unresolved); tone max 0.777"
+    },
+    "peak_rss_bytes": 12382060544
+  },
+  "second_mechanism": {
+    "finding": "every mayuan-2 source with low samples has a right-edge vertical band whose local sample lies far from the global sample. Inside the band the blend (1-w)G + wL compresses the x scale by about 1 - |L-G|/(span/2); scale < 0.75 whenever |L-G| exceeds a quarter of the ramp half-width",
+    "worst_sources": [
+      {"source": 34, "low": 862, "offset_px": 360.8, "ramp_half_px": 170.3, "ratio": 2.118},
+      {"source": 25, "low": 811, "offset_px": 106.1, "ramp_half_px": 168.6, "ratio": 0.629},
+      {"source": 38, "low": 702, "offset_px": 180.5, "ramp_half_px": 158.3, "ratio": 1.14},
+      {"source": 10, "low": 584, "offset_px": 208.0, "ramp_half_px": 166.9, "ratio": 1.246}
+    ],
+    "offset_location": "largest offsets at the band corners (source y = 0 or y = height), where the band homography extrapolates",
+    "why_fix_1_added_samples": "fix 1 extends the blend past the global border, so points that were previously boundary probes or folds are now measured as compressed in-band samples (sources 35, 36, 27)"
+  },
+  "conclusion": "Fix 1 removes the border fold and does not change any medium output, but it does not reduce mayuan-2 low composed scale (3460 -> 3996 below 0.75). The dominant cause is the second mechanism: band offsets too large for the fixed blend ramp. Not merged; awaiting the user's decision."
+}
