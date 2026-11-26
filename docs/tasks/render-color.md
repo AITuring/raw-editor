@@ -23,7 +23,7 @@
 细节见[色彩管线契约](../color-pipeline.md)及[α7R V范围化基线](../../tests/acceptance/sony-a7rv-60mp-baseline.md)。
 
 - [x] **CL.1** CPU/WGSL传递函数统一、RAW/普通图编码语义、RGB输入ICC转换、核心预览/导出sRGB ICC与原生SDR surface边界已建立契约检查。
-- [ ] **CL.2** CMYK/Gray、CICP-only、无效/超限profile的兼容边界和测试；自定义显示profile、软打样及纸墨模拟未提供，列为后续能力评估。
-- [ ] **CL.3** 旧HDR/全景等非basic预览链路的ICC统一；线性节点参考图及WebView/WGPU/各导出格式像素一致性补测。
+- [x] **CL.2** CMYK/Gray、CICP-only、无效/超限profile的兼容边界和测试（2026-11-27 `a6e1f103` 完成：`color_management.rs` 与 `image_loader/source_decode.rs` 已实现 ICC 头部显式分类、4 MiB 上限与损坏 tag 表不改写像素保护、灰度图内嵌 Gray ICC 归一化、无 `iCCP` 全范围 SDR RGB PNG `cICP` 归一化，以及 CMYK/HDR/窄范围/错配 Profile 安全回退 sRGB；单测与端到端解码测试 21 passed，`color-contract:check` 25/25 通过）；自定义显示profile、软打样及纸墨模拟未提供，列为后续能力评估。
+- [ ] **CL.3** 旧HDR/全景等非basic预览链路的ICC统一；线性节点参考图及WebView/WGPU/各导出格式像素一致性补测（2026-11-27 已完成全仓库预览与非基础保存编码点逐行勘察与改造设计，见 [CL.3 勘察与改造设计](cl3-preview-icc-design.md)；待 `build` 槽空闲后实施 Rust 编码统一与像素一致性测试）。
 - [x] **CL.4** 单个Sony α7R V有损ARW长曝光样片的范围化CPU质量与60MP性能基线建立，保留CPU默认输出高光/影调差异。
 - [ ] **CL.5** 日光、钨丝灯、高ISO、欠曝、高饱和光、lossless-L、uncompressed样片及色卡/配对参考；未具备证据前不宣称绝对色准、ACR等价或全相机质量通过。
