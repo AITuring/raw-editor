@@ -347,6 +347,11 @@ flowchart LR
   - 资源：`build` + `run`/`exclusive`。依赖：2B.6 用户批准、2B.4、2B.7、2B.8。冲突：各条目所在区域组内串行。
   - 禁止：实施未批准条目；预测与实测不符时调参继续（应停下报告用户）。
   - 完成标准：每条产出同输入、前后两个冻结二进制的 A/B benchmark JSON；受影响素材实测判定与 what-if 预测一致；中等层 TIFF 变化逐项说明。
+  - 进度（2026-11-23，冻结 `2B10-c1c6-r1`，提交 `1c176ab6` 已快进 v1）：快速层 7/7、中等层 5/5 TIFF 不变。见[摘要](../../../docs/benchmarks/2B10-c1-c6-c5-r1.json)。
+    - C1 已合入：睡觉45 0.25 density 生效（factor 1.379），闭环收敛，QG pass；原生拒绝只因 0.25 下 `local_scale_median` 为诊断项；tone degraded 2.0746/2处。
+    - C6 已合入：马远2 scale=1 `effective_pixel_count` 由证据不足变 pass（0.99848），5 个配准失败、零 owner 的来源被排除并记录；TIFF 与改前相同（`60f58640…`）。剩余 QG 失败：边界 2 样本 3.0/1.0px、owner 163 处不可测。
+    - C5 未达条件、不进生产：同二进制 5×5 时 owner 一项 pass，但 TIFF 变为 `1245e891…`，约 15.2% 字节不同。原因：`resolve_native_owner_geometry` 同时用于渲染和证据重放，stencil 半径会改输出像素，并非只改 QG 测量。默认保持 3×3，半径 2 开关仍为 test-only。
+    - 未做：赵佶 0.25（C1）对照，以及各条实测与 what-if 预测的逐项对表。
 
 - [ ] 2B.11 候选素材推进到 D3 并入复看队列（线B）
   - 目标：新合同下至少 2 套素材到 D3 并进入复看队列（总数≤3）。

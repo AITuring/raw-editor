@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "task": "2B.10",
+  "date": "2026-11-23",
+  "binary": {
+    "label": "2B10-c1c6-r1",
+    "sha256": "bf73ab10f8930d863e372c59f7d97a8dd82db85bb80a3b999ac8e8ca1e6a2066",
+    "commit": "1c176ab61f68de91191606288ba598d8380ac7b0"
+  },
+  "user_decisions": "C1 approved; C3 rejected; C5 conditional on a same-binary A/B with byte-identical TIFF; C6 option a",
+  "regression": {
+    "quick": {"matrix": "output/acceptance/2B.10/matrix-2b10-r1-quick/matrix.json", "status": "pass", "cases": "7/7"},
+    "medium": {"matrix": "output/acceptance/2B.10/matrix-2b10-r1-medium/matrix.json", "status": "pass", "cases": "5/5", "tiff_changes": 0}
+  },
+  "runs": [
+    {
+      "contract": "C1",
+      "dataset": "sleeping 45, scale 0.25",
+      "directory": "output/acceptance/2B.10/sleeping-c1-sleeping45-s025",
+      "density_factor": 1.379,
+      "closure": "converged",
+      "quality_gate": "pass",
+      "native_status": "rejected",
+      "native_reject_reason": "local_scale_median is diagnostic-only at scale 0.25",
+      "tone": "degraded, max 2.0746 at 2 locations",
+      "peak_rss_bytes": 13722517504,
+      "wall_seconds": 1531.4,
+      "tiff_sha256": "245235b87df5ab5b46c760a457a7babb7cca762b402eb8cb3eaa0f319ca4db34"
+    },
+    {
+      "contract": "C6 (and C5 control: 3x3 stencil, default)",
+      "dataset": "mayuan-2, scale 1, exclusive",
+      "directory": "output/acceptance/2B.10/mayuan-2-c6-mayuan2-s1-stencil3",
+      "effective_pixel_count": "pass (0.99848), 5 registration-failed zero-owned sources excluded and recorded",
+      "quality_gate": "fail",
+      "criteria": {"boundary_stroke_alignment": "fail (2 samples, 3.0/1.0 px)", "owner_sharpness_coverage": "insufficient_evidence (163 unresolved)", "others": "pass or not_applicable"},
+      "tone": "max 0.64",
+      "peak_rss_bytes": 13487685632,
+      "wall_seconds": 11498.7,
+      "tiff_sha256": "60f5864016550e6529d09f133354b58e15c1ce436f2b1f57cffd851986d5bad3",
+      "tiff_vs_pre_C6_control": "identical"
+    },
+    {
+      "contract": "C5 A/B (5x5 stencil via test-only RAW_EDITOR_FOCUS_OWNER_STENCIL_RADIUS=2, same binary)",
+      "dataset": "mayuan-2, scale 1, exclusive",
+      "directory": "output/acceptance/2B.10/mayuan-2-c5-mayuan2-s1-stencil5",
+      "quality_gate": "fail",
+      "criteria": {"boundary_stroke_alignment": "fail", "owner_sharpness_coverage": "pass", "others": "pass or not_applicable"},
+      "peak_rss_bytes": 11677466624,
+      "wall_seconds": 10814.0,
+      "tiff_sha256": "1245e8910f39be5c4bf1a9ea3596ae7919dec53a6365937bc0319d162959c0f0",
+      "tiff_vs_3x3": {
+        "identical": false,
+        "file_bytes": 1172340950,
+        "differing_bytes": 178262985,
+        "differing_fraction": 0.152,
+        "first_differing_offset": 534773760,
+        "last_differing_offset": 1172242432
+      }
+    }
+  ],
+  "conclusion": {
+    "C1": "shipped in 1c176ab6",
+    "C6": "shipped in 1c176ab6; TIFF unchanged, effective_pixel_count now passes on mayuan-2 scale 1",
+    "C5": "not shipped: the user's condition (byte-identical TIFF) failed. resolve_native_owner_geometry is shared by rendering and evidence replay, so the stencil radius changes output pixels, not only the QG measurement. Default stays radius 1 (3x3); the radius-2 switch stays test-only."
+  }
+}
