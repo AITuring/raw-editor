@@ -10,6 +10,7 @@ import {
   Lock,
   Redo2,
   ShieldAlert,
+  ShieldCheck,
   SquareDashedMousePointer,
   Trash2,
   Undo2,
@@ -18,11 +19,18 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 import { Invokes } from '../ui/AppProperties';
 import type { StackReportInspection, StackReportInspectionMarker } from '../../utils/stackReportInspection';
 import { parseStackReportInspection } from '../../utils/stackReportInspection';
-import type { SourceLockDocument, SourceLockPolicy, WorldBox } from '../../utils/sourceLockSidecar';
+import type {
+  RustExportBindingAudit,
+  SourceLockDocument,
+  SourceLockPolicy,
+  WorldBox,
+} from '../../utils/sourceLockSidecar';
 import {
+  buildVerifyExportBundleRequest,
   canRedo,
   canUndo,
   commitAddManualReviewRegion,
@@ -44,6 +52,7 @@ import {
 interface ImageStackInspectionPanelProps {
   draftWorldBox?: WorldBox | null;
   error: string | null;
+  exportedTiffPath?: string | null;
   inspection: StackReportInspection | null;
   isDrawingRegion?: boolean;
   selectedMarkerId: string | null;
@@ -117,6 +126,7 @@ const criterionBadgeClass = (verdict: string): string => {
 export default function ImageStackInspectionPanel({
   draftWorldBox = null,
   error,
+  exportedTiffPath = null,
   inspection,
   isDrawingRegion = false,
   selectedMarkerId,
@@ -142,6 +152,15 @@ export default function ImageStackInspectionPanel({
   const [lockPolicy, setLockPolicy] = useState<SourceLockPolicy>('single_source');
   const [reviewReason, setReviewReason] = useState('alignment_review');
   const [confirmStaleExport, setConfirmStaleExport] = useState(false);
+  const [auditTiffPath, setAuditTiffPath] = useState<string>('');
+  const [auditSidecarPath, setAuditSidecarPath] = useState<string>('');
+  const [auditEventsPath, setAuditEventsPath] = useState<string>('');
+  const [auditRecordedTiffSha, setAuditRecordedTiffSha] = useState<string>('');
+  const [auditRecordedSidecarSha, setAuditRecordedSidecarSha] = useState<string>('');
+  const [auditCheckCurrentRun, setAuditCheckCurrentRun] = useState<boolean>(true);
+  const [isAuditingBundle, setIsAuditingBundle] = useState<boolean>(false);
+  const [bundleAudit, setBundleAudit] = useState<RustExportBindingAudit | null>(null);
+  const [bundleAuditError, setBundleAuditError] = useState<string | null>(null);
 
   const baselineDoc = useMemo(() => (inspection ? buildInitialSidecarFromInspection(inspection) : null), [inspection]);
 
@@ -416,6 +435,80 @@ export default function ImageStackInspectionPanel({
   };
 
   const sidecarDigest = exportSummary ? exportSummary.sidecarSha256.slice(0, 12) : null;
+  const effectiveAuditTiffPath = auditTiffPath || exportedTiffPath || inspection?.output.path || '';
+  const effectiveAuditSidecarSha = auditRecordedSidecarSha || exportSummary?.sidecarSha256 || '';
+
+  const pickSingleFilePath = async (title: string, extensions: string[]): Promise<string | null> => {
+    const selected = await open({
+      directory: false,
+      multiple: false,
+      title,
+      filters: [{ name: title, extensions }],
+    });
+    return typeof selected === 'string' ? selected : null;
+  };
+
+  const handlePickAuditTiff = async () => {
+    try {
+      const selected = await pickSingleFilePath(t('modals.imageStack.inspection.pickTiffFile'), ['tif', 'tiff']);
+      if (selected) {
+        setAuditTiffPath(selected);
+        setBundleAuditError(null);
+      }
+    } catch (pickError) {
+      setBundleAuditError(pickError instanceof Error ? pickError.message : String(pickError));
+    }
+  };
+
+  const handlePickAuditSidecar = async () => {
+    try {
+      const selected = await pickSingleFilePath(t('modals.imageStack.inspection.pickSidecarFile'), ['json']);
+      if (selected) {
+        setAuditSidecarPath(selected);
+        setBundleAuditError(null);
+      }
+    } catch (pickError) {
+      setBundleAuditError(pickError instanceof Error ? pickError.message : String(pickError));
+    }
+  };
+
+  const handlePickAuditEvents = async () => {
+    try {
+      const selected = await pickSingleFilePath(t('modals.imageStack.inspection.pickEventsFile'), ['jsonl', 'ndjson']);
+      if (selected) {
+        setAuditEventsPath(selected);
+        setBundleAuditError(null);
+      }
+    } catch (pickError) {
+      setBundleAuditError(pickError instanceof Error ? pickError.message : String(pickError));
+    }
+  };
+
+  const handleVerifyExportBundle = async () => {
+    if (!effectiveAuditTiffPath.trim() || !auditSidecarPath.trim()) {
+      setBundleAuditError(t('modals.imageStack.inspection.bundlePathRequired'));
+      return;
+    }
+    setIsAuditingBundle(true);
+    setBundleAuditError(null);
+    try {
+      const request = buildVerifyExportBundleRequest({
+        tiffPath: effectiveAuditTiffPath,
+        sidecarPath: auditSidecarPath,
+        eventsJsonlPath: auditEventsPath || null,
+        recordedTiffSha256: auditRecordedTiffSha,
+        recordedSidecarSha256: effectiveAuditSidecarSha,
+        currentRunDoc: auditCheckCurrentRun ? baselineDoc : null,
+      });
+      const result = await invoke<RustExportBindingAudit>(Invokes.VerifySourceLockExportBundle, { ...request });
+      setBundleAudit(result);
+    } catch (auditError) {
+      setBundleAudit(null);
+      setBundleAuditError(auditError instanceof Error ? auditError.message : String(auditError));
+    } finally {
+      setIsAuditingBundle(false);
+    }
+  };
 
   return (
     <div className="space-y-4 p-4">
@@ -1044,6 +1137,166 @@ export default function ImageStackInspectionPanel({
                   ref={sidecarInputRef}
                   type="file"
                 />
+              </div>
+
+              <div className="space-y-2 rounded-lg border border-border-color bg-bg-primary/35 p-2.5 text-[11px]">
+                <div className="flex items-center justify-between gap-2">
+                  <h5 className="flex items-center gap-1.5 text-[11px] font-semibold text-text-primary">
+                    <ShieldCheck aria-hidden="true" size={13} />
+                    {t('modals.imageStack.inspection.verifyBundleTitle')}
+                  </h5>
+                  <button
+                    className="rounded-md bg-accent/15 px-2 py-1 text-[10px] font-medium text-text-primary transition-colors hover:bg-accent/25 disabled:opacity-40"
+                    disabled={isAuditingBundle || !effectiveAuditTiffPath.trim() || !auditSidecarPath.trim()}
+                    onClick={() => void handleVerifyExportBundle()}
+                    type="button"
+                  >
+                    {isAuditingBundle
+                      ? t('modals.imageStack.inspection.verifyingBundle')
+                      : t('modals.imageStack.inspection.verifyBundleButton')}
+                  </button>
+                </div>
+                <p className="text-[10px] leading-relaxed text-text-secondary">
+                  {t('modals.imageStack.inspection.verifyBundleHint')}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    className="rounded bg-card-active px-2 py-1 text-[10px] text-text-primary hover:bg-accent/15"
+                    onClick={() => void handlePickAuditTiff()}
+                    type="button"
+                  >
+                    {t('modals.imageStack.inspection.pickTiffFile')}
+                  </button>
+                  <button
+                    className="rounded bg-card-active px-2 py-1 text-[10px] text-text-primary hover:bg-accent/15"
+                    onClick={() => void handlePickAuditSidecar()}
+                    type="button"
+                  >
+                    {t('modals.imageStack.inspection.pickSidecarFile')}
+                  </button>
+                  <button
+                    className="rounded bg-card-active px-2 py-1 text-[10px] text-text-secondary hover:bg-accent/15 hover:text-text-primary"
+                    onClick={() => void handlePickAuditEvents()}
+                    type="button"
+                  >
+                    {t('modals.imageStack.inspection.pickEventsFile')}
+                  </button>
+                  {auditEventsPath && (
+                    <button
+                      className="rounded bg-card-active px-1.5 py-1 text-[10px] text-text-secondary hover:text-text-primary"
+                      onClick={() => setAuditEventsPath('')}
+                      type="button"
+                    >
+                      {t('modals.imageStack.inspection.clearOptionalFile')}
+                    </button>
+                  )}
+                </div>
+                {(effectiveAuditTiffPath || auditSidecarPath || auditEventsPath) && (
+                  <div className="space-y-0.5 font-mono text-[10px] text-text-secondary">
+                    {effectiveAuditTiffPath && (
+                      <p className="truncate" title={effectiveAuditTiffPath}>
+                        {`TIFF: ${fileBaseName(effectiveAuditTiffPath)}`}
+                      </p>
+                    )}
+                    {auditSidecarPath && (
+                      <p className="truncate" title={auditSidecarPath}>
+                        {`JSON: ${fileBaseName(auditSidecarPath)}`}
+                      </p>
+                    )}
+                    {auditEventsPath && (
+                      <p className="truncate" title={auditEventsPath}>
+                        {`LOG: ${fileBaseName(auditEventsPath)}`}
+                      </p>
+                    )}
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <input
+                    aria-label={t('modals.imageStack.inspection.recordedTiffShaPlaceholder')}
+                    className="w-full rounded-md bg-surface px-2 py-1 font-mono text-[10px] text-text-primary"
+                    onChange={(event) => setAuditRecordedTiffSha(event.target.value)}
+                    placeholder={t('modals.imageStack.inspection.recordedTiffShaPlaceholder')}
+                    type="text"
+                    value={auditRecordedTiffSha}
+                  />
+                  <input
+                    aria-label={t('modals.imageStack.inspection.recordedSidecarShaPlaceholder')}
+                    className="w-full rounded-md bg-surface px-2 py-1 font-mono text-[10px] text-text-primary"
+                    onChange={(event) => setAuditRecordedSidecarSha(event.target.value)}
+                    placeholder={t('modals.imageStack.inspection.recordedSidecarShaPlaceholder')}
+                    type="text"
+                    value={effectiveAuditSidecarSha}
+                  />
+                  {baselineDoc && (
+                    <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-text-secondary">
+                      <input
+                        checked={auditCheckCurrentRun}
+                        onChange={(event) => setAuditCheckCurrentRun(event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>{t('modals.imageStack.inspection.checkCurrentRunReconciliation')}</span>
+                    </label>
+                  )}
+                </div>
+                {bundleAuditError && (
+                  <p className="rounded bg-status-error/10 p-2 text-[10px] text-status-error" role="alert">
+                    {bundleAuditError}
+                  </p>
+                )}
+                {bundleAudit && (
+                  <div
+                    className={`space-y-1 rounded-md p-2 text-[10px] ${
+                      bundleAudit.can_publish_as_confirmed
+                        ? 'bg-status-success/10 text-status-success'
+                        : 'bg-status-error/10 text-status-error'
+                    }`}
+                    role="status"
+                  >
+                    <div className="flex items-center justify-between gap-2 font-semibold">
+                      <span>
+                        {bundleAudit.can_publish_as_confirmed
+                          ? t('modals.imageStack.inspection.bundleStatusConfirmed')
+                          : t('modals.imageStack.inspection.bundleStatusBlocked')}
+                      </span>
+                      <span className="rounded bg-bg-primary/40 px-1.5 py-0.5 font-mono text-[9px]">
+                        {bundleAudit.status}
+                      </span>
+                    </div>
+                    <p className="text-text-secondary">
+                      {t('modals.imageStack.inspection.bundleAuditSummary', {
+                        locks: bundleAudit.summary.active_locks,
+                        stale: bundleAudit.summary.stale_or_unresolved_locks,
+                        reviews: bundleAudit.summary.manual_review_regions,
+                        tiles: bundleAudit.summary.locked_eligible_tiles,
+                        events: bundleAudit.summary.event_count,
+                      })}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-1 font-mono text-[9px] text-text-secondary">
+                      <span title={bundleAudit.tiff_sha256}>
+                        {`${t('modals.imageStack.inspection.observedTiffShaLabel')}: ${bundleAudit.tiff_sha256.slice(0, 16)}…`}
+                      </span>
+                      {auditRecordedTiffSha.trim().toLowerCase() !== bundleAudit.tiff_sha256 && (
+                        <button
+                          className="rounded bg-card-active px-1.5 py-0.5 font-sans text-[9px] text-text-primary hover:bg-accent/15"
+                          onClick={() => setAuditRecordedTiffSha(bundleAudit.tiff_sha256)}
+                          type="button"
+                        >
+                          {t('modals.imageStack.inspection.useObservedTiffSha')}
+                        </button>
+                      )}
+                    </div>
+                    <p className="font-mono text-[9px] text-text-secondary" title={bundleAudit.sidecar_sha256}>
+                      {`${t('modals.imageStack.inspection.observedSidecarShaLabel')}: ${bundleAudit.sidecar_sha256.slice(0, 16)}…`}
+                    </p>
+                    {bundleAudit.reasons.length > 0 && (
+                      <ul className="list-disc space-y-0.5 pl-4 text-[10px]">
+                        {bundleAudit.reasons.map((reason) => (
+                          <li key={reason}>{reason}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
             </section>
           )}

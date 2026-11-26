@@ -46,6 +46,8 @@ use output_validation::{read_image_stack_output_metadata, validate_image_stack_o
 
 mod output_writer;
 
+pub mod source_lock_sidecar;
+
 use output_writer::{
     ImageStackReportContext, resolve_image_stack_output_path, save_image_stack_output_for_result,
 };
@@ -418,6 +420,38 @@ pub async fn image_stack_output_notices(
         );
     }
     Ok(OutputFidelity::of(image, output_format, bit_depth).downgrades(output_format))
+}
+
+/// Read-only audit verifying that an exported native TIFF, its
+/// `source-locks.json` sidecar, and optional `source-locks.events.jsonl` event
+/// log match their recorded SHA-256 bindings (Task 9 / Task 20 Phase 3).
+#[tauri::command]
+pub async fn verify_source_lock_export_bundle(
+    tiff_path_str: String,
+    sidecar_path_str: String,
+    events_jsonl_path_str: Option<String>,
+    recorded_tiff_sha256: String,
+    recorded_sidecar_sha256: String,
+    current_run: Option<source_lock_sidecar::CurrentRunBinding>,
+) -> Result<source_lock_sidecar::ExportBindingAudit, String> {
+    let (tiff_path, _) = parse_virtual_path(&tiff_path_str);
+    let (sidecar_path, _) = parse_virtual_path(&sidecar_path_str);
+    let events_jsonl_path = events_jsonl_path_str
+        .filter(|path| !path.trim().is_empty())
+        .map(|path| parse_virtual_path(&path).0);
+
+    tokio::task::spawn_blocking(move || {
+        source_lock_sidecar::audit_export_bundle_on_disk(
+            &tiff_path,
+            &sidecar_path,
+            events_jsonl_path.as_deref(),
+            &recorded_tiff_sha256,
+            &recorded_sidecar_sha256,
+            current_run.as_ref(),
+        )
+    })
+    .await
+    .map_err(|error| format!("Source-lock export audit task failed: {error}"))?
 }
 
 #[tauri::command]

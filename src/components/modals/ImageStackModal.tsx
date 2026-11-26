@@ -849,6 +849,7 @@ export default function ImageStackModal({
                 <ImageStackInspectionPanel
                   draftWorldBox={draftWorldBox}
                   error={error}
+                  exportedTiffPath={savedPath}
                   inspection={inspection}
                   isDrawingRegion={isDrawingRegion}
                   onClearDraftWorldBox={() => setDraftWorldBox(null)}

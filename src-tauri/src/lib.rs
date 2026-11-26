@@ -49,6 +49,7 @@ mod window_customizer;
 #[path = "lib/preview_cache.rs"]
 mod preview_cache;
 
+pub use image_stack::source_lock_sidecar;
 #[cfg(test)]
 use preview_cache::transformed_image_into_arc;
 pub use preview_cache::{
@@ -646,6 +647,7 @@ pub fn run() {
             image_stack::cancel_image_stack,
             image_stack::save_image_stack,
             image_stack::image_stack_output_notices,
+            image_stack::verify_source_lock_export_bundle,
             panorama_stitching::stitch_panorama,
             panorama_stitching::save_panorama,
             export_processing::export_images,

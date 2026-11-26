@@ -158,6 +158,61 @@ export interface SidecarImportReconciliation {
   mismatchReasons: string[];
 }
 
+export type RustExportBindingStatus =
+  | 'valid'
+  | 'stale_export'
+  | 'binding_mismatch'
+  | 'has_stale_or_unresolved_locks'
+  | 'events_log_mismatch'
+  | 'integrity_error';
+
+export interface StackReportSidecarReferenceSummary {
+  run_id: string;
+  sidecar_sha256: string;
+  tiff_sha256: string;
+  active_locks: number;
+  active_lock_area_px: number;
+  stale_or_unresolved_locks: number;
+  stale_or_unresolved_area_px: number;
+  manual_review_regions: number;
+  manual_review_area_px: number;
+  locked_eligible_tiles: number;
+  history_head: number;
+  event_count: number;
+}
+
+export interface RustCurrentRunBinding {
+  run_id: string;
+  input_manifest_sha256: string;
+  coordinate_frame: CoordinateFrame;
+  source_bindings: SourceBinding[];
+}
+
+export interface RustSidecarReconciliationReport {
+  doc: SourceLockDocument;
+  newly_stale_count: number;
+  mismatch_reasons: string[];
+}
+
+export interface RustExportBindingAudit {
+  status: RustExportBindingStatus;
+  can_publish_as_confirmed: boolean;
+  sidecar_sha256: string;
+  tiff_sha256: string;
+  summary: StackReportSidecarReferenceSummary;
+  reconciliation: RustSidecarReconciliationReport | null;
+  reasons: string[];
+}
+
+export interface VerifySourceLockExportBundleRequest {
+  tiffPathStr: string;
+  sidecarPathStr: string;
+  eventsJsonlPathStr: string | null;
+  recordedTiffSha256: string;
+  recordedSidecarSha256: string;
+  currentRun: RustCurrentRunBinding | null;
+}
+
 export interface ManualReviewQualityGateAccounting {
   all_tiles: number;
   auto_eligible_tiles: number;
@@ -1246,5 +1301,34 @@ export function summarizeSidecarForExport(doc: SourceLockDocument): SidecarExpor
     manualReviewAreaPx,
     requiresStaleConfirmation: staleOrUnresolvedCount > 0,
     sidecarSha256: computeSidecarDigest(doc),
+  };
+}
+
+export function buildVerifyExportBundleRequest(params: {
+  tiffPath: string;
+  sidecarPath: string;
+  eventsJsonlPath?: string | null;
+  recordedTiffSha256: string;
+  recordedSidecarSha256: string;
+  currentRunDoc?: Pick<
+    SourceLockDocument,
+    'run_id' | 'input_manifest_sha256' | 'coordinate_frame' | 'source_bindings'
+  > | null;
+}): VerifySourceLockExportBundleRequest {
+  const trimmedEvents = params.eventsJsonlPath?.trim() ?? '';
+  return {
+    tiffPathStr: params.tiffPath.trim(),
+    sidecarPathStr: params.sidecarPath.trim(),
+    eventsJsonlPathStr: trimmedEvents.length > 0 ? trimmedEvents : null,
+    recordedTiffSha256: params.recordedTiffSha256.trim().toLowerCase(),
+    recordedSidecarSha256: params.recordedSidecarSha256.trim().toLowerCase(),
+    currentRun: params.currentRunDoc
+      ? {
+          run_id: params.currentRunDoc.run_id,
+          input_manifest_sha256: params.currentRunDoc.input_manifest_sha256,
+          coordinate_frame: params.currentRunDoc.coordinate_frame,
+          source_bindings: params.currentRunDoc.source_bindings,
+        }
+      : null,
   };
 }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
@@ -308,6 +309,74 @@ assert.equal(differentRunImport.newlyStaleCount, 1);
 assert.equal(differentRunImport.doc.locks[0].status, 'stale');
 assert.equal(differentRunImport.doc.locks[0].stale_reason, 'run_id_changed');
 assert.equal(sidecar.summarizeSidecarForExport(differentRunImport.doc).requiresStaleConfirmation, true);
+
+// 8. Task 20 Phase 3: Cross-language golden SHA-256 parity with Rust read-only verifier.
+const expectedSelectionDigest = 'ab077f4318baf801584ca64f041aee5cc9116acd997ec5159faf9a09313d2209';
+const expectedDoc0State = 'fe4c197fe9f8a702515d0b0173953eb3f9fd7235359a30abf5127ac909a0034a';
+const expectedDoc1State = '937767a1ba20e1ab5550245f7cdafbcfec8c7a03a4b0ac651c2a0ef883471fe9';
+const expectedDoc1Sidecar = '2e03967a4794e263523e9cac25454c03556d9a060f27c96a924292cb6adbf482';
+const expectedDoc2Sidecar = '19cc8d93199635cf5eec72542d3f3b11611c19fba98e2bb0f50ff9132f8c7e5c';
+const expectedDoc3Sidecar = '6a4a40aa3957bc0de1bff713977b23c7f4d2e9018e47380c5e1063e1a5a8f7e4';
+
+assert.equal(doc1.locks[0].selection_digest, expectedSelectionDigest);
+assert.equal(sidecar.computeStateDigest(doc0), expectedDoc0State);
+assert.equal(sidecar.computeStateDigest(doc1), expectedDoc1State);
+assert.equal(sidecar.computeSidecarDigest(doc1), expectedDoc1Sidecar);
+assert.equal(sidecar.computeSidecarDigest(doc2), expectedDoc2Sidecar);
+assert.equal(sidecar.computeSidecarDigest(doc3), expectedDoc3Sidecar);
+
+const rustSidecarSource = fs.readFileSync(
+  path.join(repoRoot, 'src-tauri/src/image_stack/source_lock_sidecar.rs'),
+  'utf8',
+);
+const rustSidecarTestsSource = fs.readFileSync(
+  path.join(repoRoot, 'src-tauri/src/image_stack/source_lock_sidecar_tests.rs'),
+  'utf8',
+);
+const rustImageStackSource = fs.readFileSync(path.join(repoRoot, 'src-tauri/src/image_stack.rs'), 'utf8');
+const rustLibSource = fs.readFileSync(path.join(repoRoot, 'src-tauri/src/lib.rs'), 'utf8');
+const inspectionPanelSource = fs.readFileSync(
+  path.join(repoRoot, 'src/components/modals/ImageStackInspectionPanel.tsx'),
+  'utf8',
+);
+
+const bundleRequest = sidecar.buildVerifyExportBundleRequest({
+  tiffPath: ' /exports/artwork.tif ',
+  sidecarPath: ' /exports/source-locks.json ',
+  eventsJsonlPath: '   ',
+  recordedTiffSha256: 'AA'.repeat(32),
+  recordedSidecarSha256: expectedDoc3Sidecar.toUpperCase(),
+  currentRunDoc: doc3,
+});
+assert.equal(bundleRequest.tiffPathStr, '/exports/artwork.tif');
+assert.equal(bundleRequest.sidecarPathStr, '/exports/source-locks.json');
+assert.equal(bundleRequest.eventsJsonlPathStr, null);
+assert.equal(bundleRequest.recordedTiffSha256, 'aa'.repeat(32));
+assert.equal(bundleRequest.recordedSidecarSha256, expectedDoc3Sidecar);
+assert.equal(bundleRequest.currentRun?.run_id, 'native-fixture-001');
+
+assert.match(rustSidecarSource, /pub fn sha256_file_hex\(path: &Path\)[\s\S]*?File::open\(path\)/);
+assert.match(rustSidecarSource, /pub fn parse_source_lock_document_str\(/);
+assert.match(rustSidecarSource, /pub fn audit_export_bundle_on_disk\(/);
+assert.match(rustSidecarSource, /pub fn resolve_world_point_constraint\(/);
+assert.match(rustSidecarSource, /pub fn compute_manual_review_quality_gate_accounting\(/);
+assert.match(rustImageStackSource, /pub async fn verify_source_lock_export_bundle\(/);
+assert.match(rustLibSource, /image_stack::verify_source_lock_export_bundle/);
+assert.match(inspectionPanelSource, /Invokes\.VerifySourceLockExportBundle/);
+assert.match(inspectionPanelSource, /buildVerifyExportBundleRequest/);
+for (const golden of [
+  expectedSelectionDigest,
+  expectedDoc0State,
+  expectedDoc1State,
+  expectedDoc1Sidecar,
+  expectedDoc2Sidecar,
+  expectedDoc3Sidecar,
+]) {
+  assert.ok(
+    rustSidecarTestsSource.includes(golden),
+    `Rust sidecar test suite must assert cross-language golden digest ${golden}`,
+  );
+}
 
 console.log(
   'Validated Task 9 / Task 20 source-lock sidecar contract, SHA-256 digest, undo/redo log, import reconciliation, staleness, QG accounting, and export binding.',
