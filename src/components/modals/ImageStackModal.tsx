@@ -58,6 +58,8 @@ import type { ExportDialogSettings } from '../../features/export/exportDialog';
 
 interface ImageStackModalProps {
   detailImageBase64: string | null;
+  diagnosticDetailImageBase64?: string | null;
+  diagnosticPreviewBase64?: string | null;
   error: string | null;
   finalImageBase64: string | null;
   isOpen: boolean;
@@ -254,6 +256,8 @@ function SourceLayerItem({
 
 export default function ImageStackModal({
   detailImageBase64,
+  diagnosticDetailImageBase64 = null,
+  diagnosticPreviewBase64 = null,
   error,
   finalImageBase64,
   isOpen,
@@ -325,9 +329,14 @@ export default function ImageStackModal({
     return () => window.clearTimeout(timer);
   }, [isOpen]);
 
+  const activePreviewSrc = finalImageBase64 ?? diagnosticPreviewBase64 ?? null;
+  const activeDetailSrc = finalImageBase64
+    ? detailImageBase64
+    : (diagnosticDetailImageBase64 ?? diagnosticPreviewBase64 ?? null);
+
   useEffect(() => {
-    if (!finalImageBase64) setIsPreviewFocused(false);
-  }, [finalImageBase64]);
+    if (!activePreviewSrc) setIsPreviewFocused(false);
+  }, [activePreviewSrc]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -617,7 +626,7 @@ export default function ImageStackModal({
           <main className="relative min-h-0 overflow-hidden bg-[#101010]">
             <section className="relative h-full min-h-0 overflow-hidden">
               <div className="flex h-full min-h-0 items-center justify-center">
-                {error ? (
+                {error && !activePreviewSrc ? (
                   <div className="max-w-md p-6 text-center">
                     <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-status-error/15 text-status-error">
                       <X aria-hidden="true" size={22} />
@@ -629,11 +638,11 @@ export default function ImageStackModal({
                       <span aria-live="assertive">{error}</span>
                     </p>
                   </div>
-                ) : finalImageBase64 ? (
+                ) : activePreviewSrc ? (
                   <ImageStackResultPreview
                     alignmentLabel={translateAlignment(selectedAlignment.labelKey)}
                     alt={t('modals.imageStack.resultAlt')}
-                    detailSrc={detailImageBase64}
+                    detailSrc={activeDetailSrc}
                     isFocused={isPreviewFocused}
                     modeLabel={
                       blendMode === 'focus'
@@ -645,7 +654,7 @@ export default function ImageStackModal({
                     softRegions={softRegions}
                     skippedSources={skippedSources}
                     stationsUnrelated={stationsUnrelated}
-                    src={finalImageBase64}
+                    src={activePreviewSrc}
                   />
                 ) : (
                   <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
@@ -709,6 +718,23 @@ export default function ImageStackModal({
                 </motion.div>
               )}
             </AnimatePresence>
+            {error && activePreviewSrc && (
+              <div
+                aria-live="assertive"
+                className="absolute left-1/2 top-14 z-30 flex w-[min(640px,calc(100%-32px))] -translate-x-1/2 items-start gap-2.5 rounded-xl border border-status-error/40 bg-black/85 px-3.5 py-2.5 text-xs text-white shadow-2xl backdrop-blur-md"
+                role="alert"
+              >
+                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-status-error/20 text-status-error">
+                  <X aria-hidden="true" size={13} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-status-error" id="image-stack-error-title">
+                    {t('modals.imageStack.failed')}
+                  </p>
+                  <p className="mt-0.5 break-words leading-relaxed text-white/75">{error}</p>
+                </div>
+              </div>
+            )}
             {savedPath && (
               <div
                 aria-live="polite"
@@ -775,7 +801,7 @@ export default function ImageStackModal({
                 </DndContext>
 
                 <button
-                  className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border-color px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:border-accent hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-text-secondary outline-1 -outline-offset-1 outline-dashed outline-text-secondary/35 transition-colors hover:text-text-primary hover:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={isProcessing || isSaving}
                   onClick={() => void handleAddSources()}
                   type="button"
@@ -914,12 +940,12 @@ export default function ImageStackModal({
             >
               {isProcessing ? (
                 <Loader2 aria-hidden="true" className="animate-spin" size={15} />
-              ) : finalImageBase64 ? (
+              ) : activePreviewSrc ? (
                 <RefreshCw aria-hidden="true" size={15} />
               ) : (
                 <Layers3 aria-hidden="true" size={15} />
               )}
-              {finalImageBase64 ? t('modals.imageStack.realign') : t('modals.imageStack.start')}
+              {activePreviewSrc ? t('modals.imageStack.realign') : t('modals.imageStack.start')}
             </Button>
             {finalImageBase64 && (
               <Button disabled={isSaving || isProcessing} onClick={() => setIsExportDialogOpen(true)}>

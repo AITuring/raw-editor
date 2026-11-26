@@ -607,6 +607,8 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
                 setUI({
                   imageStackModalState: {
                     detailImageBase64: null,
+                    diagnosticDetailImageBase64: null,
+                    diagnosticPreviewBase64: null,
                     error: null,
                     finalImageBase64: null,
                     isOpen: true,
@@ -617,6 +619,8 @@ export function useAppContextMenus(props: UseAppContextMenusProps) {
                     lastSavedPath: null,
                     resultSize: null,
                     softRegions: null,
+                    skippedSources: null,
+                    stationsUnrelated: false,
                     sourcePaths: finalSelection,
                     blendMode: 'focus',
                     alignmentMode: 'auto',

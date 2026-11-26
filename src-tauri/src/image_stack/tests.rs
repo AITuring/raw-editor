@@ -32,6 +32,53 @@ fn image_stack_pipeline_version_rejects_stale_frontends() {
 }
 
 #[test]
+fn cancel_active_image_stack_advances_generation_clears_result_and_recovers_poisoned_mutex() {
+    use crate::panorama_utils::stack_pipeline::degradation;
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    let generation = AtomicUsize::new(10_000);
+    let stored = Mutex::new(Some((
+        "cached-result".to_string(),
+        painted_result(4, 4, 1),
+        DegradationLedger::new(),
+        None,
+    )));
+
+    let next_generation = super::cancel_active_image_stack(&generation, &stored);
+    assert_eq!(next_generation, 10_001);
+    assert_eq!(generation.load(Ordering::SeqCst), 10_001);
+    assert!(degradation::run_generation_changed_for(10_000));
+    assert!(stored.lock().expect("unpoisoned mutex").is_none());
+
+    let poisoned = Arc::new(Mutex::new(Some((
+        "poisoned-result".to_string(),
+        painted_result(4, 4, 2),
+        DegradationLedger::new(),
+        None,
+    ))));
+    let poisoned_for_panic = Arc::clone(&poisoned);
+    let _ = std::thread::spawn(move || {
+        let _guard = poisoned_for_panic.lock().expect("lock before panic");
+        panic!("simulate poisoned image_stack_result mutex");
+    })
+    .join();
+    assert!(poisoned.is_poisoned());
+
+    let next_generation = super::cancel_active_image_stack(&generation, &poisoned);
+    assert_eq!(next_generation, 10_002);
+    assert!(
+        poisoned
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .is_none()
+    );
+    degradation::set_active_run_generation(0);
+}
+
+#[test]
 fn task_7_31_source_count_boundaries_are_exact() {
     let outcomes =
         [0usize, 1, 2, 500, 501].map(|count| (count, validate_image_stack_source_count(count)));

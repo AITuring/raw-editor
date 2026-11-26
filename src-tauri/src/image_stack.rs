@@ -1,4 +1,4 @@
-use crate::app_state::AppState;
+use crate::app_state::{AppState, ImageStackResult};
 use crate::export_processing::ExportSettings;
 use crate::file_management::parse_virtual_path;
 use crate::panorama_stitching::{AlignmentMode, BlendMode, stitch_images_with_options};
@@ -11,7 +11,8 @@ use image::codecs::jpeg::JpegEncoder;
 #[cfg(test)]
 use image::imageops::FilterType;
 use std::fs;
-use std::sync::atomic::Ordering;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
@@ -111,6 +112,24 @@ fn resolve_blend_mode(value: &str) -> BlendMode {
     }
 }
 
+pub(crate) fn cancel_active_image_stack(
+    generation_handle: &AtomicUsize,
+    result_handle: &Mutex<Option<ImageStackResult>>,
+) -> usize {
+    let generation = generation_handle.fetch_add(1, Ordering::SeqCst) + 1;
+    crate::panorama_utils::stack_pipeline::degradation::set_active_run_generation(generation);
+    *result_handle
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    generation
+}
+
+#[tauri::command]
+pub async fn cancel_image_stack(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    cancel_active_image_stack(&state.image_stack_generation, &state.image_stack_result);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn process_image_stack(
     paths: Vec<String>,
@@ -135,11 +154,12 @@ pub async fn process_image_stack(
     let selected_alignment_mode = AlignmentMode::from_wire(&alignment_mode);
     let result_handle = state.image_stack_result.clone();
     let generation_handle = state.image_stack_generation.clone();
-    let generation = generation_handle.fetch_add(1, Ordering::SeqCst) + 1;
-    crate::panorama_utils::stack_pipeline::degradation::set_active_run_generation(generation);
-    *result_handle.lock().unwrap() = None;
+    let generation = cancel_active_image_stack(&generation_handle, &result_handle);
 
     let task = tokio::task::spawn_blocking(move || {
+        if generation_handle.load(Ordering::SeqCst) != generation {
+            return Ok(());
+        }
         let result = stitch_images_with_options(
             source_paths,
             app_handle.clone(),
@@ -196,6 +216,7 @@ pub async fn process_image_stack(
                     entry.reason
                         == crate::panorama_utils::stack_pipeline::degradation::STACK_STATIONS_UNRELATED
                 });
+                let (source_width, source_height) = image.dimensions();
                 let outcome_decision = DegradationManager::new(&degradation_ledger).decision();
                 if !outcome_decision.permits_final_output() {
                     // The composed pixels remain available only as diagnostic
@@ -225,15 +246,28 @@ pub async fn process_image_stack(
                             "requestId": request_id,
                             "result": outcome_decision.as_identifier(),
                             "previewPath": previews.interaction_path,
+                            "previewWidth": previews.interaction_width,
+                            "previewHeight": previews.interaction_height,
                             "detailPreviewPath": previews.detail_path,
+                            "detailPreviewWidth": previews.detail_width,
+                            "detailPreviewHeight": previews.detail_height,
+                            "sourceWidth": source_width,
+                            "sourceHeight": source_height,
+                            "fullCanvasWidth": full_canvas_width,
+                            "fullCanvasHeight": full_canvas_height,
+                            "renderScale": render_scale,
+                            "softRegions": soft_regions,
+                            "skippedSources": skipped_sources,
+                            "stationsUnrelated": stations_unrelated,
                         }),
                     );
                     return Err(message);
                 }
 
-                let (source_width, source_height) = image.dimensions();
                 {
-                    let mut stored_result = result_handle.lock().unwrap();
+                    let mut stored_result = result_handle
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
                     if generation_handle.load(Ordering::SeqCst) != generation {
                         let _ = fs::remove_file(&previews.interaction_path);
                         let _ = fs::remove_file(&previews.detail_path);

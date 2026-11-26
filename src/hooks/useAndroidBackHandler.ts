@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { Invokes } from '../components/ui/AppProperties';
 import { useUIStore } from '../store/useUIStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 
@@ -60,9 +62,14 @@ export function useAndroidBackHandler() {
         return;
       }
       if (ui.imageStackModalState.isOpen) {
+        if (ui.imageStackModalState.isProcessing || ui.imageStackModalState.resultId) {
+          void invoke(Invokes.CancelImageStack).catch(() => {});
+        }
         ui.setUI({
           imageStackModalState: {
             detailImageBase64: null,
+            diagnosticDetailImageBase64: null,
+            diagnosticPreviewBase64: null,
             isOpen: false,
             isProcessing: false,
             progressMessage: null,
@@ -73,6 +80,8 @@ export function useAndroidBackHandler() {
             lastSavedPath: null,
             resultSize: null,
             softRegions: null,
+            skippedSources: null,
+            stationsUnrelated: false,
             sourcePaths: [],
             blendMode: 'focus',
             alignmentMode: 'auto',

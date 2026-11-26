@@ -43,6 +43,7 @@ export enum Invokes {
   BatchGeometryCorrection = 'batch_geometry_correction',
   CalculateAutoAdjustments = 'calculate_auto_adjustments',
   CancelExport = 'cancel_export',
+  CancelImageStack = 'cancel_image_stack',
   ClearAllSidecars = 'clear_all_sidecars',
   ClearAiTags = 'clear_ai_tags',
   ClearAllTags = 'clear_all_tags',

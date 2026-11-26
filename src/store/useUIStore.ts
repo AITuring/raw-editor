@@ -74,6 +74,8 @@ export interface ImageStackSoftRegions {
 
 export interface ImageStackModalState {
   detailImageBase64: string | null;
+  diagnosticDetailImageBase64?: string | null;
+  diagnosticPreviewBase64?: string | null;
   error: string | null;
   finalImageBase64: string | null;
   softRegions?: ImageStackSoftRegions | null;
@@ -284,6 +286,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
   imageStackModalState: {
     detailImageBase64: null,
+    diagnosticDetailImageBase64: null,
+    diagnosticPreviewBase64: null,
     error: null,
     finalImageBase64: null,
     isOpen: false,
@@ -294,6 +298,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     lastSavedPath: null,
     resultSize: null,
     softRegions: null,
+    skippedSources: null,
+    stationsUnrelated: false,
     sourcePaths: [],
     blendMode: 'focus',
     alignmentMode: 'auto',

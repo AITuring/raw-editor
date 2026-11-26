@@ -331,10 +331,11 @@ function readBaselines() {
 function recordBaseline(summary) {
   const baselines = readBaselines();
   const commit = spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
+  const commitSha = commit.status === 0 && typeof commit.stdout === 'string' ? commit.stdout.trim() : '';
   const entry = {
     ...summary,
     recordedAt: new Date().toISOString().slice(0, 10),
-    commit: commit.stdout.trim() || null,
+    commit: commitSha || null,
   };
   delete entry.elapsedSeconds;
   delete entry.stitchSeconds;
@@ -542,7 +543,9 @@ function main() {
   const softSkippedOutsideOrder = [...expectedSoftSkipped].filter((name) => !orderNames.has(name));
   if (softSkippedOutsideOrder.length > 0) {
     sourceContractVerdict = 'fail';
-    failures.push(`expected soft-skipped inputs missing from the stitching order: ${softSkippedOutsideOrder.join(', ')}`);
+    failures.push(
+      `expected soft-skipped inputs missing from the stitching order: ${softSkippedOutsideOrder.join(', ')}`,
+    );
   }
   const streamable = inputs.filter((input) => {
     const name = path.basename(input);
@@ -565,7 +568,10 @@ function main() {
     absentFromStream: absent,
     ordered: log.ordered.length || metrics?.inputs?.ordered || null,
     orderedNamesSha256: log.ordered.length
-      ? crypto.createHash('sha256').update(`${log.ordered.join('\n')}\n`, 'utf8').digest('hex')
+      ? crypto
+          .createHash('sha256')
+          .update(`${log.ordered.join('\n')}\n`, 'utf8')
+          .digest('hex')
       : null,
     streamed: log.streamed.size || null,
     verdict: sourceContractVerdict,

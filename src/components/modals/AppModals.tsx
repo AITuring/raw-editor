@@ -245,9 +245,15 @@ export default function AppModals(props: AppModalsProps) {
   };
 
   const closeImageStackModal = () => {
+    const current = useUIStore.getState().imageStackModalState;
+    if (current.isProcessing || current.resultId) {
+      void invoke(Invokes.CancelImageStack).catch(() => {});
+    }
     setUI({
       imageStackModalState: {
         detailImageBase64: null,
+        diagnosticDetailImageBase64: null,
+        diagnosticPreviewBase64: null,
         isOpen: false,
         isProcessing: false,
         progressMessage: null,
@@ -258,6 +264,8 @@ export default function AppModals(props: AppModalsProps) {
         lastSavedPath: null,
         resultSize: null,
         softRegions: null,
+        skippedSources: null,
+        stationsUnrelated: false,
         sourcePaths: [],
         blendMode: 'focus',
         alignmentMode: 'auto',
@@ -335,6 +343,8 @@ export default function AppModals(props: AppModalsProps) {
       />
       <ImageStackModal
         detailImageBase64={imageStackModalState.detailImageBase64}
+        diagnosticDetailImageBase64={imageStackModalState.diagnosticDetailImageBase64 ?? null}
+        diagnosticPreviewBase64={imageStackModalState.diagnosticPreviewBase64 ?? null}
         error={imageStackModalState.error}
         finalImageBase64={imageStackModalState.finalImageBase64}
         initialAlignmentMode={imageStackModalState.alignmentMode}
@@ -351,6 +361,8 @@ export default function AppModals(props: AppModalsProps) {
             imageStackModalState: {
               ...state.imageStackModalState,
               detailImageBase64: null,
+              diagnosticDetailImageBase64: null,
+              diagnosticPreviewBase64: null,
               error: null,
               finalImageBase64: null,
               progressMessage: null,
@@ -359,6 +371,8 @@ export default function AppModals(props: AppModalsProps) {
               lastSavedPath: null,
               resultSize: null,
               softRegions: null,
+              skippedSources: null,
+              stationsUnrelated: false,
             },
           }))
         }

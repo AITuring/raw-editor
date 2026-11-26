@@ -21,6 +21,8 @@ const rustStackSource = readRustModule(repoRoot, 'src-tauri/src/image_stack.rs')
 const rustStitchingSource = readRustModule(repoRoot, 'src-tauri/src/panorama_stitching.rs');
 const productivityActionsSource = readSourceModule(repoRoot, 'src/hooks/useProductivityActions.ts');
 const listenerSource = readSourceModule(repoRoot, 'src/hooks/useTauriListeners.ts');
+const appModalsSource = readSourceModule(repoRoot, 'src/components/modals/AppModals.tsx');
+const rustLibSource = readRustModule(repoRoot, 'src-tauri/src/lib.rs');
 
 const frontendPipelineVersion = pipelineSource.match(/IMAGE_STACK_PIPELINE_VERSION\s*=\s*'([^']+)'/)?.[1];
 const backendPipelineVersion = rustStackSource.match(/IMAGE_STACK_PIPELINE_VERSION:\s*&str\s*=\s*"([^"]+)"/)?.[1];
@@ -48,6 +50,10 @@ assert.match(listenerSource, /renderScale/);
 assert.match(previewSource, /modals\.imageStack\.memorySafeResult/);
 assert.match(appSource, /sourcePaths: paths/);
 assert.match(contextMenuSource, /sourcePaths: finalSelection/);
+assert.match(rustStackSource, /pub async fn cancel_image_stack/);
+assert.match(rustLibSource, /image_stack::cancel_image_stack/);
+assert.match(appModalsSource, /Invokes\.CancelImageStack/);
+assert.match(listenerSource, /diagnosticPreviewBase64:\s*previewSource/);
 
 const cleanupMatch = reusablePreviewSource.match(/useEffect\(\s*\(\) => \(\) => \{([\s\S]*?)\}\s*,\s*\[\]\s*,?\s*\);/);
 

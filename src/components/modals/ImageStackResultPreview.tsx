@@ -79,10 +79,10 @@ function ImageStackResultPreview({
           return (
             <button
               aria-label={label}
-              className={`pointer-events-auto absolute rounded-[50%] border-2 transition-colors ${
+              className={`pointer-events-auto absolute rounded-[50%] ring-2 ring-inset transition-colors ${
                 region.kind === 'sources_soft'
-                  ? 'border-red-500/90 hover:bg-red-500/15'
-                  : 'border-orange-400/90 hover:bg-orange-400/15'
+                  ? 'ring-red-500/90 hover:bg-red-500/15'
+                  : 'ring-orange-400/90 hover:bg-orange-400/15'
               }`}
               data-tooltip={label}
               key={`${region.x}-${region.y}-${index}`}
@@ -184,7 +184,7 @@ function ImageStackResultPreview({
           <button
             aria-label={`${t('modals.imageStack.softRegions', { number: softRegions.count })} · ${softRegionHint}`}
             aria-pressed={showingSoftRegions}
-            className="pointer-events-auto rounded-md border border-status-warning/35 bg-black/80 px-2 py-1 text-[11px] text-status-warning transition-colors hover:bg-black/90 disabled:cursor-default"
+            className="pointer-events-auto rounded-md bg-black/80 px-2 py-1 text-[11px] text-status-warning ring-1 ring-inset ring-status-warning/35 transition-colors hover:bg-black/90 disabled:cursor-default"
             data-tooltip={softRegionHint}
             disabled={regionFrame === null}
             onClick={() => setShowSoftRegions((shown) => !shown)}

@@ -50,6 +50,10 @@ output/
 .agents/
 .worktrees/
 
+# Python bytecode from stack-lab tooling and tests
+__pycache__/
+*.py[cod]
+
 # User-supplied, local-only RAW acceptance fixtures. Their hashes and permissions
 # are tracked in tests/acceptance/raw-manifest.json; the binaries are not redistributable.
 src/assets/test/

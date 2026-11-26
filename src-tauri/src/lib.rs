@@ -643,6 +643,7 @@ pub fn run() {
             image_loader::load_image,
             image_loader::is_image_cached,
             image_stack::process_image_stack,
+            image_stack::cancel_image_stack,
             image_stack::save_image_stack,
             image_stack::image_stack_output_notices,
             panorama_stitching::stitch_panorama,

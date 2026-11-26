@@ -97,6 +97,8 @@ export function useProductivityActions(refreshImageList: () => Promise<void>, pa
         imageStackModalState: {
           ...state.imageStackModalState,
           detailImageBase64: null,
+          diagnosticDetailImageBase64: null,
+          diagnosticPreviewBase64: null,
           isProcessing: true,
           error: null,
           finalImageBase64: null,
@@ -106,6 +108,8 @@ export function useProductivityActions(refreshImageList: () => Promise<void>, pa
           lastSavedPath: null,
           resultSize: null,
           softRegions: null,
+          skippedSources: null,
+          stationsUnrelated: false,
           sourcePaths: paths,
           blendMode,
           alignmentMode,
@@ -123,14 +127,21 @@ export function useProductivityActions(refreshImageList: () => Promise<void>, pa
       }).catch((err) => {
         setUI((state) => {
           if (state.imageStackModalState.requestId !== requestId) return state;
+          const hasDiagnosticPreview = Boolean(state.imageStackModalState.diagnosticPreviewBase64);
           return {
             imageStackModalState: {
               ...state.imageStackModalState,
               isProcessing: false,
-              error: String(err),
+              error: state.imageStackModalState.error ?? String(err),
               resultId: null,
-              resultSize: null,
-              softRegions: null,
+              ...(hasDiagnosticPreview
+                ? {}
+                : {
+                    resultSize: null,
+                    softRegions: null,
+                    skippedSources: null,
+                    stationsUnrelated: false,
+                  }),
             },
           };
         });

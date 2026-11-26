@@ -5,7 +5,7 @@ import { Status } from '../components/ui/ExportImportProperties';
 import { useProcessStore } from '../store/useProcessStore';
 import { useEditorStore } from '../store/useEditorStore';
 import { useUIStore } from '../store/useUIStore';
-import type { ImageStackSoftRegion, ImageStackSoftRegions } from '../store/useUIStore';
+import type { ImageStackResultSize, ImageStackSoftRegion, ImageStackSoftRegions } from '../store/useUIStore';
 import { useLibraryStore } from '../store/useLibraryStore';
 import { BASIC_MODE } from '../basic/runtime';
 import { IMAGE_STACK_PIPELINE_VERSION } from '../utils/imageStackPipeline';
@@ -51,6 +51,48 @@ const parseImageStackSoftRegions = (payload: unknown): ImageStackSoftRegions | n
         : null,
     regions,
   };
+};
+
+const parseImageStackResultSize = (payload: any): ImageStackResultSize | null => {
+  const sourceWidth = payload?.sourceWidth;
+  const sourceHeight = payload?.sourceHeight;
+  const fullCanvasWidth = payload?.fullCanvasWidth;
+  const fullCanvasHeight = payload?.fullCanvasHeight;
+  const renderScale = payload?.renderScale;
+  if (!isFiniteNumber(sourceWidth) || sourceWidth <= 0 || !isFiniteNumber(sourceHeight) || sourceHeight <= 0) {
+    return null;
+  }
+  return {
+    width: sourceWidth,
+    height: sourceHeight,
+    ...(isFiniteNumber(fullCanvasWidth) &&
+    fullCanvasWidth > 0 &&
+    isFiniteNumber(fullCanvasHeight) &&
+    fullCanvasHeight > 0 &&
+    isFiniteNumber(renderScale) &&
+    renderScale > 0
+      ? { fullCanvasWidth, fullCanvasHeight, renderScale }
+      : {}),
+  };
+};
+
+const parseImageStackSkippedSources = (payload: unknown): string[] =>
+  Array.isArray(payload) ? payload.filter((path): path is string => typeof path === 'string') : [];
+
+const resolveImageStackPreviewSources = (
+  payload: any,
+): { previewSource: string | null; detailPreviewSource: string | null } => {
+  const previewPath = payload?.previewPath;
+  const detailPreviewPath = payload?.detailPreviewPath;
+  const previewSource =
+    typeof previewPath === 'string' && previewPath.length > 0
+      ? convertFileSrc(previewPath.replace(/\\/g, '/'))
+      : (payload?.base64 ?? null);
+  const detailPreviewSource =
+    typeof detailPreviewPath === 'string' && detailPreviewPath.length > 0
+      ? convertFileSrc(detailPreviewPath.replace(/\\/g, '/'))
+      : previewSource;
+  return { previewSource, detailPreviewSource };
 };
 
 const imageStackBasename = (path: string): string => {
@@ -362,52 +404,13 @@ export function useTauriListeners({
         if (isEffectActive) {
           const requestId = event.payload?.requestId;
           const resultId = event.payload?.resultId;
-          const previewPath = event.payload?.previewPath;
-          const detailPreviewPath = event.payload?.detailPreviewPath;
           const pipelineVersion = event.payload?.pipelineVersion;
-          const sourceWidth = event.payload?.sourceWidth;
-          const sourceHeight = event.payload?.sourceHeight;
-          const fullCanvasWidth = event.payload?.fullCanvasWidth;
-          const fullCanvasHeight = event.payload?.fullCanvasHeight;
-          const renderScale = event.payload?.renderScale;
           const orderedPaths = event.payload?.orderedPaths;
-          const resultSize =
-            typeof sourceWidth === 'number' &&
-            Number.isFinite(sourceWidth) &&
-            sourceWidth > 0 &&
-            typeof sourceHeight === 'number' &&
-            Number.isFinite(sourceHeight) &&
-            sourceHeight > 0
-              ? {
-                  width: sourceWidth,
-                  height: sourceHeight,
-                  ...(typeof fullCanvasWidth === 'number' &&
-                  Number.isFinite(fullCanvasWidth) &&
-                  fullCanvasWidth > 0 &&
-                  typeof fullCanvasHeight === 'number' &&
-                  Number.isFinite(fullCanvasHeight) &&
-                  fullCanvasHeight > 0 &&
-                  typeof renderScale === 'number' &&
-                  Number.isFinite(renderScale) &&
-                  renderScale > 0
-                    ? { fullCanvasWidth, fullCanvasHeight, renderScale }
-                    : {}),
-                }
-              : null;
+          const resultSize = parseImageStackResultSize(event.payload);
           const softRegions = parseImageStackSoftRegions(event.payload?.softRegions);
           const stationsUnrelated = event.payload?.stationsUnrelated === true;
-          const skippedPayload: unknown = event.payload?.skippedSources;
-          const skippedSources = Array.isArray(skippedPayload)
-            ? skippedPayload.filter((path): path is string => typeof path === 'string')
-            : [];
-          const previewSource =
-            typeof previewPath === 'string' && previewPath.length > 0
-              ? convertFileSrc(previewPath.replace(/\\/g, '/'))
-              : (event.payload?.base64 ?? null);
-          const detailPreviewSource =
-            typeof detailPreviewPath === 'string' && detailPreviewPath.length > 0
-              ? convertFileSrc(detailPreviewPath.replace(/\\/g, '/'))
-              : previewSource;
+          const skippedSources = parseImageStackSkippedSources(event.payload?.skippedSources);
+          const { previewSource, detailPreviewSource } = resolveImageStackPreviewSources(event.payload);
           useUIStore.getState().setUI((state) => {
             if (typeof requestId !== 'string' || requestId !== state.imageStackModalState.requestId) {
               return state;
@@ -417,6 +420,8 @@ export function useTauriListeners({
                 imageStackModalState: {
                   ...state.imageStackModalState,
                   detailImageBase64: null,
+                  diagnosticDetailImageBase64: null,
+                  diagnosticPreviewBase64: null,
                   error:
                     'The image-stack backend is out of date. Fully quit and restart RAW Editor before stacking again.',
                   finalImageBase64: null,
@@ -426,6 +431,8 @@ export function useTauriListeners({
                   lastSavedPath: null,
                   resultSize: null,
                   softRegions: null,
+                  skippedSources: null,
+                  stationsUnrelated: false,
                 },
               };
             }
@@ -437,6 +444,8 @@ export function useTauriListeners({
               imageStackModalState: {
                 ...state.imageStackModalState,
                 detailImageBase64: detailPreviewSource,
+                diagnosticDetailImageBase64: null,
+                diagnosticPreviewBase64: null,
                 error: null,
                 finalImageBase64: previewSource,
                 isProcessing: false,
@@ -457,20 +466,29 @@ export function useTauriListeners({
         if (isEffectActive) {
           const requestId = event.payload?.requestId;
           const message = event.payload?.message ?? event.payload;
+          const { previewSource, detailPreviewSource } = resolveImageStackPreviewSources(event.payload);
+          const resultSize = previewSource ? parseImageStackResultSize(event.payload) : null;
+          const softRegions = previewSource ? parseImageStackSoftRegions(event.payload?.softRegions) : null;
+          const skippedSources = previewSource ? parseImageStackSkippedSources(event.payload?.skippedSources) : null;
+          const stationsUnrelated = previewSource ? event.payload?.stationsUnrelated === true : false;
           useUIStore.getState().setUI((state) => {
             if (typeof requestId !== 'string' || requestId !== state.imageStackModalState.requestId) return state;
             return {
               imageStackModalState: {
                 ...state.imageStackModalState,
                 detailImageBase64: null,
+                diagnosticDetailImageBase64: detailPreviewSource,
+                diagnosticPreviewBase64: previewSource,
                 error: String(message),
                 finalImageBase64: null,
                 isProcessing: false,
                 progressMessage: null,
                 resultId: null,
                 lastSavedPath: null,
-                resultSize: null,
-                softRegions: null,
+                resultSize,
+                softRegions,
+                skippedSources,
+                stationsUnrelated,
               },
             };
           });

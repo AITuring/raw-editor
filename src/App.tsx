@@ -309,6 +309,8 @@ function App() {
     setUI({
       imageStackModalState: {
         detailImageBase64: null,
+        diagnosticDetailImageBase64: null,
+        diagnosticPreviewBase64: null,
         error: null,
         finalImageBase64: null,
         isOpen: true,
@@ -319,6 +321,8 @@ function App() {
         lastSavedPath: null,
         resultSize: null,
         softRegions: null,
+        skippedSources: null,
+        stationsUnrelated: false,
         sourcePaths: paths,
         blendMode: 'focus',
         alignmentMode: 'auto',
