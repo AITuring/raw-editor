@@ -216,6 +216,99 @@ const serialized = sidecar.serializeSidecarFiles(doc3);
 assert.equal(JSON.parse(serialized.sidecarJson).history.head, 3);
 assert.equal(serialized.eventsJsonl.trim().split('\n').length, 3);
 
+// 7. Task 20 Phase 2: Redo, new commit clears redo branch, remove lock/review, parse & reconcile imported sidecar.
+assert.equal(sidecar.canUndo(doc3), true);
+assert.equal(sidecar.canRedo(doc3), true);
+
+const doc4Redo = sidecar.commitRedo(doc3, {
+  base_run_id: 'native-fixture-001',
+  coordinate_frame_id: 'world-v1',
+  expected_head: 3,
+});
+assert.equal(doc4Redo.manual_review_regions.length, 1);
+assert.equal(doc4Redo.history.head, 4);
+assert.equal(doc4Redo.history.events[3].kind, 'redo');
+assert.equal(sidecar.canRedo(doc4Redo), false);
+
+const doc5UndoAgain = sidecar.commitUndo(doc4Redo, {
+  base_run_id: 'native-fixture-001',
+  coordinate_frame_id: 'world-v1',
+  expected_head: 4,
+});
+assert.equal(doc5UndoAgain.manual_review_regions.length, 0);
+assert.equal(sidecar.canRedo(doc5UndoAgain), true);
+
+// Removing a lock clears the redo stack and appends a monotonic remove_source_lock event.
+const doc6RemoveLock = sidecar.commitRemoveSourceLock(
+  doc5UndoAgain,
+  { base_run_id: 'native-fixture-001', coordinate_frame_id: 'world-v1', expected_head: 5 },
+  doc5UndoAgain.locks[0].lock_id,
+);
+assert.equal(doc6RemoveLock.locks.length, 0);
+assert.equal(sidecar.canRedo(doc6RemoveLock), false, 'new command must clear redo branch');
+assert.equal(doc6RemoveLock.history.events[5].kind, 'remove_source_lock');
+
+const doc7RestoreLock = sidecar.commitUndo(doc6RemoveLock, {
+  base_run_id: 'native-fixture-001',
+  coordinate_frame_id: 'world-v1',
+  expected_head: 6,
+});
+assert.equal(doc7RestoreLock.locks.length, 1, 'undoing remove_source_lock must restore the removed lock');
+
+// Remove manual review region + undo restore.
+const docReviewRemoved = sidecar.commitRemoveManualReviewRegion(
+  doc2,
+  { base_run_id: 'native-fixture-001', coordinate_frame_id: 'world-v1', expected_head: 2 },
+  doc2.manual_review_regions[0].region_id,
+);
+assert.equal(docReviewRemoved.manual_review_regions.length, 0);
+const docReviewRestored = sidecar.commitUndo(docReviewRemoved, {
+  base_run_id: 'native-fixture-001',
+  coordinate_frame_id: 'world-v1',
+  expected_head: 3,
+});
+assert.equal(docReviewRestored.manual_review_regions.length, 1);
+
+// Geometry conversion + pixel area + export summary.
+const drawnWorld = sidecar.normalizedBoxToWorldBox({ x: 0.1, y: 0.2, width: 0.2, height: 0.25 }, baseFrame);
+const drawnPoly = sidecar.worldBoxToPolygon(drawnWorld);
+assert.equal(sidecar.computeRegionPixelArea(drawnPoly), drawnWorld.width * drawnWorld.height);
+const roundTrippedNorm = sidecar.worldPolygonToNormalizedBox(drawnPoly, baseFrame);
+assert.ok(Math.abs(roundTrippedNorm.x - 0.1) < 1e-3);
+assert.ok(Math.abs(roundTrippedNorm.y - 0.2) < 1e-3);
+
+const exportSummaryClean = sidecar.summarizeSidecarForExport(doc2);
+assert.equal(exportSummaryClean.activeLockCount, 1);
+assert.equal(exportSummaryClean.activeLockAreaPx, 520 * 420);
+assert.equal(exportSummaryClean.manualReviewCount, 1);
+assert.equal(exportSummaryClean.requiresStaleConfirmation, false);
+
+// Strict parse + import reconciliation across run/frame changes.
+assert.equal(sidecar.parseSourceLockDocument('{not json'), null);
+assert.equal(sidecar.parseSourceLockDocument(JSON.stringify({ schema: 2 })), null);
+const serializedDoc2 = sidecar.serializeSidecarFiles(doc2).sidecarJson;
+const sameRunImport = sidecar.importAndReconcileSidecar(serializedDoc2, {
+  runId: 'native-fixture-001',
+  inputManifestSha256: 'mm'.repeat(32),
+  coordinateFrame: baseFrame,
+  sourceBindings: baseBindings,
+});
+assert.ok(sameRunImport);
+assert.equal(sameRunImport.newlyStaleCount, 0);
+assert.equal(sameRunImport.doc.locks[0].status, 'active');
+
+const differentRunImport = sidecar.importAndReconcileSidecar(serializedDoc2, {
+  runId: 'native-fixture-002',
+  inputManifestSha256: 'mm'.repeat(32),
+  coordinateFrame: baseFrame,
+  sourceBindings: baseBindings,
+});
+assert.ok(differentRunImport);
+assert.equal(differentRunImport.newlyStaleCount, 1);
+assert.equal(differentRunImport.doc.locks[0].status, 'stale');
+assert.equal(differentRunImport.doc.locks[0].stale_reason, 'run_id_changed');
+assert.equal(sidecar.summarizeSidecarForExport(differentRunImport.doc).requiresStaleConfirmation, true);
+
 console.log(
-  'Validated Task 9 / Task 20 source-lock sidecar contract, SHA-256 digest, undo log, staleness, QG accounting, and export binding.',
+  'Validated Task 9 / Task 20 source-lock sidecar contract, SHA-256 digest, undo/redo log, import reconciliation, staleness, QG accounting, and export binding.',
 );

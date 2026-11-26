@@ -8,8 +8,12 @@ import {
   FileSearch,
   FolderOpen,
   Lock,
+  Redo2,
   ShieldAlert,
+  SquareDashedMousePointer,
+  Trash2,
   Undo2,
+  Upload,
   XCircle,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -17,26 +21,40 @@ import { invoke } from '@tauri-apps/api/core';
 import { Invokes } from '../ui/AppProperties';
 import type { StackReportInspection, StackReportInspectionMarker } from '../../utils/stackReportInspection';
 import { parseStackReportInspection } from '../../utils/stackReportInspection';
-import type { SourceLockDocument, SourceLockPolicy } from '../../utils/sourceLockSidecar';
+import type { SourceLockDocument, SourceLockPolicy, WorldBox } from '../../utils/sourceLockSidecar';
 import {
+  canRedo,
+  canUndo,
   commitAddManualReviewRegion,
   commitAddSourceLock,
+  commitRedo,
+  commitRemoveManualReviewRegion,
+  commitRemoveSourceLock,
   commitUndo,
-  computeSidecarDigest,
+  computeRegionPixelArea,
+  computeWorldRegion,
   createSourceLockDocument,
+  importAndReconcileSidecar,
   serializeSidecarFiles,
   sha256Hex,
+  summarizeSidecarForExport,
+  worldBoxToPolygon,
 } from '../../utils/sourceLockSidecar';
 
 interface ImageStackInspectionPanelProps {
+  draftWorldBox?: WorldBox | null;
   error: string | null;
   inspection: StackReportInspection | null;
+  isDrawingRegion?: boolean;
   selectedMarkerId: string | null;
   sourceLockDoc: SourceLockDocument | null;
   stackReportPath: string | null;
+  onClearDraftWorldBox?(): void;
   onFocusMarker(marker: StackReportInspectionMarker): void;
+  onFocusWorldBox?(worldBox: WorldBox): void;
   onLoadInspection(inspection: StackReportInspection, fileName: string): void;
   onSourceLockDocChange(doc: SourceLockDocument | null): void;
+  onToggleDrawRegion?(): void;
 }
 
 const formatGiB = (bytes: number | null): string => {
@@ -52,6 +70,8 @@ const formatSeconds = (seconds: number | null): string => {
   return `${mins}m ${rem}s`;
 };
 
+const fileBaseName = (filePath: string): string => filePath.split(/[\\/]/).pop() ?? filePath;
+
 const downloadTextFile = (fileName: string, content: string, mimeType: string) => {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -62,7 +82,7 @@ const downloadTextFile = (fileName: string, content: string, mimeType: string) =
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
-const buildInitialSidecarFromInspection = (inspection: StackReportInspection): SourceLockDocument => {
+export const buildInitialSidecarFromInspection = (inspection: StackReportInspection): SourceLockDocument => {
   const bindings = inspection.sources
     .filter((source) => !source.excluded && source.path.trim().length > 0)
     .map((source, index) => ({
@@ -95,35 +115,88 @@ const criterionBadgeClass = (verdict: string): string => {
 };
 
 export default function ImageStackInspectionPanel({
+  draftWorldBox = null,
   error,
   inspection,
+  isDrawingRegion = false,
   selectedMarkerId,
   sourceLockDoc,
   stackReportPath,
+  onClearDraftWorldBox,
   onFocusMarker,
+  onFocusWorldBox,
   onLoadInspection,
   onSourceLockDocChange,
+  onToggleDrawRegion,
 }: ImageStackInspectionPanelProps) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const sidecarInputRef = useRef<HTMLInputElement | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedFileName, setLoadedFileName] = useState<string | null>(null);
   const [showSources, setShowSources] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
+  const [sidecarNotice, setSidecarNotice] = useState<string | null>(null);
   const [selectedSourceId, setSelectedSourceId] = useState<number>(1);
+  const [selectedAllowedSourceIds, setSelectedAllowedSourceIds] = useState<number[]>([1]);
   const [lockPolicy, setLockPolicy] = useState<SourceLockPolicy>('single_source');
   const [reviewReason, setReviewReason] = useState('alignment_review');
+  const [confirmStaleExport, setConfirmStaleExport] = useState(false);
 
-  const activeDoc = useMemo(() => {
-    if (!inspection) return null;
-    if (sourceLockDoc && sourceLockDoc.run_id === inspection.runId) return sourceLockDoc;
-    return buildInitialSidecarFromInspection(inspection);
-  }, [inspection, sourceLockDoc]);
+  const baselineDoc = useMemo(() => (inspection ? buildInitialSidecarFromInspection(inspection) : null), [inspection]);
+
+  const activeDoc = sourceLockDoc ?? baselineDoc;
 
   const selectedMarker = useMemo(
     () => inspection?.markers.find((marker) => marker.id === selectedMarkerId) ?? inspection?.markers[0] ?? null,
     [inspection, selectedMarkerId],
   );
+
+  const sourceNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const binding of activeDoc?.source_bindings ?? []) {
+      map.set(binding.source_id, fileBaseName(binding.path));
+    }
+    return map;
+  }, [activeDoc]);
+
+  const targetRegionInfo = useMemo(() => {
+    if (draftWorldBox) {
+      const polygon = worldBoxToPolygon(draftWorldBox);
+      return {
+        kind: 'drawn' as const,
+        box: draftWorldBox,
+        polygon,
+        areaPx: computeRegionPixelArea(polygon),
+      };
+    }
+    if (selectedMarker) {
+      const polygon = worldBoxToPolygon(selectedMarker.worldBox);
+      return {
+        kind: 'marker' as const,
+        box: selectedMarker.worldBox,
+        polygon,
+        areaPx: computeRegionPixelArea(polygon),
+      };
+    }
+    const defaultBox: WorldBox = {
+      x: inspection?.origin.x ?? 0,
+      y: inspection?.origin.y ?? 0,
+      width: Math.min(512, inspection?.canvas?.width ?? 512),
+      height: Math.min(512, inspection?.canvas?.height ?? 512),
+    };
+    const polygon = worldBoxToPolygon(defaultBox);
+    return {
+      kind: 'default' as const,
+      box: defaultBox,
+      polygon,
+      areaPx: computeRegionPixelArea(polygon),
+    };
+  }, [draftWorldBox, inspection, selectedMarker]);
+
+  const exportSummary = useMemo(() => (activeDoc ? summarizeSidecarForExport(activeDoc) : null), [activeDoc]);
+  const undoAvailable = activeDoc ? canUndo(activeDoc) : false;
+  const redoAvailable = activeDoc ? canRedo(activeDoc) : false;
 
   const handleReportFilePicked = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -138,6 +211,8 @@ export default function ImageStackInspectionPanel({
       }
       setLoadError(null);
       setLockError(null);
+      setSidecarNotice(null);
+      setConfirmStaleExport(false);
       setLoadedFileName(file.name);
       onLoadInspection(parsed, file.name);
       onSourceLockDocChange(buildInitialSidecarFromInspection(parsed));
@@ -146,31 +221,64 @@ export default function ImageStackInspectionPanel({
     }
   };
 
+  const handleSidecarFilePicked = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !baselineDoc) return;
+    try {
+      const text = await file.text();
+      const reconciled = importAndReconcileSidecar(text, {
+        runId: baselineDoc.run_id,
+        inputManifestSha256: baselineDoc.input_manifest_sha256,
+        coordinateFrame: baselineDoc.coordinate_frame,
+        sourceBindings: baselineDoc.source_bindings,
+      });
+      if (!reconciled) {
+        setLockError(t('modals.imageStack.inspection.invalidSidecar'));
+        return;
+      }
+      setLockError(null);
+      setConfirmStaleExport(false);
+      setSidecarNotice(
+        reconciled.newlyStaleCount > 0 || reconciled.mismatchReasons.length > 0
+          ? t('modals.imageStack.inspection.sidecarImportedStale', {
+              stale: reconciled.doc.locks.filter((lock) => lock.status !== 'active').length,
+            })
+          : t('modals.imageStack.inspection.sidecarImported', {
+              locks: reconciled.doc.locks.length,
+              reviews: reconciled.doc.manual_review_regions.length,
+            }),
+      );
+      onSourceLockDocChange(reconciled.doc);
+    } catch (readError) {
+      setLockError(readError instanceof Error ? readError.message : String(readError));
+    }
+  };
+
   const handleRevealReport = () => {
     if (!stackReportPath) return;
     void invoke(Invokes.ShowInFinder, { path: stackReportPath }).catch(() => {});
   };
 
-  const targetWorldPolygon = (): Array<[number, number]> => {
-    const box = selectedMarker?.worldBox ?? {
-      x: inspection?.origin.x ?? 0,
-      y: inspection?.origin.y ?? 0,
-      width: Math.min(512, inspection?.canvas?.width ?? 512),
-      height: Math.min(512, inspection?.canvas?.height ?? 512),
-    };
-    return [
-      [Math.round(box.x), Math.round(box.y)],
-      [Math.round(box.x + box.width), Math.round(box.y)],
-      [Math.round(box.x + box.width), Math.round(box.y + box.height)],
-      [Math.round(box.x), Math.round(box.y + box.height)],
-    ];
+  const toggleAllowedSourceId = (sourceId: number) => {
+    setSelectedAllowedSourceIds((previous) =>
+      previous.includes(sourceId)
+        ? previous.filter((id) => id !== sourceId)
+        : [...previous, sourceId].sort((a, b) => a - b),
+    );
   };
 
   const handleAddSourceLock = () => {
     if (!activeDoc || activeDoc.source_bindings.length === 0) return;
-    const binding =
-      activeDoc.source_bindings.find((candidate) => candidate.source_id === selectedSourceId) ??
-      activeDoc.source_bindings[0];
+    const validIds = new Set(activeDoc.source_bindings.map((binding) => binding.source_id));
+    const requestedSources =
+      lockPolicy === 'single_source'
+        ? [validIds.has(selectedSourceId) ? selectedSourceId : activeDoc.source_bindings[0].source_id]
+        : selectedAllowedSourceIds.filter((id) => validIds.has(id));
+    if (requestedSources.length === 0) {
+      setLockError(t('modals.imageStack.inspection.multiSourceHint'));
+      return;
+    }
     try {
       const next = commitAddSourceLock(
         activeDoc,
@@ -180,24 +288,25 @@ export default function ImageStackInspectionPanel({
           expected_head: activeDoc.history.head,
         },
         {
-          polygonWorld: targetWorldPolygon(),
-          requestedSources: [binding.source_id],
+          polygonWorld: targetRegionInfo.polygon,
+          requestedSources,
           policy: lockPolicy,
           evidence: {
             coordinate_frame_id: activeDoc.coordinate_frame.id,
             input_manifest_sha256: activeDoc.input_manifest_sha256,
-            eligible_tiles: 1,
-            covered_tiles: 1,
+            eligible_tiles: Math.max(1, Math.ceil(targetRegionInfo.areaPx / (256 * 256))),
+            covered_tiles: Math.max(1, Math.ceil(targetRegionInfo.areaPx / (256 * 256))),
             has_no_owner_or_transparent: false,
             footprint_and_inverse_valid: true,
             integrity_errors: [],
             coverage_owner_tile_digest: sha256Hex(
-              `${activeDoc.run_id}:${binding.source_id}:${selectedMarker?.id ?? 'canvas'}`,
+              `${activeDoc.run_id}:${requestedSources.join(',')}:${targetRegionInfo.box.x},${targetRegionInfo.box.y},${targetRegionInfo.box.width},${targetRegionInfo.box.height}`,
             ),
           },
         },
       );
       setLockError(null);
+      setSidecarNotice(null);
       onSourceLockDocChange(next);
     } catch (err) {
       setLockError(err instanceof Error ? err.message : String(err));
@@ -215,9 +324,48 @@ export default function ImageStackInspectionPanel({
           expected_head: activeDoc.history.head,
         },
         {
-          polygonWorld: targetWorldPolygon(),
+          polygonWorld: targetRegionInfo.polygon,
           reason: reviewReason || 'alignment_review',
         },
+      );
+      setLockError(null);
+      setSidecarNotice(null);
+      onSourceLockDocChange(next);
+    } catch (err) {
+      setLockError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleRemoveLock = (lockId: string) => {
+    if (!activeDoc) return;
+    try {
+      const next = commitRemoveSourceLock(
+        activeDoc,
+        {
+          base_run_id: activeDoc.run_id,
+          coordinate_frame_id: activeDoc.coordinate_frame.id,
+          expected_head: activeDoc.history.head,
+        },
+        lockId,
+      );
+      setLockError(null);
+      onSourceLockDocChange(next);
+    } catch (err) {
+      setLockError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleRemoveReviewRegion = (regionId: string) => {
+    if (!activeDoc) return;
+    try {
+      const next = commitRemoveManualReviewRegion(
+        activeDoc,
+        {
+          base_run_id: activeDoc.run_id,
+          coordinate_frame_id: activeDoc.coordinate_frame.id,
+          expected_head: activeDoc.history.head,
+        },
+        regionId,
       );
       setLockError(null);
       onSourceLockDocChange(next);
@@ -227,7 +375,7 @@ export default function ImageStackInspectionPanel({
   };
 
   const handleUndoLockEvent = () => {
-    if (!activeDoc || activeDoc.history.head === 0) return;
+    if (!activeDoc || !undoAvailable) return;
     try {
       const next = commitUndo(activeDoc, {
         base_run_id: activeDoc.run_id,
@@ -241,14 +389,33 @@ export default function ImageStackInspectionPanel({
     }
   };
 
+  const handleRedoLockEvent = () => {
+    if (!activeDoc || !redoAvailable) return;
+    try {
+      const next = commitRedo(activeDoc, {
+        base_run_id: activeDoc.run_id,
+        coordinate_frame_id: activeDoc.coordinate_frame.id,
+        expected_head: activeDoc.history.head,
+      });
+      setLockError(null);
+      onSourceLockDocChange(next);
+    } catch (err) {
+      setLockError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const handleExportSidecar = () => {
-    if (!activeDoc) return;
+    if (!activeDoc || !exportSummary) return;
+    if (exportSummary.requiresStaleConfirmation && !confirmStaleExport) {
+      setLockError(t('modals.imageStack.inspection.staleWarning'));
+      return;
+    }
     const { sidecarJson, eventsJsonl } = serializeSidecarFiles(activeDoc);
     downloadTextFile('source-locks.json', sidecarJson, 'application/json');
     downloadTextFile('source-locks.events.jsonl', eventsJsonl, 'application/x-ndjson');
   };
 
-  const sidecarDigest = useMemo(() => (activeDoc ? computeSidecarDigest(activeDoc).slice(0, 12) : null), [activeDoc]);
+  const sidecarDigest = exportSummary ? exportSummary.sidecarSha256.slice(0, 12) : null;
 
   return (
     <div className="space-y-4 p-4">
@@ -315,7 +482,7 @@ export default function ImageStackInspectionPanel({
                 ) : (
                   <XCircle aria-hidden="true" className="text-status-error" size={15} />
                 )}
-                {t('modals.imageStack.inspection.verdictLabel')}: {inspection.verdict}
+                {`${t('modals.imageStack.inspection.verdictLabel')}: ${inspection.verdict}`}
               </span>
               <span className="rounded bg-card-active px-1.5 py-0.5 text-[10px] text-text-secondary">
                 {inspection.selectedPath}
@@ -331,37 +498,39 @@ export default function ImageStackInspectionPanel({
               <div>
                 <dt className="text-text-secondary">{t('modals.imageStack.inspection.closure')}</dt>
                 <dd className="font-medium text-text-primary">
-                  {inspection.closure.status}
-                  {inspection.closure.maxDirectPairP95Px !== null
-                    ? ` · P95 ${inspection.closure.maxDirectPairP95Px.toFixed(2)}px`
-                    : ''}
+                  {`${inspection.closure.status}${
+                    inspection.closure.maxDirectPairP95Px !== null
+                      ? ` · P95 ${inspection.closure.maxDirectPairP95Px.toFixed(2)}px`
+                      : ''
+                  }`}
                 </dd>
               </div>
               <div>
                 <dt className="text-text-secondary">{t('modals.imageStack.inspection.density')}</dt>
                 <dd className="font-medium text-text-primary">
-                  {inspection.outputDensity.status}
-                  {inspection.outputDensity.factor !== null ? ` (${inspection.outputDensity.factor.toFixed(3)}×)` : ''}
+                  {`${inspection.outputDensity.status}${
+                    inspection.outputDensity.factor !== null ? ` (${inspection.outputDensity.factor.toFixed(3)}×)` : ''
+                  }`}
                 </dd>
               </div>
               <div>
                 <dt className="text-text-secondary">{t('modals.imageStack.inspection.tone')}</dt>
                 <dd className="font-medium text-text-primary">
-                  {inspection.tone.status}
-                  {inspection.tone.maxDeltaE00 !== null ? ` · ΔE ${inspection.tone.maxDeltaE00.toFixed(2)}` : ''}
+                  {`${inspection.tone.status}${
+                    inspection.tone.maxDeltaE00 !== null ? ` · ΔE ${inspection.tone.maxDeltaE00.toFixed(2)}` : ''
+                  }`}
                 </dd>
               </div>
               <div>
                 <dt className="text-text-secondary">{t('modals.imageStack.inspection.stations')}</dt>
                 <dd className="font-medium text-text-primary">
-                  {inspection.stationCount} · {inspection.sources.length - inspection.excludedCount}/
-                  {inspection.sources.length}
+                  {`${inspection.stationCount} · ${inspection.sources.length - inspection.excludedCount}/${inspection.sources.length}`}
                 </dd>
               </div>
               <div>
                 <dt className="text-text-secondary">{t('modals.imageStack.inspection.resources')}</dt>
                 <dd className="font-medium text-text-primary">
-                  {formatGiB(inspection.resources.peakRssBytes)} · {formatSeconds(inspection.resources.totalSeconds)}
+                  {`${formatGiB(inspection.resources.peakRssBytes)} · ${formatSeconds(inspection.resources.totalSeconds)}`}
                 </dd>
               </div>
             </dl>
@@ -388,7 +557,7 @@ export default function ImageStackInspectionPanel({
                         {issue.summary}
                       </span>
                       <span className="shrink-0 rounded bg-card-active px-1.5 py-0.5 text-[10px] tabular-nums text-text-secondary">
-                        ×{issue.count}
+                        {`×${issue.count}`}
                       </span>
                     </div>
                     <p className="mt-0.5 leading-relaxed text-text-secondary">{issue.detail}</p>
@@ -460,7 +629,7 @@ export default function ImageStackInspectionPanel({
                               : 'bg-status-warning/15 text-status-warning'
                           }`}
                         >
-                          {Math.round(marker.worldBox.x)},{Math.round(marker.worldBox.y)}
+                          {`${Math.round(marker.worldBox.x)},${Math.round(marker.worldBox.y)}`}
                         </span>
                       </button>
                     </li>
@@ -509,16 +678,16 @@ export default function ImageStackInspectionPanel({
             )}
           </section>
 
-          {activeDoc && (
-            <section className="space-y-2 border-t border-border-color pt-3">
+          {activeDoc && exportSummary && (
+            <section className="space-y-2.5 border-t border-border-color pt-3">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="flex items-center gap-1.5 text-xs font-semibold text-text-primary">
                   <Lock aria-hidden="true" size={14} />
                   {t('modals.imageStack.inspection.sourceLocksTitle')}
                 </h4>
                 {sidecarDigest && (
-                  <span className="font-mono text-[10px] text-text-secondary" title={sidecarDigest}>
-                    #{sidecarDigest}
+                  <span className="font-mono text-[10px] text-text-secondary" title={exportSummary.sidecarSha256}>
+                    {`#${sidecarDigest}`}
                   </span>
                 )}
               </div>
@@ -526,23 +695,53 @@ export default function ImageStackInspectionPanel({
                 {t('modals.imageStack.inspection.sourceLocksHint')}
               </p>
 
-              {activeDoc.source_bindings.length > 0 && (
-                <div className="space-y-1.5 rounded-lg border border-border-color bg-bg-primary/30 p-2.5">
-                  <label className="block text-[10px] font-medium text-text-secondary">
-                    {t('modals.imageStack.inspection.lockSourceLabel')}
-                    <select
-                      className="mt-1 w-full rounded-md bg-surface px-2 py-1 text-xs text-text-primary"
-                      onChange={(event) => setSelectedSourceId(Number(event.target.value))}
-                      value={selectedSourceId}
-                    >
-                      {activeDoc.source_bindings.map((binding) => (
-                        <option key={binding.source_id} value={binding.source_id}>
-                          #{binding.source_id} · {binding.path.split(/[\\/]/).pop() ?? binding.path}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+              <div className="space-y-1.5 rounded-lg border border-border-color bg-bg-primary/35 p-2.5 text-[11px]">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-text-secondary">
+                    {`${t('modals.imageStack.inspection.targetRegionLabel')}: ${
+                      targetRegionInfo.kind === 'drawn'
+                        ? t('modals.imageStack.inspection.drawnTarget')
+                        : targetRegionInfo.kind === 'marker'
+                          ? t('modals.imageStack.inspection.markerTarget')
+                          : t('modals.imageStack.inspection.canvasDefaultTarget')
+                    }`}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {onToggleDrawRegion && (
+                      <button
+                        aria-pressed={isDrawingRegion}
+                        className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                          isDrawingRegion
+                            ? 'bg-accent text-white'
+                            : 'bg-card-active text-text-primary hover:bg-accent/15'
+                        }`}
+                        onClick={onToggleDrawRegion}
+                        type="button"
+                      >
+                        <SquareDashedMousePointer aria-hidden="true" size={11} />
+                        {isDrawingRegion
+                          ? t('modals.imageStack.inspection.drawingRegion')
+                          : t('modals.imageStack.inspection.drawRegion')}
+                      </button>
+                    )}
+                    {draftWorldBox && onClearDraftWorldBox && (
+                      <button
+                        className="rounded bg-card-active px-1.5 py-0.5 text-[10px] text-text-secondary hover:text-text-primary"
+                        onClick={onClearDraftWorldBox}
+                        type="button"
+                      >
+                        {t('modals.imageStack.inspection.clearDrawnRegion')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="font-mono text-[10px] tabular-nums text-text-secondary">
+                  {`(${Math.round(targetRegionInfo.box.x)}, ${Math.round(targetRegionInfo.box.y)}) · ${Math.round(targetRegionInfo.box.width)}×${Math.round(targetRegionInfo.box.height)} px · ${targetRegionInfo.areaPx.toLocaleString()} px² · ${activeDoc.coordinate_frame.id}`}
+                </p>
+              </div>
 
+              {activeDoc.source_bindings.length > 0 && (
+                <div className="space-y-2 rounded-lg border border-border-color bg-bg-primary/30 p-2.5">
                   <div className="flex gap-1.5">
                     <button
                       className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
@@ -567,6 +766,49 @@ export default function ImageStackInspectionPanel({
                       {t('modals.imageStack.inspection.allowedSourcesPolicy')}
                     </button>
                   </div>
+
+                  {lockPolicy === 'single_source' ? (
+                    <label className="block text-[10px] font-medium text-text-secondary">
+                      {t('modals.imageStack.inspection.lockSourceLabel')}
+                      <select
+                        className="mt-1 w-full rounded-md bg-surface px-2 py-1 text-xs text-text-primary"
+                        onChange={(event) => setSelectedSourceId(Number(event.target.value))}
+                        value={selectedSourceId}
+                      >
+                        {activeDoc.source_bindings.map((binding) => (
+                          <option key={binding.source_id} value={binding.source_id}>
+                            {`#${binding.source_id} · ${fileBaseName(binding.path)}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-text-secondary">
+                        {t('modals.imageStack.inspection.multiSourceHint')}
+                      </p>
+                      <div className="max-h-28 space-y-1 overflow-y-auto rounded-md bg-surface/80 p-1.5">
+                        {activeDoc.source_bindings.map((binding) => {
+                          const checked = selectedAllowedSourceIds.includes(binding.source_id);
+                          return (
+                            <label
+                              className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-[11px] text-text-primary hover:bg-card-active"
+                              key={binding.source_id}
+                            >
+                              <input
+                                checked={checked}
+                                onChange={() => toggleAllowedSourceId(binding.source_id)}
+                                type="checkbox"
+                              />
+                              <span className="truncate" title={binding.path}>
+                                {`#${binding.source_id} · ${fileBaseName(binding.path)}`}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap gap-1.5">
                     <button
@@ -598,24 +840,168 @@ export default function ImageStackInspectionPanel({
                 </div>
               )}
 
+              {activeDoc.locks.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-semibold text-text-secondary">
+                    {t('modals.imageStack.inspection.locksListTitle', { total: activeDoc.locks.length })}
+                  </p>
+                  <ul className="max-h-36 space-y-1 overflow-y-auto pr-0.5 text-[11px]">
+                    {activeDoc.locks.map((lock) => {
+                      const sourceLabel = lock.requested_sources
+                        .map((id) => `#${id} ${sourceNameById.get(id) ?? ''}`.trim())
+                        .join(', ');
+                      const [bx, by, bw, bh] = lock.region.bbox;
+                      return (
+                        <li
+                          className="flex items-start justify-between gap-1.5 rounded-md bg-bg-primary/30 px-2 py-1.5"
+                          key={lock.lock_id}
+                        >
+                          <button
+                            className="min-w-0 flex-1 text-left"
+                            onClick={() => onFocusWorldBox?.({ x: bx, y: by, width: bw, height: bh })}
+                            type="button"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-[10px] font-semibold text-text-primary">
+                                {lock.lock_id}
+                              </span>
+                              <span
+                                className={`rounded px-1 py-0.25 text-[9px] font-medium ${
+                                  lock.status === 'active'
+                                    ? 'bg-status-success/15 text-status-success'
+                                    : 'bg-status-warning/15 text-status-warning'
+                                }`}
+                              >
+                                {lock.status}
+                              </span>
+                            </div>
+                            <p className="truncate text-[10px] text-text-secondary" title={sourceLabel}>
+                              {sourceLabel}
+                            </p>
+                            {lock.stale_reason && (
+                              <p className="truncate text-[10px] text-status-warning" title={lock.stale_reason}>
+                                {lock.stale_reason}
+                              </p>
+                            )}
+                          </button>
+                          <button
+                            aria-label={`${t('modals.imageStack.inspection.deleteRegion')} ${lock.lock_id}`}
+                            className="shrink-0 rounded p-1 text-text-secondary transition-colors hover:bg-status-error/15 hover:text-status-error"
+                            onClick={() => handleRemoveLock(lock.lock_id)}
+                            type="button"
+                          >
+                            <Trash2 aria-hidden="true" size={12} />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {activeDoc.manual_review_regions.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-semibold text-text-secondary">
+                    {t('modals.imageStack.inspection.reviewsListTitle', {
+                      total: activeDoc.manual_review_regions.length,
+                    })}
+                  </p>
+                  <ul className="max-h-32 space-y-1 overflow-y-auto pr-0.5 text-[11px]">
+                    {activeDoc.manual_review_regions.map((region) => {
+                      const [bx, by, bw, bh] = computeWorldRegion(region.polygon_world).bbox;
+                      return (
+                        <li
+                          className="flex items-start justify-between gap-1.5 rounded-md bg-bg-primary/30 px-2 py-1.5"
+                          key={region.region_id}
+                        >
+                          <button
+                            className="min-w-0 flex-1 text-left"
+                            onClick={() => onFocusWorldBox?.({ x: bx, y: by, width: bw, height: bh })}
+                            type="button"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-[10px] font-semibold text-text-primary">
+                                {region.region_id}
+                              </span>
+                              <span className="rounded bg-violet-500/15 px-1 py-0.25 text-[9px] text-violet-300">
+                                {t('modals.imageStack.inspection.manualExcludedTag')}
+                              </span>
+                            </div>
+                            <p className="truncate text-[10px] text-text-secondary" title={region.reason}>
+                              {region.reason}
+                            </p>
+                          </button>
+                          <button
+                            aria-label={`${t('modals.imageStack.inspection.deleteRegion')} ${region.region_id}`}
+                            className="shrink-0 rounded p-1 text-text-secondary transition-colors hover:bg-status-error/15 hover:text-status-error"
+                            onClick={() => handleRemoveReviewRegion(region.region_id)}
+                            type="button"
+                          >
+                            <Trash2 aria-hidden="true" size={12} />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {sidecarNotice && (
+                <p className="rounded bg-accent/10 p-2 text-[11px] text-text-primary" role="status">
+                  {sidecarNotice}
+                </p>
+              )}
+
               {lockError && (
                 <p className="rounded bg-status-error/10 p-2 text-[11px] text-status-error" role="alert">
                   {lockError}
                 </p>
               )}
 
-              <div className="flex items-center justify-between gap-2 text-[11px] text-text-secondary">
-                <span>
+              <div className="space-y-1.5 rounded-lg border border-border-color bg-bg-primary/30 p-2.5 text-[10px] text-text-secondary">
+                <p>
+                  {t('modals.imageStack.inspection.activeSummary', {
+                    locks: exportSummary.activeLockCount,
+                    pixels: exportSummary.activeLockAreaPx.toLocaleString(),
+                  })}
+                </p>
+                {exportSummary.staleOrUnresolvedCount > 0 && (
+                  <p className="font-medium text-status-warning">
+                    {t('modals.imageStack.inspection.staleSummary', {
+                      stale: exportSummary.staleOrUnresolvedCount,
+                      pixels: exportSummary.staleOrUnresolvedAreaPx.toLocaleString(),
+                    })}
+                  </p>
+                )}
+                <p>
                   {t('modals.imageStack.inspection.sidecarCounts', {
                     locks: activeDoc.locks.length,
                     reviews: activeDoc.manual_review_regions.length,
                     events: activeDoc.history.head,
                   })}
-                </span>
+                </p>
+                {exportSummary.requiresStaleConfirmation && (
+                  <label className="mt-1 flex cursor-pointer items-start gap-1.5 rounded bg-status-warning/10 p-1.5 text-[10px] text-status-warning">
+                    <input
+                      checked={confirmStaleExport}
+                      className="mt-0.5"
+                      onChange={(event) => setConfirmStaleExport(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>
+                      {t('modals.imageStack.inspection.confirmStaleExport', {
+                        stale: exportSummary.staleOrUnresolvedCount,
+                      })}
+                    </span>
+                  </label>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
                 <div className="flex items-center gap-1.5">
                   <button
                     className="flex items-center gap-1 rounded-md bg-card-active px-2 py-1 text-[11px] text-text-primary disabled:opacity-40"
-                    disabled={activeDoc.history.head === 0}
+                    disabled={!undoAvailable}
                     onClick={handleUndoLockEvent}
                     type="button"
                   >
@@ -623,7 +1009,27 @@ export default function ImageStackInspectionPanel({
                     {t('modals.imageStack.inspection.undo')}
                   </button>
                   <button
-                    className="flex items-center gap-1 rounded-md bg-card-active px-2 py-1 text-[11px] text-text-primary"
+                    className="flex items-center gap-1 rounded-md bg-card-active px-2 py-1 text-[11px] text-text-primary disabled:opacity-40"
+                    disabled={!redoAvailable}
+                    onClick={handleRedoLockEvent}
+                    type="button"
+                  >
+                    <Redo2 aria-hidden="true" size={12} />
+                    {t('modals.imageStack.inspection.redo')}
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    className="flex items-center gap-1 rounded-md bg-card-active px-2 py-1 text-[11px] text-text-primary hover:bg-accent/15"
+                    onClick={() => sidecarInputRef.current?.click()}
+                    type="button"
+                  >
+                    <Upload aria-hidden="true" size={12} />
+                    {t('modals.imageStack.inspection.importSidecar')}
+                  </button>
+                  <button
+                    className="flex items-center gap-1 rounded-md bg-card-active px-2 py-1 text-[11px] text-text-primary hover:bg-accent/15 disabled:opacity-40"
+                    disabled={exportSummary.requiresStaleConfirmation && !confirmStaleExport}
                     onClick={handleExportSidecar}
                     type="button"
                   >
@@ -631,6 +1037,13 @@ export default function ImageStackInspectionPanel({
                     {t('modals.imageStack.inspection.exportSidecar')}
                   </button>
                 </div>
+                <input
+                  accept=".json,application/json"
+                  className="hidden"
+                  onChange={(event) => void handleSidecarFilePicked(event)}
+                  ref={sidecarInputRef}
+                  type="file"
+                />
               </div>
             </section>
           )}

@@ -127,6 +127,37 @@ export interface ExportBindingVerification {
   reasons: string[];
 }
 
+export interface NormalizedBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface WorldBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface SidecarExportSummary {
+  activeLockCount: number;
+  activeLockAreaPx: number;
+  staleOrUnresolvedCount: number;
+  staleOrUnresolvedAreaPx: number;
+  manualReviewCount: number;
+  manualReviewAreaPx: number;
+  requiresStaleConfirmation: boolean;
+  sidecarSha256: string;
+}
+
+export interface SidecarImportReconciliation {
+  doc: SourceLockDocument;
+  newlyStaleCount: number;
+  mismatchReasons: string[];
+}
+
 export interface ManualReviewQualityGateAccounting {
   all_tiles: number;
   auto_eligible_tiles: number;
@@ -253,6 +284,62 @@ export function computeWorldRegion(polygon: Array<[number, number]>): WorldRegio
   return {
     polygon_world: polygon.map(([x, y]) => [x, y]),
     bbox: [minX, minY, Math.max(0, maxX - minX), Math.max(0, maxY - minY)],
+  };
+}
+
+export function computeRegionPixelArea(polygon: Array<[number, number]>): number {
+  if (polygon.length < 3) return 0;
+  let areaTwice = 0;
+  for (let i = 0; i < polygon.length; i += 1) {
+    const [x0, y0] = polygon[i];
+    const [x1, y1] = polygon[(i + 1) % polygon.length];
+    areaTwice += x0 * y1 - x1 * y0;
+  }
+  return Math.round(Math.abs(areaTwice) / 2);
+}
+
+const clamp01 = (value: number): number => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
+
+export function normalizedBoxToWorldBox(box: NormalizedBox, frame: CoordinateFrame): WorldBox {
+  const x0 = clamp01(Math.min(box.x, box.x + box.width));
+  const y0 = clamp01(Math.min(box.y, box.y + box.height));
+  const x1 = clamp01(Math.max(box.x, box.x + box.width));
+  const y1 = clamp01(Math.max(box.y, box.y + box.height));
+  const canvasW = Math.max(1, frame.canvas[0]);
+  const canvasH = Math.max(1, frame.canvas[1]);
+  const worldX = Math.round(frame.origin[0] + x0 * canvasW);
+  const worldY = Math.round(frame.origin[1] + y0 * canvasH);
+  const worldW = Math.max(1, Math.round((x1 - x0) * canvasW));
+  const worldH = Math.max(1, Math.round((y1 - y0) * canvasH));
+  return { x: worldX, y: worldY, width: worldW, height: worldH };
+}
+
+export function worldBoxToPolygon(box: WorldBox): Array<[number, number]> {
+  const x = Math.round(box.x);
+  const y = Math.round(box.y);
+  const w = Math.max(1, Math.round(box.width));
+  const h = Math.max(1, Math.round(box.height));
+  return [
+    [x, y],
+    [x + w, y],
+    [x + w, y + h],
+    [x, y + h],
+  ];
+}
+
+export function worldPolygonToNormalizedBox(polygon: Array<[number, number]>, frame: CoordinateFrame): NormalizedBox {
+  const { bbox } = computeWorldRegion(polygon);
+  const canvasW = Math.max(1, frame.canvas[0]);
+  const canvasH = Math.max(1, frame.canvas[1]);
+  const x = clamp01((bbox[0] - frame.origin[0]) / canvasW);
+  const y = clamp01((bbox[1] - frame.origin[1]) / canvasH);
+  const right = clamp01((bbox[0] + bbox[2] - frame.origin[0]) / canvasW);
+  const bottom = clamp01((bbox[1] + bbox[3] - frame.origin[1]) / canvasH);
+  return {
+    x,
+    y,
+    width: Math.max(0.002, right - x),
+    height: Math.max(0.002, bottom - y),
   };
 }
 
@@ -509,46 +596,169 @@ export function commitAddManualReviewRegion(
   };
 }
 
+export function commitRemoveSourceLock(
+  doc: SourceLockDocument,
+  session: SessionContext,
+  lockId: string,
+): SourceLockDocument {
+  assertSessionMatches(doc, session);
+  const existing = doc.locks.find((lock) => lock.lock_id === lockId);
+  if (!existing) {
+    throw new Error(`Source lock not found: ${lockId}`);
+  }
+  const nextEventId = doc.history.head + 1;
+  const beforeDigest = computeStateDigest(doc);
+  const nextLocks = doc.locks.filter((lock) => lock.lock_id !== lockId);
+  const afterDigest = computeStateDigest({ locks: nextLocks, manual_review_regions: doc.manual_review_regions });
+  const event: SourceLockEvent = {
+    event_id: nextEventId,
+    kind: 'remove_source_lock',
+    inverse_kind: 'add_source_lock',
+    before_digest: beforeDigest,
+    after_digest: afterDigest,
+    coordinate_frame_id: doc.coordinate_frame.id,
+    target_id: lockId,
+    payload: existing,
+  };
+  return {
+    ...doc,
+    locks: nextLocks,
+    history: {
+      head: nextEventId,
+      events: [...doc.history.events, event],
+    },
+  };
+}
+
+export function commitRemoveManualReviewRegion(
+  doc: SourceLockDocument,
+  session: SessionContext,
+  regionId: string,
+): SourceLockDocument {
+  assertSessionMatches(doc, session);
+  const existing = doc.manual_review_regions.find((region) => region.region_id === regionId);
+  if (!existing) {
+    throw new Error(`Manual review region not found: ${regionId}`);
+  }
+  const nextEventId = doc.history.head + 1;
+  const beforeDigest = computeStateDigest(doc);
+  const nextRegions = doc.manual_review_regions.filter((region) => region.region_id !== regionId);
+  const afterDigest = computeStateDigest({ locks: doc.locks, manual_review_regions: nextRegions });
+  const event: SourceLockEvent = {
+    event_id: nextEventId,
+    kind: 'remove_manual_review_region',
+    inverse_kind: 'add_manual_review_region',
+    before_digest: beforeDigest,
+    after_digest: afterDigest,
+    coordinate_frame_id: doc.coordinate_frame.id,
+    target_id: regionId,
+    payload: existing,
+  };
+  return {
+    ...doc,
+    manual_review_regions: nextRegions,
+    history: {
+      head: nextEventId,
+      events: [...doc.history.events, event],
+    },
+  };
+}
+
+const isUndoableCommand = (kind: SourceLockEventKind): boolean =>
+  kind === 'add_source_lock' ||
+  kind === 'remove_source_lock' ||
+  kind === 'add_manual_review_region' ||
+  kind === 'remove_manual_review_region';
+
+const computeUndoRedoStacks = (
+  events: SourceLockEvent[],
+): { applied: SourceLockEvent[]; redoable: SourceLockEvent[] } => {
+  const applied: SourceLockEvent[] = [];
+  const redoable: SourceLockEvent[] = [];
+  for (const event of events) {
+    if (isUndoableCommand(event.kind)) {
+      applied.push(event);
+      redoable.length = 0;
+    } else if (event.kind === 'undo') {
+      const revertedId = event.reverted_event_id;
+      if (applied.length > 0 && (revertedId === undefined || applied[applied.length - 1].event_id === revertedId)) {
+        const popped = applied.pop()!;
+        redoable.push(popped);
+      } else if (revertedId !== undefined) {
+        const idx = applied.findIndex((item) => item.event_id === revertedId);
+        if (idx >= 0) {
+          const [removed] = applied.splice(idx, 1);
+          redoable.push(removed);
+        }
+      }
+    } else if (event.kind === 'redo') {
+      const reappliedId = event.reverted_event_id;
+      if (
+        redoable.length > 0 &&
+        (reappliedId === undefined || redoable[redoable.length - 1].event_id === reappliedId)
+      ) {
+        const popped = redoable.pop()!;
+        applied.push(popped);
+      } else if (reappliedId !== undefined) {
+        const idx = redoable.findIndex((item) => item.event_id === reappliedId);
+        if (idx >= 0) {
+          const [restored] = redoable.splice(idx, 1);
+          applied.push(restored);
+        }
+      }
+    }
+  }
+  return { applied, redoable };
+};
+
+export function canUndo(doc: SourceLockDocument): boolean {
+  return computeUndoRedoStacks(doc.history.events).applied.length > 0;
+}
+
+export function canRedo(doc: SourceLockDocument): boolean {
+  return computeUndoRedoStacks(doc.history.events).redoable.length > 0;
+}
+
+const applyEventState = (
+  doc: SourceLockDocument,
+  targetEvent: SourceLockEvent,
+  direction: 'forward' | 'inverse',
+): { locks: SourceLock[]; manual_review_regions: ManualReviewRegion[] } => {
+  let nextLocks = doc.locks;
+  let nextRegions = doc.manual_review_regions;
+  const effectiveKind = direction === 'forward' ? targetEvent.kind : targetEvent.inverse_kind;
+  if (effectiveKind === 'remove_source_lock') {
+    nextLocks = doc.locks.filter((lock) => lock.lock_id !== targetEvent.target_id);
+  } else if (effectiveKind === 'add_source_lock' && targetEvent.payload && 'lock_id' in targetEvent.payload) {
+    nextLocks = [...doc.locks.filter((lock) => lock.lock_id !== targetEvent.target_id), targetEvent.payload];
+  } else if (effectiveKind === 'remove_manual_review_region') {
+    nextRegions = doc.manual_review_regions.filter((region) => region.region_id !== targetEvent.target_id);
+  } else if (
+    effectiveKind === 'add_manual_review_region' &&
+    targetEvent.payload &&
+    'region_id' in targetEvent.payload
+  ) {
+    nextRegions = [
+      ...doc.manual_review_regions.filter((region) => region.region_id !== targetEvent.target_id),
+      targetEvent.payload,
+    ];
+  }
+  return { locks: nextLocks, manual_review_regions: nextRegions };
+};
+
 /**
  * Undo the latest committed command by appending an inverse event without
  * deleting prior history entries.
  */
 export function commitUndo(doc: SourceLockDocument, session: SessionContext): SourceLockDocument {
   assertSessionMatches(doc, session);
-  const undoneTargets = new Set<number>();
-  let targetEvent: SourceLockEvent | null = null;
-  for (let i = doc.history.events.length - 1; i >= 0; i -= 1) {
-    const candidate = doc.history.events[i];
-    if (candidate.kind === 'undo' && candidate.reverted_event_id !== undefined) {
-      undoneTargets.add(candidate.reverted_event_id);
-      continue;
-    }
-    if (candidate.kind === 'redo' || candidate.kind === 'mark_lock_stale') continue;
-    if (!undoneTargets.has(candidate.event_id)) {
-      targetEvent = candidate;
-      break;
-    }
-  }
+  const { applied } = computeUndoRedoStacks(doc.history.events);
+  const targetEvent = applied.length > 0 ? applied[applied.length - 1] : null;
   if (!targetEvent) {
     throw new Error('No committed command available to undo.');
   }
 
-  let nextLocks = doc.locks;
-  let nextRegions = doc.manual_review_regions;
-  if (targetEvent.kind === 'add_source_lock') {
-    nextLocks = doc.locks.filter((lock) => lock.lock_id !== targetEvent.target_id);
-  } else if (targetEvent.kind === 'remove_source_lock' && targetEvent.payload && 'lock_id' in targetEvent.payload) {
-    nextLocks = [...doc.locks, targetEvent.payload];
-  } else if (targetEvent.kind === 'add_manual_review_region') {
-    nextRegions = doc.manual_review_regions.filter((region) => region.region_id !== targetEvent.target_id);
-  } else if (
-    targetEvent.kind === 'remove_manual_review_region' &&
-    targetEvent.payload &&
-    'region_id' in targetEvent.payload
-  ) {
-    nextRegions = [...doc.manual_review_regions, targetEvent.payload];
-  }
-
+  const { locks: nextLocks, manual_review_regions: nextRegions } = applyEventState(doc, targetEvent, 'inverse');
   const nextEventId = doc.history.head + 1;
   const beforeDigest = computeStateDigest(doc);
   const afterDigest = computeStateDigest({ locks: nextLocks, manual_review_regions: nextRegions });
@@ -570,6 +780,44 @@ export function commitUndo(doc: SourceLockDocument, session: SessionContext): So
     history: {
       head: nextEventId,
       events: [...doc.history.events, undoEvent],
+    },
+  };
+}
+
+/**
+ * Redo the most recently undone command by appending a monotonic redo event.
+ * Any new non-undo/redo commit automatically clears the redo stack.
+ */
+export function commitRedo(doc: SourceLockDocument, session: SessionContext): SourceLockDocument {
+  assertSessionMatches(doc, session);
+  const { redoable } = computeUndoRedoStacks(doc.history.events);
+  const targetEvent = redoable.length > 0 ? redoable[redoable.length - 1] : null;
+  if (!targetEvent) {
+    throw new Error('No undone command available to redo.');
+  }
+
+  const { locks: nextLocks, manual_review_regions: nextRegions } = applyEventState(doc, targetEvent, 'forward');
+  const nextEventId = doc.history.head + 1;
+  const beforeDigest = computeStateDigest(doc);
+  const afterDigest = computeStateDigest({ locks: nextLocks, manual_review_regions: nextRegions });
+  const redoEvent: SourceLockEvent = {
+    event_id: nextEventId,
+    kind: 'redo',
+    inverse_kind: targetEvent.inverse_kind,
+    before_digest: beforeDigest,
+    after_digest: afterDigest,
+    coordinate_frame_id: doc.coordinate_frame.id,
+    target_id: targetEvent.target_id,
+    reverted_event_id: targetEvent.event_id,
+    payload: targetEvent.payload ?? null,
+  };
+  return {
+    ...doc,
+    locks: nextLocks,
+    manual_review_regions: nextRegions,
+    history: {
+      head: nextEventId,
+      events: [...doc.history.events, redoEvent],
     },
   };
 }
@@ -746,5 +994,257 @@ export function serializeSidecarFiles(doc: SourceLockDocument): {
     sidecarJson: `${JSON.stringify(doc, null, 2)}\n`,
     eventsJsonl:
       doc.history.events.map((event) => JSON.stringify(event)).join('\n') + (doc.history.events.length ? '\n' : ''),
+  };
+}
+
+const isFinitePair = (value: unknown): value is [number, number] =>
+  Array.isArray(value) &&
+  value.length === 2 &&
+  typeof value[0] === 'number' &&
+  Number.isFinite(value[0]) &&
+  typeof value[1] === 'number' &&
+  Number.isFinite(value[1]);
+
+const isValidPolygon = (value: unknown): value is Array<[number, number]> =>
+  Array.isArray(value) && value.length >= 3 && value.every(isFinitePair);
+
+export function parseSourceLockDocument(rawJson: string): SourceLockDocument | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const doc = parsed as Record<string, unknown>;
+  if (doc.schema !== SOURCE_LOCK_SCHEMA_VERSION) return null;
+  if (typeof doc.run_id !== 'string' || !doc.run_id.trim()) return null;
+  if (typeof doc.input_manifest_sha256 !== 'string' || !doc.input_manifest_sha256.trim()) return null;
+
+  const frame = doc.coordinate_frame as Record<string, unknown> | undefined;
+  if (
+    !frame ||
+    typeof frame !== 'object' ||
+    typeof frame.id !== 'string' ||
+    !frame.id.trim() ||
+    !isFinitePair(frame.canvas) ||
+    frame.canvas[0] <= 0 ||
+    frame.canvas[1] <= 0 ||
+    !isFinitePair(frame.origin) ||
+    frame.units !== 'native_output_pixels'
+  ) {
+    return null;
+  }
+
+  if (!Array.isArray(doc.source_bindings)) return null;
+  const seenSourceIds = new Set<number>();
+  const bindings: SourceBinding[] = [];
+  for (const entry of doc.source_bindings) {
+    if (!entry || typeof entry !== 'object') return null;
+    const item = entry as Record<string, unknown>;
+    if (
+      typeof item.source_id !== 'number' ||
+      !Number.isInteger(item.source_id) ||
+      item.source_id <= 0 ||
+      seenSourceIds.has(item.source_id) ||
+      typeof item.path !== 'string' ||
+      typeof item.sha256 !== 'string' ||
+      typeof item.station_id !== 'number' ||
+      typeof item.capture_group_id !== 'number' ||
+      typeof item.source_to_world_sha256 !== 'string'
+    ) {
+      return null;
+    }
+    seenSourceIds.add(item.source_id);
+    bindings.push({
+      source_id: item.source_id,
+      path: item.path,
+      sha256: item.sha256,
+      station_id: item.station_id,
+      capture_group_id: item.capture_group_id,
+      source_to_world_sha256: item.source_to_world_sha256,
+    });
+  }
+
+  if (!Array.isArray(doc.locks) || !Array.isArray(doc.manual_review_regions)) return null;
+  const locks: SourceLock[] = [];
+  for (const entry of doc.locks) {
+    if (!entry || typeof entry !== 'object') return null;
+    const item = entry as Record<string, unknown>;
+    const region = item.region as Record<string, unknown> | undefined;
+    if (
+      typeof item.lock_id !== 'string' ||
+      !item.lock_id.trim() ||
+      (item.status !== 'active' && item.status !== 'stale' && item.status !== 'unresolved') ||
+      !region ||
+      !isValidPolygon(region.polygon_world) ||
+      !Array.isArray(item.requested_sources) ||
+      !item.requested_sources.every((id) => typeof id === 'number' && Number.isInteger(id) && id > 0) ||
+      (item.policy !== 'single_source' && item.policy !== 'allowed_sources') ||
+      typeof item.eligible_tiles !== 'number' ||
+      typeof item.selection_digest !== 'string' ||
+      typeof item.created_event !== 'number' ||
+      (item.stale_reason !== null && typeof item.stale_reason !== 'string')
+    ) {
+      return null;
+    }
+    locks.push({
+      lock_id: item.lock_id,
+      status: item.status,
+      region: computeWorldRegion(region.polygon_world),
+      requested_sources: [...new Set(item.requested_sources as number[])].sort((a, b) => a - b),
+      policy: item.policy,
+      eligible_tiles: item.eligible_tiles,
+      selection_digest: item.selection_digest,
+      created_event: item.created_event,
+      stale_reason: item.stale_reason,
+    });
+  }
+
+  const manualReviewRegions: ManualReviewRegion[] = [];
+  for (const entry of doc.manual_review_regions) {
+    if (!entry || typeof entry !== 'object') return null;
+    const item = entry as Record<string, unknown>;
+    if (
+      typeof item.region_id !== 'string' ||
+      !item.region_id.trim() ||
+      !isValidPolygon(item.polygon_world) ||
+      typeof item.reason !== 'string' ||
+      !item.reason.trim() ||
+      item.excluded_from_quality_gate !== true ||
+      typeof item.created_event !== 'number'
+    ) {
+      return null;
+    }
+    manualReviewRegions.push({
+      region_id: item.region_id,
+      polygon_world: item.polygon_world.map(([x, y]) => [x, y]),
+      reason: item.reason,
+      excluded_from_quality_gate: true,
+      created_event: item.created_event,
+    });
+  }
+
+  const history = doc.history as Record<string, unknown> | undefined;
+  if (
+    !history ||
+    typeof history !== 'object' ||
+    typeof history.head !== 'number' ||
+    !Number.isInteger(history.head) ||
+    history.head < 0 ||
+    !Array.isArray(history.events)
+  ) {
+    return null;
+  }
+  let prevEventId = 0;
+  for (const eventEntry of history.events) {
+    if (!eventEntry || typeof eventEntry !== 'object') return null;
+    const ev = eventEntry as Record<string, unknown>;
+    if (typeof ev.event_id !== 'number' || !Number.isInteger(ev.event_id) || ev.event_id <= prevEventId) {
+      return null;
+    }
+    prevEventId = ev.event_id;
+  }
+  if (prevEventId > history.head) return null;
+
+  return {
+    schema: SOURCE_LOCK_SCHEMA_VERSION,
+    run_id: doc.run_id,
+    input_manifest_sha256: doc.input_manifest_sha256,
+    coordinate_frame: {
+      id: frame.id,
+      canvas: [frame.canvas[0], frame.canvas[1]],
+      origin: [frame.origin[0], frame.origin[1]],
+      units: 'native_output_pixels',
+    },
+    source_bindings: bindings.sort((left, right) => left.source_id - right.source_id),
+    locks,
+    manual_review_regions: manualReviewRegions,
+    history: {
+      head: history.head,
+      events: history.events as SourceLockEvent[],
+    },
+  };
+}
+
+/**
+ * Parse an imported `source-locks.json` sidecar and reconcile every active lock
+ * against the currently loaded run's identity, manifest, coordinate frame, and
+ * source bindings. Any mismatch marks affected locks `stale` so they can never
+ * silently affect a different render or publish as confirmed.
+ */
+export function importAndReconcileSidecar(
+  rawJson: string,
+  current: {
+    runId: string;
+    inputManifestSha256: string;
+    coordinateFrame: CoordinateFrame;
+    sourceBindings: SourceBinding[];
+  },
+): SidecarImportReconciliation | null {
+  const parsed = parseSourceLockDocument(rawJson);
+  if (!parsed) return null;
+
+  const activeBefore = parsed.locks.filter((lock) => lock.status === 'active').length;
+  const mismatchReasons: string[] = [];
+
+  let reconciled = parsed;
+  if (parsed.run_id !== current.runId) {
+    mismatchReasons.push(`run_id_changed:${parsed.run_id}->${current.runId}`);
+    reconciled = {
+      ...parsed,
+      locks: parsed.locks.map((lock) =>
+        lock.status === 'active' ? { ...lock, status: 'stale' as const, stale_reason: 'run_id_changed' } : lock,
+      ),
+    };
+  } else {
+    reconciled = reconcileDocumentStaleness(parsed, {
+      inputManifestSha256: current.inputManifestSha256,
+      coordinateFrame: current.coordinateFrame,
+      sourceBindings: current.sourceBindings,
+    });
+    for (const lock of reconciled.locks) {
+      if (lock.status !== 'active' && lock.stale_reason && !mismatchReasons.includes(lock.stale_reason)) {
+        mismatchReasons.push(lock.stale_reason);
+      }
+    }
+  }
+
+  const activeAfter = reconciled.locks.filter((lock) => lock.status === 'active').length;
+  return {
+    doc: reconciled,
+    newlyStaleCount: Math.max(0, activeBefore - activeAfter),
+    mismatchReasons,
+  };
+}
+
+export function summarizeSidecarForExport(doc: SourceLockDocument): SidecarExportSummary {
+  let activeLockCount = 0;
+  let activeLockAreaPx = 0;
+  let staleOrUnresolvedCount = 0;
+  let staleOrUnresolvedAreaPx = 0;
+  for (const lock of doc.locks) {
+    const area = computeRegionPixelArea(lock.region.polygon_world);
+    if (lock.status === 'active') {
+      activeLockCount += 1;
+      activeLockAreaPx += area;
+    } else {
+      staleOrUnresolvedCount += 1;
+      staleOrUnresolvedAreaPx += area;
+    }
+  }
+  let manualReviewAreaPx = 0;
+  for (const region of doc.manual_review_regions) {
+    manualReviewAreaPx += computeRegionPixelArea(region.polygon_world);
+  }
+  return {
+    activeLockCount,
+    activeLockAreaPx,
+    staleOrUnresolvedCount,
+    staleOrUnresolvedAreaPx,
+    manualReviewCount: doc.manual_review_regions.length,
+    manualReviewAreaPx,
+    requiresStaleConfirmation: staleOrUnresolvedCount > 0,
+    sidecarSha256: computeSidecarDigest(doc),
   };
 }

@@ -57,7 +57,7 @@ import ExportImageDialog from '../../features/export/ExportImageDialog';
 import { getSupportedImageTypes, normalizeExtensions, pathsFromSelection } from './BatchGeometryModal/utils';
 import type { ExportDialogSettings } from '../../features/export/exportDialog';
 import type { StackReportInspection, StackReportInspectionMarker } from '../../utils/stackReportInspection';
-import type { SourceLockDocument } from '../../utils/sourceLockSidecar';
+import type { CoordinateFrame, SourceLockDocument, WorldBox } from '../../utils/sourceLockSidecar';
 
 interface ImageStackModalProps {
   detailImageBase64: string | null;
@@ -298,6 +298,9 @@ export default function ImageStackModal({
   const [sidebarTab, setSidebarTab] = useState<'setup' | 'inspection'>('setup');
   const [inspection, setInspection] = useState<StackReportInspection | null>(null);
   const [focusedMarker, setFocusedMarker] = useState<StackReportInspectionMarker | null>(null);
+  const [focusedWorldBox, setFocusedWorldBox] = useState<WorldBox | null>(null);
+  const [draftWorldBox, setDraftWorldBox] = useState<WorldBox | null>(null);
+  const [isDrawingRegion, setIsDrawingRegion] = useState(false);
   const [sourceLockDoc, setSourceLockDoc] = useState<SourceLockDocument | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const sourcePanelRef = useRef<HTMLElement | null>(null);
@@ -323,11 +326,27 @@ export default function ImageStackModal({
     setSidebarTab('setup');
     setInspection(null);
     setFocusedMarker(null);
+    setFocusedWorldBox(null);
+    setDraftWorldBox(null);
+    setIsDrawingRegion(false);
     setSourceLockDoc(null);
     setIsMounted(true);
     const timer = window.setTimeout(() => setShow(true), 10);
     return () => window.clearTimeout(timer);
   }, [initialAlignmentMode, initialBlendMode, isOpen, sourcePaths]);
+
+  const activeCoordinateFrame = useMemo<CoordinateFrame | null>(() => {
+    if (sourceLockDoc) return sourceLockDoc.coordinate_frame;
+    if (inspection?.canvas) {
+      return {
+        id: 'world-v1',
+        canvas: [inspection.canvas.width, inspection.canvas.height],
+        origin: [inspection.origin.x, inspection.origin.y],
+        units: 'native_output_pixels',
+      };
+    }
+    return null;
+  }, [inspection, sourceLockDoc]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -655,22 +674,37 @@ export default function ImageStackModal({
                   <ImageStackResultPreview
                     alignmentLabel={translateAlignment(selectedAlignment.labelKey)}
                     alt={t('modals.imageStack.resultAlt')}
+                    coordinateFrame={activeCoordinateFrame}
                     detailSrc={activeDetailSrc}
+                    draftWorldBox={draftWorldBox}
                     focusedMarker={focusedMarker}
+                    focusedWorldBox={focusedWorldBox}
                     inspectionMarkers={inspection?.markers ?? null}
+                    isDrawingRegion={isDrawingRegion}
                     isFocused={isPreviewFocused}
+                    manualReviewRegions={sourceLockDoc?.manual_review_regions ?? null}
                     modeLabel={
                       blendMode === 'focus'
                         ? t('modals.imageStack.focusStackResult')
                         : t('modals.imageStack.panoramaResult')
                     }
+                    onDrawnWorldBox={(worldBox) => {
+                      setDraftWorldBox(worldBox);
+                      setIsDrawingRegion(false);
+                      setSidebarTab('inspection');
+                    }}
                     onFocusedChange={setIsPreviewFocused}
                     onSelectMarker={(marker) => {
                       setFocusedMarker(marker);
+                      setFocusedWorldBox(null);
                       setSidebarTab('inspection');
                     }}
+                    onToggleDrawRegion={
+                      activeCoordinateFrame ? () => setIsDrawingRegion((drawing) => !drawing) : undefined
+                    }
                     resultSize={resultSize}
                     softRegions={softRegions}
+                    sourceLocks={sourceLockDoc?.locks ?? null}
                     skippedSources={skippedSources}
                     stationsUnrelated={stationsUnrelated}
                     src={activePreviewSrc}
@@ -813,14 +847,30 @@ export default function ImageStackModal({
               </div>
               {sidebarTab === 'inspection' ? (
                 <ImageStackInspectionPanel
+                  draftWorldBox={draftWorldBox}
                   error={error}
                   inspection={inspection}
-                  onFocusMarker={(marker) => setFocusedMarker(marker)}
+                  isDrawingRegion={isDrawingRegion}
+                  onClearDraftWorldBox={() => setDraftWorldBox(null)}
+                  onFocusMarker={(marker) => {
+                    setFocusedMarker(marker);
+                    setFocusedWorldBox(null);
+                  }}
+                  onFocusWorldBox={(worldBox) => {
+                    setFocusedMarker(null);
+                    setFocusedWorldBox({ ...worldBox });
+                  }}
                   onLoadInspection={(parsed) => {
                     setInspection(parsed);
                     setFocusedMarker(parsed.markers[0] ?? null);
+                    setFocusedWorldBox(null);
+                    setDraftWorldBox(null);
+                    setIsDrawingRegion(false);
                   }}
                   onSourceLockDocChange={setSourceLockDoc}
+                  onToggleDrawRegion={
+                    activeCoordinateFrame ? () => setIsDrawingRegion((drawing) => !drawing) : undefined
+                  }
                   selectedMarkerId={focusedMarker?.id ?? null}
                   sourceLockDoc={sourceLockDoc}
                   stackReportPath={stackReportPath}
