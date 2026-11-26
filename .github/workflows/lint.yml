@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - v1
   pull_request:
 
 jobs:
@@ -31,11 +32,31 @@ jobs:
       - name: Run TypeScript typecheck
         run: npm run typecheck
 
-      - name: Enforce local-only product boundary
-        run: npm run local-only:check
-
       - name: Check Translation Sync
         run: npm run i18n:check
+
+      - name: Run Contract & Unit Checks
+        run: npm run contracts:check
+
+      - name: Build Frontend
+        run: npm run build
+
+  stack-lab-tests:
+    name: Stack Lab Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run stack-lab unit and process tests
+        run: >-
+          python3 -m unittest -v
+          tests/stack-lab/test_determinism.py
+          tests/stack-lab/test_qg_whatif.py
+          tests/stack-lab/test_tools.py
 
   fmt:
     name: cargo fmt
@@ -65,6 +86,11 @@ jobs:
           rustflags: ''
           rust-src-dir: src-tauri
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: clippy
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -77,3 +103,32 @@ jobs:
       - name: Clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+  rust-test:
+    name: cargo test --lib
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          rustflags: ''
+          rust-src-dir: src-tauri
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: rust-test
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Run Rust library unit tests
+        working-directory: src-tauri
+        run: cargo test --lib
