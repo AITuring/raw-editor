@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { access, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readRustModule } from './support/rust-source.mjs';
@@ -87,6 +87,108 @@ for (const [relativePath, content] of [
       failures.push(`${relativePath}: non-allowlisted download host ${url}`);
     }
   }
+}
+
+const normalizeCspSources = (value) => {
+  if (Array.isArray(value)) return value.flatMap((item) => String(item).trim().split(/\s+/).filter(Boolean));
+  if (typeof value === 'string') return value.trim().split(/\s+/).filter(Boolean);
+  return [];
+};
+
+const parseCsp = (rawCsp) => {
+  if (!rawCsp) return null;
+  if (typeof rawCsp === 'string') {
+    const map = {};
+    for (const part of rawCsp.split(';')) {
+      const tokens = part.trim().split(/\s+/).filter(Boolean);
+      if (tokens.length > 0) map[tokens[0]] = tokens.slice(1);
+    }
+    return map;
+  }
+  if (typeof rawCsp === 'object' && !Array.isArray(rawCsp)) {
+    const map = {};
+    for (const [directive, sources] of Object.entries(rawCsp)) {
+      map[directive] = normalizeCspSources(sources);
+    }
+    return map;
+  }
+  return null;
+};
+
+const isAllowedCspOrigin = (token, allowLocalDev) => {
+  if (!/^(?:https?|wss?):/i.test(token)) return true;
+  if (/^https?:\/\/(?:asset|ipc)\.localhost$/i.test(token)) return true;
+  if (allowLocalDev && /^(?:http|ws):\/\/localhost:1420$/i.test(token)) return true;
+  return false;
+};
+
+const tauriConfig = JSON.parse(await readFile(path.join(projectRoot, 'src-tauri', 'tauri.conf.json'), 'utf8'));
+const prodCsp = parseCsp(tauriConfig?.app?.security?.csp);
+if (!prodCsp) {
+  failures.push('src-tauri/tauri.conf.json: app.security.csp must be explicitly configured (not null)');
+} else {
+  const requiredExact = [
+    ['default-src', ["'self'"]],
+    ['script-src', ["'self'"]],
+    ['object-src', ["'none'"]],
+    ['frame-src', ["'none'"]],
+    ['base-uri', ["'self'"]],
+    ['form-action', ["'self'"]],
+  ];
+  for (const [directive, expected] of requiredExact) {
+    const actual = prodCsp[directive] ?? [];
+    if (actual.length !== expected.length || expected.some((item, index) => actual[index] !== item)) {
+      failures.push(`src-tauri/tauri.conf.json: csp.${directive} must be ${expected.join(' ')}`);
+    }
+  }
+  for (const requiredToken of ["'self'", 'ipc:', 'http://ipc.localhost', 'https://ipc.localhost']) {
+    if (!(prodCsp['connect-src'] ?? []).includes(requiredToken)) {
+      failures.push(`src-tauri/tauri.conf.json: csp.connect-src missing ${requiredToken}`);
+    }
+  }
+  for (const requiredToken of [
+    "'self'",
+    'asset:',
+    'http://asset.localhost',
+    'https://asset.localhost',
+    'blob:',
+    'data:',
+  ]) {
+    if (!(prodCsp['img-src'] ?? []).includes(requiredToken)) {
+      failures.push(`src-tauri/tauri.conf.json: csp.img-src missing ${requiredToken}`);
+    }
+  }
+  for (const [directive, sources] of Object.entries(prodCsp)) {
+    if (directive === 'frame-ancestors') {
+      failures.push('src-tauri/tauri.conf.json: csp must not set frame-ancestors (ignored in meta CSP)');
+    }
+    for (const token of sources) {
+      if (token === '*' || token === "'unsafe-eval'" || !isAllowedCspOrigin(token, false)) {
+        failures.push(`src-tauri/tauri.conf.json: csp.${directive} contains disallowed source ${token}`);
+      }
+    }
+  }
+}
+
+const devCsp = parseCsp(tauriConfig?.app?.security?.devCsp);
+if (devCsp) {
+  for (const [directive, sources] of Object.entries(devCsp)) {
+    if (directive === 'frame-ancestors') {
+      failures.push('src-tauri/tauri.conf.json: devCsp must not set frame-ancestors (ignored in meta CSP)');
+    }
+    for (const token of sources) {
+      if (token === '*' || token === "'unsafe-eval'" || !isAllowedCspOrigin(token, true)) {
+        failures.push(`src-tauri/tauri.conf.json: devCsp.${directive} contains disallowed source ${token}`);
+      }
+    }
+  }
+}
+
+try {
+  await access(path.join(projectRoot, 'pnpm-lock.yaml'));
+  failures.push('pnpm-lock.yaml: redundant lockfile must not coexist with package-lock.json');
+} catch {
+  // Expected: npm package-lock.json is the single canonical lockfile.
 }
 
 if (failures.length > 0) {
